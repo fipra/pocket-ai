@@ -1,0 +1,75 @@
+{
+  "name": "pocket-ai",
+  "version": "0.1.0",
+  "description": "Assistente locale portatile con documenti",
+  "author": "Fabrizio Casula",
+  "private": true,
+  "type": "module",
+  "main": "src/main.mjs",
+  "scripts": {
+    "start": "electron .",
+    "start:compat": "node scripts/start-compat.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "model:download": "node scripts/download-model.mjs",
+    "dist": "node scripts/check-model.mjs && electron-builder",
+    "dist:win": "node scripts/check-model.mjs && electron-builder --win --x64",
+    "dist:mac": "node scripts/check-model.mjs && electron-builder --mac"
+  },
+  "dependencies": {
+    "node-llama-cpp": "3.22.2",
+    "pdfjs-dist": "^5.4.296"
+  },
+  "devDependencies": {
+    "electron": "^40.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "ch.fabriziocasula.pocketai",
+    "productName": "Pocket AI",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/node-llama-cpp/**/*",
+      "node_modules/@node-llama-cpp/**/*",
+      "node_modules/@napi-rs/**/*"
+    ],
+    "npmRebuild": false,
+    "files": [
+      "src/**/*",
+      "ui/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "models",
+        "to": "models",
+        "filter": [
+          "*.gguf",
+          "*.json",
+          "*.txt",
+          "*.md",
+          "!.*"
+        ]
+      }
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "portable"
+      ]
+    },
+    "mac": {
+      "target": [
+        "zip",
+        "dmg"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [
+        "dir"
+      ]
+    }
+  }
+}
