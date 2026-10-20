@@ -7,7 +7,7 @@ Pocket AI is an open-source desktop assistant that runs language models locally 
 
 > **Project status:** early release (v0.1.0). Builds are not code-signed. The default 0.5B model is small and has limited accuracy.
 
-[Italiano](README.it.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
+[English guide](README.en.md) · [Guida italiana](README.it.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
 
 ## Highlights
 
@@ -56,6 +56,8 @@ Word, Excel and image imports are not supported in this version.
 ## Models and performance
 
 The default build uses a small Qwen2.5 0.5B Instruct GGUF model. It prioritizes portability, **not answer quality**. Larger compatible single-file GGUF instruct models can be imported through the application; memory and speed depend on model, quantization, context length and hardware. See [the Italian guide](README.it.md#scegliere-un-modello-più-potente) for example sizes and RAM estimates. Check model licenses before redistribution.
+
+For detailed model download instructions, see the [English GGUF guide](README.en.md) or [Italian guide](README.it.md).
 
 ## Build packages
 
