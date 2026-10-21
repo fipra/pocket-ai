@@ -34,7 +34,7 @@ function render(){
  translateDom();lock(busy);$('messages').scrollTop=$('messages').scrollHeight;
 }
 function addMessage(message){
- const node=el('div',null,'bubble '+message.role);node.append(el('div',message.role==='user'?tr('you'):'POCKET AI','who'));
+ const node=el('div',null,'bubble '+message.role);node.append(el('div',message.role==='user'?tr('you'):'USB AI','who'));
  const body=el('div',message.text);node.append(body);
  for(const [index,source] of (message.sources||[]).entries()){
   const details=el('details',null,'source');details.append(el('summary',`[${index+1}] ${source.name}${source.page?' · '+tr('page')+' '+source.page:''}`),el('div',source.text));node.append(details);

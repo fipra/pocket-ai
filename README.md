@@ -1,9 +1,9 @@
-# Pocket AI
+# USB AI
 
 **Created by FipraAI** · Contact: [fabrizio.casula@gmail.com](mailto:fabrizio.casula@gmail.com)
 **Your private AI assistant. Offline. Portable. Yours.**
 
-Pocket AI is an open-source desktop assistant that runs language models locally using Electron and `node-llama-cpp`. Chat, search your own documents, and carry your workspace on a USB drive — without an account, cloud API, or Ollama.
+USB AI is an open-source desktop assistant that runs language models locally using Electron and `node-llama-cpp`. Chat, search your own documents, and carry your workspace on a USB drive — without an account, cloud API, or Ollama.
 
 > **Project status:** early release (v0.1.0). Builds are not code-signed. The default 0.5B model is small and has limited accuracy.
 
@@ -23,8 +23,8 @@ Pocket AI is an open-source desktop assistant that runs language models locally 
 Requires **Node.js 22+**, a supported Windows/macOS machine, and an internet connection **once** to install dependencies and download the default model.
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/pocket-ai.git
-cd pocket-ai
+git clone https://github.com/fipra/usb-ai.git
+cd usb-ai
 npm ci
 npm run model:download
 npm start
@@ -38,7 +38,7 @@ Download a Windows portable EXE or macOS package from **Releases**, *when a rele
 
 ## Use it from a USB drive
 
-Put the extracted portable app in a writable USB folder. Pocket AI stores its workspace in `PocketAI-data/` next to the app (or in the absolute path specified by `POCKET_AI_HOME`). Close the application before ejecting the drive. Windows and macOS can use the same data folder, **not simultaneously**.
+Put the extracted portable app in a writable USB folder. USB AI stores its workspace in `PocketAI-data/` next to the app (or in the absolute path specified by `POCKET_AI_HOME`). Close the application before ejecting the drive. Windows and macOS can use the same data folder, **not simultaneously**.
 
 **Privacy limitations:** inference is local, but the data folder is **not encrypted**. The host OS may retain metadata or caches. Avoid untrusted machines for sensitive data. Installation and model downloads require network access; offline use starts after setup.
 

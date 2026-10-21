@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-Pocket AI is an Electron app. `src/main.mjs` owns the main process, `src/preload.cjs` exposes the restricted renderer bridge, and `src/core.mjs` contains retrieval and workspace helpers. `ui/` holds HTML, CSS, client logic, and translations. `tests/*.test.mjs` contains Node tests; `scripts/` contains launch, model, and packaging helpers. `models/` holds the manifest, license, and optional GGUF weights. `PocketAI-data/` is local runtime data. Packaging output goes to `release/`.
+USB AI is an Electron app. `src/main.mjs` owns the main process, `src/preload.cjs` exposes the restricted renderer bridge, and `src/core.mjs` contains retrieval and workspace helpers. `ui/` holds HTML, CSS, client logic, and translations. `tests/*.test.mjs` contains Node tests; `scripts/` contains launch, model, and packaging helpers. `models/` holds the manifest, license, and optional GGUF weights. `PocketAI-data/` is local runtime data. Packaging output goes to `release/`.
 
 ## Build, Test, and Development Commands
 

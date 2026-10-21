@@ -1,5 +1,5 @@
 {
-  "name": "pocket-ai",
+  "name": "usb-ai",
   "version": "0.1.0",
   "description": "Assistente locale portatile con documenti",
   "author": "Fabrizio Casula",
@@ -24,8 +24,8 @@
     "electron-builder": "^26.0.12"
   },
   "build": {
-    "appId": "ch.fabriziocasula.pocketai",
-    "productName": "Pocket AI",
+    "appId": "ch.fabriziocasula.usbai",
+    "productName": "USB AI",
     "asar": true,
     "asarUnpack": [
       "node_modules/node-llama-cpp/**/*",

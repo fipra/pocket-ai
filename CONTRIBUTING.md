@@ -1,4 +1,4 @@
-# Contributing to Pocket AI
+# Contributing to USB AI
 
 Thanks for helping make local AI more accessible!
 

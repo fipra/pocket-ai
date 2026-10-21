@@ -1,18 +1,18 @@
-# Pocket AI
+# USB AI
 
 **Created by FipraAI** · Contact: [fabrizio.casula@gmail.com](mailto:fabrizio.casula@gmail.com)
 ### Il tuo assistente locale, anche su una chiavetta USB
 
-Pocket AI è un'app desktop per **chattare con un modello linguistico e consultare i tuoi documenti direttamente sul computer**. Non richiede account, Ollama o API cloud. Una volta preparato il pacchetto con il modello incluso, funziona anche senza Internet.
+USB AI è un'app desktop per **chattare con un modello linguistico e consultare i tuoi documenti direttamente sul computer**. Non richiede account, Ollama o API cloud. Una volta preparato il pacchetto con il modello incluso, funziona anche senza Internet.
 
-> **In breve:** porta app, modello, conversazioni e testi indicizzati in una cartella sulla USB. Inserisci la chiavetta in un computer compatibile, apri Pocket AI e riprendi da dove eri rimasto.
+> **In breve:** porta app, modello, conversazioni e testi indicizzati in una cartella sulla USB. Inserisci la chiavetta in un computer compatibile, apri USB AI e riprendi da dove eri rimasto.
 
 ## Cosa puoi fare
 
 | Funzione | Come funziona |
 | --- | --- |
 | **Chat locale** | Le risposte vengono generate sul computer. Puoi creare più conversazioni, fermare una risposta ed esportare una chat in Markdown. |
-| **Domande sui documenti** | Importa PDF con testo, TXT o Markdown. Pocket AI mostra i passaggi usati e, per i PDF, le pagine. |
+| **Domande sui documenti** | Importa PDF con testo, TXT o Markdown. USB AI mostra i passaggi usati e, per i PDF, le pagine. |
 | **Cinque lingue** | Interfaccia e risposte in italiano, inglese, tedesco, francese e spagnolo. |
 | **Modello sostituibile** | Il pacchetto può includere un piccolo modello Qwen; puoi importare un altro modello *instruct* GGUF compatibile. |
 | **Dati portatili** | Conversazioni, documenti indicizzati e modelli importati risiedono in `PocketAI-data/`. |
@@ -47,14 +47,14 @@ Metti **l'EXE portable Windows** oppure **la `.app` Mac estratta** in una cartel
 
 ```text
 Chiavetta USB/
-├── Pocket AI.exe  oppure  Pocket AI.app
+├── USB AI.exe  oppure  USB AI.app
 └── PocketAI-data/
     ├── workspace.json
     ├── models/
     └── session/
 ```
 
-Chiudi Pocket AI prima di espellere la chiavetta. La cartella dati **non è cifrata**: proteggi la USB e conserva un backup. Il sistema ospite può creare cache o altri metadati, quindi non è garantita l'assenza di tracce. Velocità e memoria dipendono dal computer; una USB lenta può allungare l'avvio.
+Chiudi USB AI prima di espellere la chiavetta. La cartella dati **non è cifrata**: proteggi la USB e conserva un backup. Il sistema ospite può creare cache o altri metadati, quindi non è garantita l'assenza di tracce. Velocità e memoria dipendono dal computer; una USB lenta può allungare l'avvio.
 
 Per scegliere un'altra posizione dei dati, imposta `POCKET_AI_HOME` su un percorso assoluto prima dell'avvio. In sviluppo, la cartella predefinita è `PocketAI-data/` dentro il progetto.
 
@@ -66,7 +66,7 @@ Sono supportati PDF con testo selezionabile, TXT e Markdown, fino a **20 MB per 
 
 ## Scegliere un modello più potente
 
-Se il computer ha abbastanza RAM e potenza di calcolo, puoi scaricare un modello più grande e usarlo al posto di quello incluso. Pocket AI accetta file **GGUF instruct**: apri **Modello e archivio locale → Importa GGUF**, scegli il file scaricato, poi selezionalo e premi **Carica modello**. L'importazione ne crea una copia in `PocketAI-data/models/`, quindi controlla anche lo spazio libero sulla USB.
+Se il computer ha abbastanza RAM e potenza di calcolo, puoi scaricare un modello più grande e usarlo al posto di quello incluso. USB AI accetta file **GGUF instruct**: apri **Modello e archivio locale → Importa GGUF**, scegli il file scaricato, poi selezionalo e premi **Carica modello**. L'importazione ne crea una copia in `PocketAI-data/models/`, quindi controlla anche lo spazio libero sulla USB.
 
 Questi esempi appartengono alla famiglia Qwen2.5 Instruct. I pesi indicati sono per la quantizzazione **Q4_K_M**; la RAM è una **stima prudente della memoria totale del computer**, non la dimensione del download né una garanzia di velocità.
 
@@ -77,7 +77,7 @@ Questi esempi appartengono alla famiglia Qwen2.5 Instruct. I pesi indicati sono 
 | [Qwen2.5 3B](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/tree/main) | 2,1 GB | 8 GB | Più capace; richiede più tempo per rispondere. |
 | [Qwen2.5 7B](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/tree/main) | 4,7 GB | 16 GB | Per computer più potenti; vedi la nota sui file suddivisi. |
 
-**Prima di scaricare:** scegli proprio un file `q4_k_m.gguf`, non i pesi FP16. Alcuni modelli grandi, incluso il 7B ufficiale nella tabella, sono distribuiti in più parti: l'importazione di Pocket AI seleziona **un solo file GGUF**, quindi quelle parti vanno prima unite in un GGUF unico con uno strumento compatibile. Per iniziare, i modelli 1.5B e 3B elencati sopra sono file singoli.
+**Prima di scaricare:** scegli proprio un file `q4_k_m.gguf`, non i pesi FP16. Alcuni modelli grandi, incluso il 7B ufficiale nella tabella, sono distribuiti in più parti: l'importazione di USB AI seleziona **un solo file GGUF**, quindi quelle parti vanno prima unite in un GGUF unico con uno strumento compatibile. Per iniziare, i modelli 1.5B e 3B elencati sopra sono file singoli.
 
 La memoria effettiva include anche il contesto della chat e i buffer di calcolo; sistema operativo e altre app ne consumano altra. La velocità dipende molto da CPU, accelerazione GPU, memoria disponibile e supporto del motore al modello scelto. Più RAM permette di *caricare* un modello grande, ma non rende automaticamente rapide le risposte. Prova prima un modello piccolo e controlla la licenza del modello prima di ridistribuirlo.
 

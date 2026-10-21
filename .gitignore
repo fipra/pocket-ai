@@ -1,0 +1,5 @@
+node_modules/
+PocketAI-data/
+release/
+models/*.gguf
+.DS_Store

@@ -1,9 +1,9 @@
-# Pocket AI
+# USB AI
 
 **Created by FipraAI** · Contact: [fabrizio.casula@gmail.com](mailto:fabrizio.casula@gmail.com)
 **Your private AI assistant. Offline. Portable. Yours.**
 
-Pocket AI is an open-source desktop assistant that runs language models locally using Electron and `node-llama-cpp`. Chat, search your own documents, and carry your workspace on a USB drive — without an account, cloud API, or Ollama.
+USB AI is an open-source desktop assistant that runs language models locally using Electron and `node-llama-cpp`. Chat, search your own documents, and carry your workspace on a USB drive — without an account, cloud API, or Ollama.
 
 > **Project status:** early release (v0.1.0). Builds are not code-signed. The default 0.5B model is small and has limited accuracy.
 
@@ -23,8 +23,8 @@ Pocket AI is an open-source desktop assistant that runs language models locally 
 Requires **Node.js 22+**, a supported Windows/macOS machine, and an internet connection **once** to install dependencies and download the default model.
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/pocket-ai.git
-cd pocket-ai
+git clone https://github.com/fipra/usb-ai.git
+cd usb-ai
 npm ci
 npm run model:download
 npm start
@@ -38,7 +38,7 @@ Download a Windows portable EXE or macOS package from **Releases**, *when a rele
 
 ## Use it from a USB drive
 
-Put the extracted portable app in a writable USB folder. Pocket AI stores its workspace in `PocketAI-data/` next to the app (or in the absolute path specified by `POCKET_AI_HOME`). Close the application before ejecting the drive. Windows and macOS can use the same data folder, **not simultaneously**.
+Put the extracted portable app in a writable USB folder. USB AI stores its workspace in `PocketAI-data/` next to the app (or in the absolute path specified by `POCKET_AI_HOME`). Close the application before ejecting the drive. Windows and macOS can use the same data folder, **not simultaneously**.
 
 **Privacy limitations:** inference is local, but the data folder is **not encrypted**. The host OS may retain metadata or caches. Avoid untrusted machines for sensitive data. Installation and model downloads require network access; offline use starts after setup.
 
@@ -55,14 +55,14 @@ Word, Excel and image imports are not supported in this version.
 
 ## Download and use other GGUF models
 
-Pocket AI is **not limited to the bundled model**. You can import another compatible **instruct GGUF** language model and run it locally without Ollama or a cloud API.
+USB AI is **not limited to the bundled model**. You can import another compatible **instruct GGUF** language model and run it locally without Ollama or a cloud API.
 
 ### Import a downloaded model
 
 1. Open the model's Hugging Face page (examples below), then select **Files and versions**.
 2. Download a **single-file `Q4_K_M` GGUF** where available (not FP16 weights). Check the model's license.
-3. In Pocket AI, open **Model and local storage → Import GGUF** (the label may appear in your selected interface language).
-4. Select the downloaded `.gguf` file. Pocket AI copies it into `PocketAI-data/models/`, so ensure sufficient free space, especially on USB drives.
+3. In USB AI, open **Model and local storage → Import GGUF** (the label may appear in your selected interface language).
+4. Select the downloaded `.gguf` file. USB AI copies it into `PocketAI-data/models/`, so ensure sufficient free space, especially on USB drives.
 5. Select the imported model and click **Load model**.
 
 ### Example models: Qwen2.5 Instruct
@@ -76,7 +76,7 @@ The file sizes below are approximate for **Q4_K_M** quantization. RAM figures ar
 | [Qwen2.5 3B](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/tree/main) | 2.1 GB | 8 GB | More capable; may respond more slowly. |
 | [Qwen2.5 7B](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/tree/main) | 4.7 GB | 16 GB | For stronger machines; see split-file warning. |
 
-**Important: split GGUF files.** Some larger releases, including the official 7B example above, are distributed in multiple parts. Pocket AI's import dialog accepts **one GGUF file**, so split parts must first be merged into a single compatible GGUF using an appropriate tool. For an easier start, use the single-file 1.5B or 3B examples above.
+**Important: split GGUF files.** Some larger releases, including the official 7B example above, are distributed in multiple parts. USB AI's import dialog accepts **one GGUF file**, so split parts must first be merged into a single compatible GGUF using an appropriate tool. For an easier start, use the single-file 1.5B or 3B examples above.
 
 **Compatibility and performance:** Not every GGUF model or architecture works with the bundled `node-llama-cpp` runtime. Memory use also includes chat context and compute buffers, while the operating system and other applications need RAM. More RAM may let you *load* a larger model but does not guarantee fast inference; CPU/GPU support matters. Test with a small model first and respect each model's license before redistribution.
 
