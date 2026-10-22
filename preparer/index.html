@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Prepara USB AI</title>
+<style>
+  body {font: 16px system-ui, sans-serif; margin: 0; color: #17221e; background: #f5f8f4;}
+  main {max-width: 520px; margin: 38px auto; padding: 0 24px;}
+  h1 {font-size: 27px; margin-bottom: 8px;}
+  p {line-height: 1.5;}
+  #location {padding: 12px; background: white; border: 1px solid #cbd6ce; border-radius: 8px; overflow-wrap: anywhere; min-height: 23px;}
+  button {background: #175c42; color: white; border: 0; border-radius: 8px; padding: 11px 16px; font: inherit; cursor: pointer; margin: 12px 8px 0 0;}
+  button:disabled {opacity: .55; cursor: default;}
+  #status {min-height: 46px; font-weight: 600;}
+  progress {width: 100%; height: 16px;}
+  small {color: #4c5c53;}
+</style></head><body><main>
+<h1>Prepara USB AI</h1>
+<p>Collega una chiavetta con spazio libero, poi scegli una cartella al suo interno. L’app e il modello verranno copiati e verificati.</p>
+<div id="location">Nessuna cartella selezionata</div>
+<button id="choose">Scegli cartella</button><button id="install" disabled>Prepara USB</button>
+<p id="status" role="status" aria-live="polite"></p>
+<progress id="progress" value="0" max="100" hidden></progress>
+<p><small>I dati esistenti in PocketAI-data non vengono cancellati. Chiudi USB AI prima di espellere la chiavetta.</small></p>
+</main><script>
+  const choose = document.getElementById('choose');
+  const install = document.getElementById('install');
+  const locationBox = document.getElementById('location');
+  const status = document.getElementById('status');
+  const progress = document.getElementById('progress');
+  choose.onclick = async () => {
+    const selected = await window.preparer.choose();
+    if (selected) { locationBox.textContent = selected; install.disabled = false; status.textContent = ''; }
+  };
+  install.onclick = async () => {
+    choose.disabled = install.disabled = true;
+    progress.hidden = false;
+    status.textContent = 'Copia e verifica in corso…';
+    try {
+      const result = await window.preparer.install();
+      progress.value = 100;
+      status.textContent = `Pronto. Apri ${result.target} dalla chiavetta.`;
+    } catch (error) {
+      status.textContent = error.message;
+      install.disabled = false;
+    } finally { choose.disabled = false; }
+  };
+  window.preparer.onProgress(({copied, total}) => { progress.value = total ? Math.round(copied / total * 100) : 100; });
+</script></body></html>

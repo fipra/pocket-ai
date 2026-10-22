@@ -45,6 +45,14 @@ Su Mac puoi avviare il sorgente con un doppio clic su `Avvia-Mac.command` dopo a
 
 ## Portalo su USB
 
+### Procedura guidata
+
+Scarica **Prepara USB AI** per il tuo sistema operativo dagli artefatti di build, quando disponibile. Collega la chiavetta, apri il preparatore, scegli una cartella sulla chiavetta e premi **Prepara USB**. Il preparatore include l'app compilata e il modello, controlla lo spazio libero, copia i file e ne verifica il contenuto. Non richiede Node.js sul computer dell'utente. Se `PocketAI-data/` esiste già, la lascia intatta; se l'app è già presente nella cartella scelta, si ferma per evitare una sovrascrittura. Il preparatore Windows contiene la build Windows, quello Mac la build Mac.
+
+La cartella scelta deve essere scrivibile e trovarsi sulla chiavetta: il preparatore non formatta il dispositivo. Per un uso su entrambi i sistemi occorrono entrambe le build e un filesystem compatibile; prova la chiavetta sui computer previsti prima di usarla con dati importanti.
+
+### Copia manuale
+
 Metti **l'EXE portable Windows** oppure **la `.app` Mac estratta** in una cartella scrivibile sulla chiavetta. Al primo avvio l'app crea `PocketAI-data/` accanto al programma. Lì conserva conversazioni, testi indicizzati, preferenze e modelli importati. La stessa cartella dati può essere usata dalle build Windows e Mac, **una alla volta**.
 
 ```text
@@ -89,9 +97,11 @@ La memoria effettiva include anche il contesto della chat e i buffer di calcolo;
 npm test              # test automatici
 npm run dist:win      # pacchetto Windows, su Windows x64
 npm run dist:mac      # pacchetti Mac, sul Mac di destinazione
+npm run usb-preparer:win  # app + preparatore Windows, su Windows x64
+npm run usb-preparer:mac  # app + preparatore Mac, su Mac
 ```
 
-Le build richiedono prima `npm ci` e `npm run model:download`; senza GGUF il packaging si ferma. I risultati sono in `release/`. Le dipendenze native vanno installate sulla piattaforma di destinazione. Mac Intel e Apple Silicon richiedono build distinte. Il workflow in `.github/workflows/build.yml` prepara le varianti su runner nativi quando viene avviato manualmente; non pubblica una release automaticamente.
+Le build richiedono prima `npm ci` e `npm run model:download`; senza GGUF il packaging si ferma. I risultati sono in `release/`, e i preparatori in `release/preparer/`. Le dipendenze native vanno installate sulla piattaforma di destinazione. Mac Intel e Apple Silicon richiedono build distinte. I pacchetti non sono firmati o notarizzati: il sistema può mostrare un avviso. Il preparatore non sostituisce il collaudo su USB reale.
 
 Il progetto è organizzato in `src/` (processo Electron e logica), `ui/` (interfaccia), `tests/`, `scripts/` e `models/` (manifest e avvisi del modello). Leggi [VERIFICHE.md](VERIFICHE.md) per lo stato delle verifiche e [AGENTS.md](AGENTS.md) per contribuire.
 

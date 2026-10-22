@@ -40,6 +40,8 @@ Download a Windows portable EXE or macOS package from **Releases**, *when a rele
 
 ## Use it from a USB drive
 
+For a guided setup, build or download **Prepara USB AI** for your operating system. It lets the user choose a folder on the USB drive, checks free space, copies the bundled app and model, and verifies the copy. It preserves an existing `PocketAI-data/` folder and stops if the app is already present. The Windows and Mac preparers contain their respective platform builds.
+
 Put the extracted portable app in a writable USB folder. USB AI stores its workspace in `PocketAI-data/` next to the app (or in the absolute path specified by `POCKET_AI_HOME`). Close the application before ejecting the drive. Windows and macOS can use the same data folder, **not simultaneously**.
 
 **Privacy limitations:** inference is local, but the data folder is **not encrypted**. The host OS may retain metadata or caches. Avoid untrusted machines for sensitive data. Installation and model downloads require network access; offline use starts after setup.
@@ -69,9 +71,11 @@ npm run model:download
 npm test
 npm run dist:win   # on Windows x64
 npm run dist:mac   # on macOS
+npm run usb-preparer:win  # app and USB preparer, on Windows x64
+npm run usb-preparer:mac  # app and USB preparer, on macOS
 ```
 
-Outputs are written to `release/`. Native dependencies must be installed on the target platform. Apple Silicon and Intel require separate builds. The GitHub Actions build is manually triggered and uploads artifacts; it does **not** automatically publish a GitHub Release.
+Outputs are written to `release/`; preparers are written to `release/preparer/`. Native dependencies must be installed on the target platform. Apple Silicon and Intel require separate builds. The packages are not signed or notarized. Test the preparer and app on a real USB drive for each target platform.
 
 ## Architecture
 
