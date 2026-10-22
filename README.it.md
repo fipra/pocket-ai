@@ -45,16 +45,6 @@ Su Mac puoi avviare il sorgente con un doppio clic su `Avvia-Mac.command` dopo a
 
 ## Portalo su USB
 
-### Procedura guidata
-
-Apri la pagina [Releases di USB AI](https://github.com/fipra/usb-ai/releases) e scegli l'ultima anteprima **USB AI preparatori**. Scarica il file per il tuo computer: Windows x64 (`.exe`), Mac Apple Silicon (`arm64`, `.zip`) oppure Mac Intel (`x64`, `.zip`). Su Mac estrai lo ZIP e apri **Prepara USB AI.app**. Non aprire `preparer/index.html` nel browser: è solo un file del codice sorgente e non può scegliere o scrivere sulla USB. Collega la chiavetta, scegli una cartella al suo interno e premi **Prepara USB**.
-
-Il preparatore include l'app compilata e il modello, controlla lo spazio libero, copia i file e ne verifica il contenuto. Non richiede Node.js sul computer dell'utente. Se `PocketAI-data/` esiste già, la lascia intatta; se l'app è già presente nella cartella scelta, si ferma per evitare una sovrascrittura. I pacchetti sono anteprime non firmate: Windows o macOS potrebbero mostrare un avviso di sicurezza.
-
-La cartella scelta deve essere scrivibile e trovarsi sulla chiavetta: il preparatore non formatta il dispositivo. Per un uso su entrambi i sistemi occorrono entrambe le build e un filesystem compatibile; prova la chiavetta sui computer previsti prima di usarla con dati importanti.
-
-### Copia manuale
-
 Metti **l'EXE portable Windows** oppure **la `.app` Mac estratta** in una cartella scrivibile sulla chiavetta. Al primo avvio l'app crea `PocketAI-data/` accanto al programma. Lì conserva conversazioni, testi indicizzati, preferenze e modelli importati. La stessa cartella dati può essere usata dalle build Windows e Mac, **una alla volta**.
 
 ```text
@@ -99,11 +89,9 @@ La memoria effettiva include anche il contesto della chat e i buffer di calcolo;
 npm test              # test automatici
 npm run dist:win      # pacchetto Windows, su Windows x64
 npm run dist:mac      # pacchetti Mac, sul Mac di destinazione
-npm run usb-preparer:win  # app + preparatore Windows, su Windows x64
-npm run usb-preparer:mac  # app + preparatore Mac, su Mac
 ```
 
-Le build richiedono prima `npm ci` e `npm run model:download`; senza GGUF il packaging si ferma. I risultati sono in `release/`, e i preparatori in `release/preparer/`. Le dipendenze native vanno installate sulla piattaforma di destinazione. Mac Intel e Apple Silicon richiedono build distinte. I pacchetti non sono firmati o notarizzati: il sistema può mostrare un avviso. Il preparatore non sostituisce il collaudo su USB reale.
+Le build richiedono prima `npm ci` e `npm run model:download`; senza GGUF il packaging si ferma. I risultati sono in `release/`. Le dipendenze native vanno installate sulla piattaforma di destinazione. Mac Intel e Apple Silicon richiedono build distinte. Il workflow in `.github/workflows/build.yml` prepara le varianti su runner nativi quando viene avviato manualmente; non pubblica una release automaticamente.
 
 Il progetto è organizzato in `src/` (processo Electron e logica), `ui/` (interfaccia), `tests/`, `scripts/` e `models/` (manifest e avvisi del modello). Leggi [VERIFICHE.md](VERIFICHE.md) per lo stato delle verifiche e [AGENTS.md](AGENTS.md) per contribuire.
 
