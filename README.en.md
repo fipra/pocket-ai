@@ -40,7 +40,7 @@ Download a Windows portable EXE or macOS package from **Releases**, *when a rele
 
 ## Use it from a USB drive
 
-For guided setup, download **Prepara USB AI** for your operating system when a build is available. Open the compiled `.exe` or `.app`, not `preparer/index.html` in a browser; the HTML page alone cannot access the USB drive. Choose a folder on the USB drive and click **Prepara USB**. The preparer includes the compiled app and model, checks free space, copies and verifies the files, and leaves any existing `PocketAI-data/` untouched. It stops if the app is already present in the chosen folder. The Windows and Mac preparers contain separate platform builds.
+For guided setup, open [Releases](https://github.com/fipra/usb-ai/releases) and download the latest **USB AI preparatori** preview for Windows x64, Mac Apple Silicon, or Mac Intel. On Mac, extract the ZIP and open **Prepara USB AI.app**. Do not open `preparer/index.html` in a browser; it is only a source file. Choose a folder on the USB drive and click **Prepara USB**. The preparer includes the compiled app and model, checks free space, copies and verifies the files, and leaves any existing `PocketAI-data/` untouched. It stops if the app is already present in the chosen folder. These preview packages are unsigned.
 
 Put the extracted portable app in a writable USB folder. USB AI stores its workspace in `PocketAI-data/` next to the app (or in the absolute path specified by `POCKET_AI_HOME`). Close the application before ejecting the drive. Windows and macOS can use the same data folder, **not simultaneously**.
 

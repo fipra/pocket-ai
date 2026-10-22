@@ -1,0 +1,74 @@
+name: Build USB preparers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-preparers.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'preparer/**'
+      - 'scripts/**'
+      - 'src/**'
+      - 'ui/**'
+      - 'models/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            runner: windows-2025
+            platform: win
+          - name: mac-arm64
+            runner: macos-15
+            platform: mac
+          - name: mac-intel
+            runner: macos-15-intel
+            platform: mac
+    runs-on: ${{ matrix.runner }}
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run model:download
+      - run: npm run usb-preparer:${{ matrix.platform }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preparer-${{ matrix.name }}
+          path: |
+            release/preparer/*.exe
+            release/preparer/*.zip
+          if-no-files-found: error
+
+  publish-preview:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: preparer-*
+          path: artifacts
+      - name: Publish downloadable preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mapfile -d '' assets < <(find artifacts -type f -print0)
+          test "${#assets[@]}" -eq 3
+          gh release create "usb-ai-preview-${GITHUB_RUN_NUMBER}" "${assets[@]}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title "USB AI preparatori ${GITHUB_RUN_NUMBER}" \
+            --notes "Pacchetti di prova per Windows x64, Mac Apple Silicon e Mac Intel. Non firmati né collaudati su chiavetta reale." \
+            --prerelease
