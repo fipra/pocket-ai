@@ -47,7 +47,7 @@ Su Mac puoi avviare il sorgente con un doppio clic su `Avvia-Mac.command` dopo a
 
 ### Procedura guidata
 
-Scarica **Prepara USB AI** per il tuo sistema operativo dagli artefatti di build, quando disponibile. Collega la chiavetta, apri il preparatore, scegli una cartella sulla chiavetta e premi **Prepara USB**. Il preparatore include l'app compilata e il modello, controlla lo spazio libero, copia i file e ne verifica il contenuto. Non richiede Node.js sul computer dell'utente. Se `PocketAI-data/` esiste già, la lascia intatta; se l'app è già presente nella cartella scelta, si ferma per evitare una sovrascrittura. Il preparatore Windows contiene la build Windows, quello Mac la build Mac.
+Scarica **Prepara USB AI** per il tuo sistema operativo dagli artefatti di build, quando disponibile. Apri il programma compilato (`.exe` su Windows o `.app` su Mac), **non** `preparer/index.html` nel browser: la pagina da sola non può scegliere o scrivere sulla USB. Collega la chiavetta, scegli una cartella sulla chiavetta e premi **Prepara USB**. Il preparatore include l'app compilata e il modello, controlla lo spazio libero, copia i file e ne verifica il contenuto. Non richiede Node.js sul computer dell'utente. Se `PocketAI-data/` esiste già, la lascia intatta; se l'app è già presente nella cartella scelta, si ferma per evitare una sovrascrittura. Il preparatore Windows contiene la build Windows, quello Mac la build Mac.
 
 La cartella scelta deve essere scrivibile e trovarsi sulla chiavetta: il preparatore non formatta il dispositivo. Per un uso su entrambi i sistemi occorrono entrambe le build e un filesystem compatibile; prova la chiavetta sui computer previsti prima di usarla con dati importanti.
 

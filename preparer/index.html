@@ -27,9 +27,15 @@
   const locationBox = document.getElementById('location');
   const status = document.getElementById('status');
   const progress = document.getElementById('progress');
+  if (!window.preparer) {
+    choose.disabled = true;
+    status.textContent = 'Questa pagina è solo l’interfaccia. Avvia il programma «Prepara USB AI» compilato per Windows o Mac: il file index.html aperto nel browser non può accedere alla chiavetta.';
+  }
   choose.onclick = async () => {
-    const selected = await window.preparer.choose();
-    if (selected) { locationBox.textContent = selected; install.disabled = false; status.textContent = ''; }
+    try {
+      const selected = await window.preparer.choose();
+      if (selected) { locationBox.textContent = selected; install.disabled = false; status.textContent = ''; }
+    } catch (error) { status.textContent = error.message; }
   };
   install.onclick = async () => {
     choose.disabled = install.disabled = true;
@@ -44,5 +50,5 @@
       install.disabled = false;
     } finally { choose.disabled = false; }
   };
-  window.preparer.onProgress(({copied, total}) => { progress.value = total ? Math.round(copied / total * 100) : 100; });
+  if (window.preparer) window.preparer.onProgress(({copied, total}) => { progress.value = total ? Math.round(copied / total * 100) : 100; });
 </script></body></html>
