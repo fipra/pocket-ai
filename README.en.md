@@ -32,6 +32,8 @@ npm start
 
 Replace `YOUR-USERNAME` with the repository owner. `model:download` checks the downloaded model against the manifest. To run tests: `npm test`.
 
+On macOS, you can double-click `Avvia-Mac.command` after installing Node.js 22+. It installs dependencies on first launch, which requires Internet access. If macOS blocks the downloaded launcher, run `xattr -d com.apple.quarantine Avvia-Mac.command` from the extracted project folder in Terminal and try again. If copying removed its executable permission, also run `chmod +x Avvia-Mac.command`.
+
 ## For non-developers
 
 Download a Windows portable EXE or macOS package from **Releases**, *when a release is available*. GitHub's **Code → Download ZIP** downloads the source, not a ready-to-run application. Open the app from a writable folder, select a model and click **Load model**. Prebuilt packages are intended to contain the default model. The app is not currently signed or notarized, so your OS may display a warning.

@@ -41,6 +41,8 @@ npm start
 
 `model:download` usa Internet solo per la preparazione e verifica il GGUF tramite dimensione e SHA-256. I pesi del modello e `node_modules/` non sono nel repository. Se su Windows la finestra non compare in un ambiente aziendale, prova `npm run start:compat`: riduce l'isolamento di Chromium, quindi usalo solo con documenti attendibili.
 
+Su Mac puoi avviare il sorgente con un doppio clic su `Avvia-Mac.command` dopo aver installato Node.js 22+. Il launcher installa le dipendenze al primo avvio e richiede Internet per questa configurazione. Se macOS blocca il file scaricato da GitHub, apri Terminale nella cartella estratta ed esegui `xattr -d com.apple.quarantine Avvia-Mac.command`; poi riprova il doppio clic. Se il file ha perso il permesso di esecuzione durante la copia, esegui anche `chmod +x Avvia-Mac.command`.
+
 ## Portalo su USB
 
 Metti **l'EXE portable Windows** oppure **la `.app` Mac estratta** in una cartella scrivibile sulla chiavetta. Al primo avvio l'app crea `PocketAI-data/` accanto al programma. Lì conserva conversazioni, testi indicizzati, preferenze e modelli importati. La stessa cartella dati può essere usata dalle build Windows e Mac, **una alla volta**.
