@@ -1,6 +1,5 @@
 node_modules/
 PocketAI-data/
 release/
-preparer/payload/
 models/*.gguf
 .DS_Store
