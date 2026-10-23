@@ -10,6 +10,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'scripts/package-mac.py'
+      - 'scripts/mac-launcher.command'
       - '.github/workflows/mac-portable.yml'
   workflow_dispatch:
 
