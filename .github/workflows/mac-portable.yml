@@ -51,6 +51,17 @@ jobs:
           assert not workspace.get('documents')
           PY
           "$folder/bin/llama-cli" --help >/dev/null 2>&1
+          python3 - "$folder" <<'PY'
+          from pathlib import Path
+          import subprocess, sys
+          folder = Path(sys.argv[1])
+          linked_cpu = (folder / 'lib/libggml-cpu.dylib').is_file()
+          dynamic_cpu = any((folder / 'bin').glob('libggml-cpu*.so'))
+          assert linked_cpu or dynamic_cpu, 'Packaged llama-cli has no CPU backend'
+          devices = subprocess.run([str(folder / 'bin/llama-cli'), '--list-devices'],
+                                   text=True, capture_output=True, check=True)
+          assert any(name in devices.stdout + devices.stderr for name in ('BLAS:', 'Metal:', 'CPU:')), devices.stdout + devices.stderr
+          PY
           "$folder/bin/pdftotext" -v >/dev/null 2>&1
           ditto -c -k --sequesterRsrc --keepParent "$folder" "USB-AI-Rust-mac-${{ matrix.architecture }}.zip"
       - name: Upload build artifact
