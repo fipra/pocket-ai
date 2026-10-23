@@ -11,20 +11,91 @@ use std::{
 use tiny_http::{Header, Method, Response, Server, StatusCode};
 
 const INDEX: &str = include_str!("../web/index.html");
-const DEFAULT_MODEL: &str = include_str!("../models/default-model.json");
+const MODEL_CATALOG: &str = include_str!("../models/catalog.json");
 const MAX_FILE: usize = 20 * 1024 * 1024;
 
 #[derive(Clone, Deserialize)]
 struct ModelDownload {
+    id: String,
     name: String,
+    family: String,
+    parameters: String,
     file: String,
     url: String,
-    size: u64,
+    source_url: String,
+    size_bytes: Option<u64>,
+    download_gb: f64,
     sha256: String,
+    minimum_ram_gb: u64,
+    comfortable_ram_gb: u64,
+    license: String,
+    summary: String,
 }
 
-fn default_model() -> ModelDownload {
-    serde_json::from_str(DEFAULT_MODEL).expect("invalid built-in model manifest")
+fn model_catalog() -> Vec<ModelDownload> {
+    serde_json::from_str(MODEL_CATALOG).expect("invalid built-in model catalog")
+}
+
+#[derive(Clone, Serialize)]
+struct Hardware {
+    os: &'static str,
+    arch: &'static str,
+    logical_cores: usize,
+    ram_gb: Option<f64>,
+}
+
+fn detect_hardware() -> Hardware {
+    let logical_cores = std::thread::available_parallelism()
+        .map(|v| v.get())
+        .unwrap_or(1);
+    #[cfg(target_os = "macos")]
+    let ram_bytes = Command::new("sysctl")
+        .args(["-n", "hw.memsize"])
+        .output()
+        .ok()
+        .and_then(|v| String::from_utf8(v.stdout).ok())
+        .and_then(|v| v.trim().parse::<u64>().ok());
+    #[cfg(target_os = "windows")]
+    let ram_bytes = Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory",
+        ])
+        .output()
+        .ok()
+        .and_then(|v| String::from_utf8(v.stdout).ok())
+        .and_then(|v| v.trim().parse::<u64>().ok());
+    #[cfg(target_os = "linux")]
+    let ram_bytes = fs::read_to_string("/proc/meminfo")
+        .ok()
+        .and_then(|v| {
+            v.lines()
+                .find(|line| line.starts_with("MemTotal:"))
+                .and_then(|line| line.split_whitespace().nth(1))
+                .and_then(|value| value.parse::<u64>().ok())
+        })
+        .map(|kib| kib * 1024);
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    let ram_bytes: Option<u64> = None;
+    Hardware {
+        os: env::consts::OS,
+        arch: env::consts::ARCH,
+        logical_cores,
+        ram_gb: ram_bytes.map(|v| v as f64 / 1_073_741_824.0),
+    }
+}
+
+fn recommended_id<'a>(hardware: &Hardware, catalog: &'a [ModelDownload]) -> Option<&'a str> {
+    let ram = hardware.ram_gb?;
+    catalog
+        .iter()
+        .filter(|model| {
+            ram >= model.comfortable_ram_gb as f64
+                && (hardware.logical_cores >= 4 || model.minimum_ram_gb <= 8)
+        })
+        .last()
+        .map(|model| model.id.as_str())
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -73,7 +144,9 @@ struct App {
     models: PathBuf,
     db: Workspace,
     selected: Option<String>,
-    downloading: bool,
+    catalog: Vec<ModelDownload>,
+    hardware: Hardware,
+    downloading: Option<ModelDownload>,
     download_error: Option<String>,
 }
 
@@ -202,13 +275,38 @@ impl App {
         Err("Modello non trovato".into())
     }
     fn state(&self) -> Value {
-        let default = default_model();
-        let part = self
-            .root
-            .join("models")
-            .join(format!("{}.part", default.file));
-        let downloaded = fs::metadata(part).map(|m| m.len()).unwrap_or(0);
-        json!({"chats":self.db.chats,"documents":self.db.documents.iter().map(|d|json!({"id":d.id,"name":d.name,"count":d.chunks.len()})).collect::<Vec<_>>(),"models":self.models(),"model":self.selected,"root":self.root,"download":{"active":self.downloading,"error":self.download_error,"bytes":downloaded,"total":default.size,"name":default.name}})
+        let installed = self.models();
+        let recommendation = recommended_id(&self.hardware, &self.catalog);
+        let catalog = self.catalog.iter().map(|model| {
+            let fit = match self.hardware.ram_gb {
+                None => "unknown",
+                Some(ram) if ram < model.minimum_ram_gb as f64 => "low",
+                Some(ram) if ram < model.comfortable_ram_gb as f64 => "possible",
+                Some(_) => "good",
+            };
+            json!({"id":model.id,"name":model.name,"family":model.family,"parameters":model.parameters,"file":model.file,
+                "sourceUrl":model.source_url,"downloadGb":model.download_gb,"minimumRamGb":model.minimum_ram_gb,
+                "comfortableRamGb":model.comfortable_ram_gb,"license":model.license,"summary":model.summary,
+                "installed":installed.contains(&model.file),"fit":fit,"recommended":recommendation==Some(model.id.as_str())})
+        }).collect::<Vec<_>>();
+        let (download_name, downloaded, total) = if let Some(model) = &self.downloading {
+            let part = self
+                .root
+                .join("models")
+                .join(format!("{}.part", model.file));
+            (
+                Some(model.name.as_str()),
+                fs::metadata(part).map(|m| m.len()).unwrap_or(0),
+                model
+                    .size_bytes
+                    .unwrap_or((model.download_gb * 1_000_000_000.0) as u64),
+            )
+        } else {
+            (None, 0, 0)
+        };
+        json!({"chats":self.db.chats,"documents":self.db.documents.iter().map(|d|json!({"id":d.id,"name":d.name,"count":d.chunks.len()})).collect::<Vec<_>>(),
+            "models":installed,"model":self.selected,"root":self.root,"catalog":catalog,"hardware":self.hardware,
+            "download":{"active":self.downloading.is_some(),"error":self.download_error,"bytes":downloaded,"total":total,"name":download_name}})
     }
     fn command(&mut self, action: &str, data: Value) -> Result<Value, String> {
         match action {
@@ -443,8 +541,10 @@ fn sha256_file(path: &Path) -> Result<String, String> {
 
 fn verify_model(path: &Path, manifest: &ModelDownload) -> Result<(), String> {
     let size = fs::metadata(path).map_err(|e| e.to_string())?.len();
-    if size != manifest.size {
-        return Err(format!("Dimensione modello errata: {size} byte"));
+    if let Some(expected) = manifest.size_bytes {
+        if size != expected {
+            return Err(format!("Dimensione modello errata: {size} byte"));
+        }
     }
     let mut file = fs::File::open(path).map_err(|e| e.to_string())?;
     let mut head = [0; 4];
@@ -458,14 +558,13 @@ fn verify_model(path: &Path, manifest: &ModelDownload) -> Result<(), String> {
     Ok(())
 }
 
-fn run_download(root: &Path) -> Result<String, String> {
-    let manifest = default_model();
+fn run_download(root: &Path, manifest: &ModelDownload) -> Result<String, String> {
     let dir = root.join("models");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let target = dir.join(&manifest.file);
     if target.exists() {
         verify_model(&target, &manifest)?;
-        return Ok(manifest.file);
+        return Ok(manifest.file.clone());
     }
     let part = dir.join(format!("{}.part", manifest.file));
     let curl = if cfg!(windows) { "curl.exe" } else { "curl" };
@@ -498,22 +597,32 @@ fn run_download(root: &Path) -> Result<String, String> {
         return Err(e);
     }
     fs::rename(&part, &target).map_err(|e| e.to_string())?;
-    Ok(manifest.file)
+    Ok(manifest.file.clone())
 }
 
-fn start_download(app: Arc<Mutex<App>>) -> Result<Value, String> {
-    let root = {
+fn start_download(app: Arc<Mutex<App>>, model_id: &str) -> Result<Value, String> {
+    let (root, model) = {
         let mut guard = app.lock().unwrap();
-        if guard.downloading {
+        if guard.downloading.is_some() {
             return Ok(guard.state());
         }
-        guard.downloading = true;
+        let model = guard
+            .catalog
+            .iter()
+            .find(|model| model.id == model_id)
+            .cloned()
+            .ok_or("Modello non disponibile nel catalogo")?;
+        if guard.model_path(&model.file).is_ok() {
+            guard.selected = Some(model.file);
+            return Ok(guard.state());
+        }
+        guard.downloading = Some(model.clone());
         guard.download_error = None;
-        guard.root.clone()
+        (guard.root.clone(), model)
     };
     let state = app.lock().unwrap().state();
     std::thread::spawn(move || {
-        let result = run_download(&root);
+        let result = run_download(&root, &model);
         let mut guard = app.lock().unwrap();
         match result {
             Ok(name) => {
@@ -522,7 +631,7 @@ fn start_download(app: Arc<Mutex<App>>) -> Result<Value, String> {
             }
             Err(error) => guard.download_error = Some(error),
         }
-        guard.downloading = false;
+        guard.downloading = None;
     });
     Ok(state)
 }
@@ -603,14 +712,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         Workspace::default()
     };
-    let app = Arc::new(Mutex::new(App {
+    let mut app_state = App {
         root,
         models: base.join("models"),
         db,
         selected: None,
-        downloading: false,
+        catalog: model_catalog(),
+        hardware: detect_hardware(),
+        downloading: None,
         download_error: None,
-    }));
+    };
+    let installed = app_state.models();
+    let preferred = recommended_id(&app_state.hardware, &app_state.catalog)
+        .and_then(|id| app_state.catalog.iter().find(|model| model.id == id))
+        .map(|model| model.file.clone());
+    app_state.selected = preferred
+        .filter(|name| installed.contains(name))
+        .or_else(|| installed.first().cloned());
+    let app = Arc::new(Mutex::new(app_state));
     let (server, port) = bind_server()?;
     let origin = format!("http://127.0.0.1:{port}");
     println!("USB AI Rust: {origin}");
@@ -647,7 +766,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Ok(v) => {
                         let action = v["action"].as_str().unwrap_or("").to_owned();
                         if action == "download-model" {
-                            start_download(app.clone())
+                            v["modelId"]
+                                .as_str()
+                                .ok_or_else(|| "Scegli un modello".to_owned())
+                                .and_then(|model_id| start_download(app.clone(), model_id))
                         } else {
                             app.lock().unwrap().command(&action, v)
                         }
@@ -710,12 +832,20 @@ mod tests {
         assert!(decode_name("%ZZ").is_err());
     }
     #[test]
-    fn default_model_manifest_is_pinned() {
-        let model = default_model();
-        assert!(model.url.starts_with("https://huggingface.co/Qwen/"));
-        assert_eq!(model.size, 491400032);
-        assert_eq!(model.sha256.len(), 64);
-        assert!(model.file.ends_with(".gguf"));
+    fn model_catalog_is_pinned() {
+        let catalog = model_catalog();
+        assert_eq!(
+            catalog
+                .iter()
+                .map(|model| model.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["qwen-0.5b", "qwen-3b", "qwen-7b", "gemma-9b"]
+        );
+        for model in catalog {
+            assert!(model.url.starts_with("https://huggingface.co/"));
+            assert_eq!(model.sha256.len(), 64);
+            assert!(model.file.ends_with(".gguf"));
+        }
     }
     #[test]
     fn sha256_check_rejects_wrong_or_invalid_model() {
@@ -725,10 +855,49 @@ mod tests {
             sha256_file(&file).unwrap(),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
-        let mut model = default_model();
-        model.size = 3;
+        let mut model = model_catalog().remove(0);
+        model.size_bytes = Some(3);
         assert!(verify_model(&file, &model).is_err());
         fs::remove_file(file).unwrap();
+    }
+    #[test]
+    fn hardware_recommendation_respects_ram() {
+        let catalog = model_catalog();
+        let mut hardware = Hardware {
+            os: "macos",
+            arch: "aarch64",
+            logical_cores: 8,
+            ram_gb: Some(8.0),
+        };
+        assert_eq!(recommended_id(&hardware, &catalog), Some("qwen-0.5b"));
+        hardware.ram_gb = Some(16.0);
+        assert_eq!(recommended_id(&hardware, &catalog), Some("qwen-7b"));
+        hardware.ram_gb = Some(24.0);
+        assert_eq!(recommended_id(&hardware, &catalog), Some("gemma-9b"));
+        hardware.ram_gb = None;
+        assert_eq!(recommended_id(&hardware, &catalog), None);
+    }
+    #[test]
+    fn state_exposes_hardware_and_model_choices() {
+        let app = App {
+            root: env::temp_dir().join(format!("usb-ai-state-{}", id())),
+            models: env::temp_dir().join("usb-ai-no-models"),
+            db: Workspace::default(),
+            selected: None,
+            catalog: model_catalog(),
+            hardware: Hardware {
+                os: "macos",
+                arch: "aarch64",
+                logical_cores: 8,
+                ram_gb: Some(16.0),
+            },
+            downloading: None,
+            download_error: None,
+        };
+        let state = app.state();
+        assert_eq!(state["catalog"].as_array().unwrap().len(), 4);
+        assert_eq!(state["hardware"]["ram_gb"], 16.0);
+        assert_eq!(state["catalog"][2]["recommended"], true);
     }
     #[test]
     fn selects_next_port_when_default_is_busy() {

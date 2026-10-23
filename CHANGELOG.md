@@ -6,3 +6,4 @@
 - Added local GGUF chat through `llama-cli`, document import and keyword retrieval, portable workspace, and Markdown export.
 - Added an explicit, verified default-model download with progress display.
 - Added macOS and Windows portable packaging scripts.
+- Added a four-model catalog, hardware-aware recommendations, and a redesigned chat interface.

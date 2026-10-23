@@ -30,7 +30,7 @@ try {
     Get-ChildItem $toolDir -Filter '*.dll' | Copy-Item -Destination $bin -Force
   }
   Get-ChildItem (Join-Path $root 'models') -Filter '*.gguf' | Copy-Item -Destination (Join-Path $out 'models')
-  foreach ($name in @('QWEN-LICENSE.txt','default-model.json')) {
+  foreach ($name in @('QWEN-LICENSE.txt','catalog.json')) {
     $file = Join-Path (Join-Path $root 'models') $name
     if (Test-Path $file) { Copy-Item $file (Join-Path $out 'models') }
   }

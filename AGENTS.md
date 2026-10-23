@@ -2,7 +2,7 @@
 
 ## Structure
 
-USB AI is a Rust application. `src/main.rs` implements the localhost HTTP server, workspace persistence, document retrieval, model selection, and inference through `llama-cli`. `web/index.html` contains the browser interface. `models/default-model.json` pins the optional first-run download; `models/QWEN-LICENSE.txt` provides the default model's license. `scripts/` creates portable macOS and Windows packages. `PocketAI-data/`, GGUF weights, `target/`, and `release/` are local/generated and ignored.
+USB AI is a Rust application. `src/main.rs` implements the localhost HTTP server, workspace persistence, document retrieval, hardware guidance, model selection, and inference through `llama-cli`. `web/index.html` contains the browser interface. `models/catalog.json` lists curated GGUF downloads with source links, hashes, and licenses. `scripts/` creates portable macOS and Windows packages. `PocketAI-data/`, GGUF weights, `target/`, and `release/` are local/generated and ignored.
 
 ## Build and test
 
@@ -19,4 +19,4 @@ Use `rustfmt` and keep operations inside the local application and restricted lo
 
 ## Security and data
 
-Keep private documents, conversations, downloaded weights, and generated packages out of version control. Never weaken the localhost bind or allow arbitrary filesystem paths from browser requests. Verify the downloaded default model against the pinned size and SHA-256 before use. Respect third-party licenses. The portable workspace is not encrypted.
+Keep private documents, conversations, downloaded weights, and generated packages out of version control. Never weaken the localhost bind or allow arbitrary filesystem paths from browser requests. Verify catalog downloads against pinned SHA-256 values before use, and against exact sizes when available. Treat RAM guidance as an estimate. Respect each model's third-party license. The portable workspace is not encrypted.

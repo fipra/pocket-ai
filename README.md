@@ -9,6 +9,7 @@ Assistente AI locale e portatile. L'applicazione è scritta in Rust, apre la pro
 - Ricerca per parole chiave nei documenti, con estratti e numeri di pagina per i PDF.
 - Conversazioni persistenti ed esportazione Markdown.
 - Pacchetti portabili separati per Mac e Windows.
+- Scelta tra modelli 0,5B, 3B, 7B e 9B con indicazione della RAM del computer e stima di compatibilità.
 
 L'interfaccia si apre normalmente su `http://127.0.0.1:48157`. Se la porta è occupata, l'app sceglie automaticamente una porta libera tra `48158` e `48167` e apre l'indirizzo corretto nel browser. Il server ascolta solo sul computer locale. I dati sono salvati senza cifratura in `PocketAI-data/`.
 
@@ -20,7 +21,16 @@ Servono Rust, `llama-cli` di llama.cpp e, per leggere i PDF, `pdftotext` di Popp
 cargo run --release
 ```
 
-Il browser si apre automaticamente. Se manca un modello, premi **Scarica modello base (491 MB)** nell'interfaccia: il download parte solo dopo il clic, mostra l'avanzamento e verifica dimensione e SHA-256 prima dell'uso. Per scaricarlo serve Internet una volta; chat e documenti funzionano offline dopo il download. Puoi anche copiare un tuo modello `.gguf` in `models/`.
+Il browser si apre automaticamente. Apri **Scegli un modello** per vedere RAM totale, core logici e architettura rilevati sul computer in uso. Puoi scaricare uno dei modelli del catalogo; il download parte solo dopo il clic, mostra l'avanzamento e verifica SHA-256 e formato GGUF prima dell'uso. Per scaricarlo serve Internet una volta; chat e documenti funzionano offline dopo il download. Puoi anche copiare un tuo modello `.gguf` in `models/`.
+
+| Modello | Download circa | RAM minima indicativa | RAM più comoda | Licenza |
+|---|---:|---:|---:|---|
+| Qwen 2.5 0,5B | 0,49 GB | 4 GB | 6 GB | Apache 2.0 |
+| Qwen 2.5 3B | 2,1 GB | 8 GB | 10 GB | Qwen Research |
+| Qwen 2.5 7B | 4,68 GB | 12 GB | 16 GB | Apache 2.0 |
+| Gemma 2 9B | 5,76 GB | 16 GB | 24 GB | Gemma |
+
+Queste soglie sono stime prudenti basate sulla **RAM totale**, non una misura della memoria libera. Velocità e capacità effettive dipendono anche da GPU, contesto e programmi aperti. Il catalogo e le fonti dei file sono in [models/catalog.json](models/catalog.json).
 
 Su Windows, installa Rust, `llama-cli.exe` e `pdftotext.exe` nel PATH, poi esegui `cargo run --release` da PowerShell.
 
@@ -34,7 +44,7 @@ Questa repo non contiene pesi GGUF nel controllo versione. Una copia locale del 
 python3 scripts/package-mac.py
 ```
 
-La cartella `release/USB-AI-Rust-mac-<architettura>/` include l'eseguibile Rust, `llama-cli`, `pdftotext`, le librerie richieste e i GGUF presenti in `models/`. Se non contiene un modello, chi usa la chiavetta può scaricare quello base dall'interfaccia quando ha Internet. Copia **tutta la cartella** sulla chiavetta e fai doppio clic su `Avvia USB AI Rust.command`. Il pacchetto creato qui è per Apple Silicon (`arm64`); per Intel serve una build su Mac Intel. La build è firmata localmente per integrità, ma non ha firma Developer ID né notarizzazione Apple.
+La cartella `release/USB-AI-Rust-mac-<architettura>/` include l'eseguibile Rust, `llama-cli`, `pdftotext`, le librerie richieste e i GGUF presenti in `models/`. Se non contiene un modello, chi usa la chiavetta può sceglierne uno nel catalogo e scaricarlo quando ha Internet. Copia **tutta la cartella** sulla chiavetta e fai doppio clic su `Avvia USB AI Rust.command`. Il pacchetto creato qui è per Apple Silicon (`arm64`); per Intel serve una build su Mac Intel. La build è firmata localmente per integrità, ma non ha firma Developer ID né notarizzazione Apple.
 
 **Windows x64:** su un PC Windows con Rust, `llama-cli.exe` e `pdftotext.exe` nel PATH, esegui in PowerShell:
 

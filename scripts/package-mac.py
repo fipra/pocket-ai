@@ -97,7 +97,7 @@ def main():
             run("cp", "-c", str(model), str(dest))
         except subprocess.CalledProcessError:
             shutil.copy2(model, dest)
-    for name in ["QWEN-LICENSE.txt", "default-model.json"]:
+    for name in ["QWEN-LICENSE.txt", "catalog.json"]:
         source = ROOT / "models" / name
         if source.is_file():
             shutil.copy2(source, OUT / "models" / name)

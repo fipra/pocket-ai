@@ -10,7 +10,7 @@ Install Rust, `llama-cli` from llama.cpp, and `pdftotext` from Poppler for PDF i
 cargo run --release
 ```
 
-The browser normally opens at `http://127.0.0.1:48157`. If that port is occupied, the app chooses a free port through `48167` and opens the correct address. The server binds only to localhost. If no model is present, click **Scarica modello base (491 MB)** in the interface. The explicit download shows progress and verifies the file size and SHA-256 before use. Internet is needed once for that download; normal chat and document use stay offline afterward. You can also put your own compatible instruct GGUF in `models/`. Data lives in `PocketAI-data/` and is **not encrypted**. Model weights are not tracked in the repository.
+The browser normally opens at `http://127.0.0.1:48157`. If that port is occupied, the app chooses a free port through `48167` and opens the correct address. The server binds only to localhost. The model picker shows detected total RAM, logical cores and architecture, with conservative guidance for 0.5B, 3B, 7B and 9B models. Downloads start only after a click, show progress and verify SHA-256 and GGUF format before use. Internet is needed once for each model download; normal chat and document use stay offline afterward. You can also put your own compatible instruct GGUF in `models/`. Data lives in `PocketAI-data/` and is **not encrypted**. Model weights are not tracked in the repository. See [models/catalog.json](models/catalog.json) for model sources and licenses.
 
 ## Portable USB packages
 
