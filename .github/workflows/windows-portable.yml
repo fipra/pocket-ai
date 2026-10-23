@@ -74,8 +74,10 @@ jobs:
           $tag = 'rust-windows-portable'
           gh release view $tag *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --title 'USB AI Rust for Windows x64' --notes 'Portable Windows build. Extract the ZIP and double-click Avvia USB AI Rust.cmd. Choose and download a model on first use. No Rust or PowerShell setup is needed.' --prerelease
+            gh release create $tag --title 'USB AI Rust for Windows x64' --notes 'Portable Windows build. Extract the ZIP and double-click Avvia USB AI Rust.cmd. Choose and download a model on first use. No Rust or PowerShell setup is needed.' --latest
             if ($LASTEXITCODE -ne 0) { throw 'Could not create release' }
           }
           gh release upload $tag 'USB-AI-Rust-Windows-x64.zip' --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Could not upload Windows ZIP' }
+          gh release edit $tag --prerelease=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Could not make Windows release visible as latest' }
