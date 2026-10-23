@@ -1,0 +1,81 @@
+name: Mac portable
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'web/**'
+      - 'models/catalog.json'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'scripts/package-mac.py'
+      - '.github/workflows/mac-portable.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            architecture: arm64
+          - runner: macos-15-intel
+            architecture: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: |
+          rustup update stable
+          brew install llama.cpp poppler
+      - name: Test and package
+        run: |
+          cargo test --locked
+          python3 scripts/package-mac.py
+          folder="release/USB-AI-Rust-mac-${{ matrix.architecture }}"
+          test -f "$folder/Avvia USB AI Rust.command"
+          test -x "$folder/bin/usb-ai-rust"
+          test -x "$folder/bin/llama-cli"
+          test -x "$folder/bin/pdftotext"
+          test -f "$folder/models/catalog.json"
+          python3 - "$folder/PocketAI-data/workspace.json" <<'PY'
+          import json, sys
+          workspace = json.load(open(sys.argv[1]))
+          assert not workspace.get('chats')
+          assert not workspace.get('documents')
+          PY
+          "$folder/bin/llama-cli" --help >/dev/null 2>&1
+          "$folder/bin/pdftotext" -v >/dev/null 2>&1
+          ditto -c -k --sequesterRsrc --keepParent "$folder" "USB-AI-Rust-mac-${{ matrix.architecture }}.zip"
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: USB-AI-Rust-mac-${{ matrix.architecture }}
+          path: USB-AI-Rust-mac-${{ matrix.architecture }}.zip
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: USB-AI-Rust-mac-*
+          merge-multiple: true
+      - name: Publish Mac downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag='rust-mac-portable'
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title 'USB AI Rust for macOS' --notes 'Portable macOS builds for Apple Silicon and Intel. Download the ZIP matching your Mac, extract the complete folder and double-click Avvia USB AI Rust.command. Choose and download a model on first use.' --latest
+          fi
+          gh release upload "$tag" USB-AI-Rust-mac-*.zip --clobber
+          gh release edit "$tag" --prerelease=false --latest

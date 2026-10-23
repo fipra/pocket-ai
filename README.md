@@ -2,7 +2,7 @@
 
 A private, portable AI assistant that runs on your computer. The Rust app opens in your browser and uses `llama-cli` to run GGUF models locally. It needs no account or cloud API. Keep the entire folder on a USB drive to carry your models and data with you.
 
-[**Download the ready-to-use Windows x64 ZIP**](https://github.com/fipra/usb-ai/releases/latest) · [Leggi in italiano](README.it.md)
+[**Download for Windows x64**](https://github.com/fipra/usb-ai/releases/tag/rust-windows-portable) · [**Download for macOS**](https://github.com/fipra/usb-ai/releases/tag/rust-mac-portable) · [Leggi in italiano](README.it.md)
 
 ## Features
 
@@ -28,13 +28,9 @@ The destination PC does **not** need Rust, Cargo, or a PowerShell setup. Keep th
 
 ### macOS
 
-Build on a Mac with the same architecture as the destination Mac:
+Download the ZIP that matches your Mac from the [macOS release](https://github.com/fipra/usb-ai/releases/tag/rust-mac-portable): **arm64** for Apple Silicon or **x86_64** for Intel. Extract the complete folder to your USB drive and double-click `Avvia USB AI Rust.command`. Choose and download a model in the app on first use. The ZIP includes the app, `llama-cli`, `pdftotext`, and their required libraries; it does not include model weights or personal data.
 
-```bash
-python3 scripts/package-mac.py
-```
-
-Copy the entire `release/USB-AI-Rust-mac-<architecture>/` folder to a USB drive and double-click `Avvia USB AI Rust.command`. The folder includes the app, `llama-cli`, `pdftotext`, their required libraries, and any GGUF files already in `models/`. If it contains no model, choose and download one in the app. Build on Apple Silicon for an `arm64` Mac or on Intel for an Intel Mac. The package has a local integrity signature but is not Developer ID signed or notarized.
+The package has a local integrity signature but is not Developer ID signed or notarized. macOS may ask you to authorize it on first launch. Developers can also create the folder locally with `python3 scripts/package-mac.py` on a Mac of the same architecture.
 
 ## Models and hardware guidance
 

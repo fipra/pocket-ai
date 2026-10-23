@@ -39,13 +39,7 @@ Questa repo non contiene pesi GGUF nel controllo versione. Una copia locale del 
 
 ## Pacchetto per chiavetta USB
 
-**Mac:** su un Mac della stessa architettura del computer di destinazione, esegui:
-
-```bash
-python3 scripts/package-mac.py
-```
-
-La cartella `release/USB-AI-Rust-mac-<architettura>/` include l'eseguibile Rust, `llama-cli`, `pdftotext`, le librerie richieste e i GGUF presenti in `models/`. Se non contiene un modello, chi usa la chiavetta può sceglierne uno nel catalogo e scaricarlo quando ha Internet. Copia **tutta la cartella** sulla chiavetta e fai doppio clic su `Avvia USB AI Rust.command`. Il pacchetto creato qui è per Apple Silicon (`arm64`); per Intel serve una build su Mac Intel. La build è firmata localmente per integrità, ma non ha firma Developer ID né notarizzazione Apple.
+**Mac:** scarica dalla [release macOS](https://github.com/fipra/usb-ai/releases/tag/rust-mac-portable) lo ZIP **arm64** per Apple Silicon oppure **x86_64** per Intel. Estrai l'intera cartella sulla chiavetta e fai doppio clic su `Avvia USB AI Rust.command`. La cartella include eseguibile e strumenti necessari, ma non modelli o dati personali. Al primo avvio scegli e scarica un modello. La build non ha firma Developer ID né notarizzazione Apple; macOS può chiedere di autorizzarla. Per creare il pacchetto dal sorgente su un Mac della stessa architettura, esegui `python3 scripts/package-mac.py`.
 
 **Windows x64:** scarica lo ZIP **USB-AI-Rust-Windows-x64.zip** dalla [release Windows portatile](https://github.com/fipra/usb-ai/releases/tag/rust-windows-portable), estrai **tutta la cartella** e fai doppio clic su `Avvia USB AI Rust.cmd`. Non servono Rust, Cargo, PowerShell o installazioni aggiuntive sul PC di destinazione. Al primo avvio scegli un modello e scaricalo dall'interfaccia; poi puoi usare la chiavetta offline. I dati e il modello scaricato restano nella cartella portatile. La build è per Windows x64 ed è da collaudare su un PC Windows reale. Il file `Prepara.USB.AI.0.1.0.exe` della vecchia release è Electron e non appartiene alla versione Rust.
 
