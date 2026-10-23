@@ -55,6 +55,16 @@ fn localized_no_passages(value: &str) -> &'static str {
     }
 }
 
+fn localized_empty_response(value: &str) -> &'static str {
+    match normalize_language(value) {
+        "it" => "llama-cli: risposta vuota",
+        "de" => "llama-cli: leere Antwort",
+        "fr" => "llama-cli : réponse vide",
+        "es" => "llama-cli: respuesta vacía",
+        _ => "llama-cli: empty response",
+    }
+}
+
 #[derive(Clone, Deserialize)]
 struct ModelDownload {
     id: String,
@@ -482,7 +492,11 @@ impl App {
                     String::from_utf8_lossy(&output.stderr)
                 ));
             }
-            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+            clean_llama_output(
+                &String::from_utf8_lossy(&output.stdout),
+                &prompt,
+                self.language(),
+            )?
         };
         let chat = &mut self.db.chats[idx];
         if chat.messages.is_empty() {
@@ -552,6 +566,40 @@ impl App {
         self.save()?;
         Ok(self.state())
     }
+}
+
+fn clean_llama_output(stdout: &str, prompt: &str, language: &str) -> Result<String, String> {
+    let normalized = stdout.replace("\r\n", "\n");
+    let response = normalized
+        .rfind(prompt)
+        .map(|index| &normalized[index + prompt.len()..])
+        .unwrap_or(&normalized);
+    let mut lines: Vec<&str> = response.trim().lines().collect();
+    while lines.last().is_some_and(|line| line.trim().is_empty()) {
+        lines.pop();
+    }
+    if lines.last().is_some_and(|line| line.trim() == "Exiting...") {
+        lines.pop();
+    }
+    while lines.last().is_some_and(|line| line.trim().is_empty()) {
+        lines.pop();
+    }
+    let timing = if lines
+        .last()
+        .is_some_and(|line| line.trim().starts_with("[ Prompt:") && line.contains("| Generation:"))
+    {
+        Some(lines.pop().unwrap().trim())
+    } else {
+        None
+    };
+    let answer = lines.join("\n").trim().to_owned();
+    if answer.is_empty() {
+        return Err(localized_empty_response(language).into());
+    }
+    Ok(match timing {
+        Some(timing) => format!("{answer}\n\n{timing}"),
+        None => answer,
+    })
 }
 
 fn sha256_file(path: &Path) -> Result<String, String> {
@@ -862,6 +910,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn llama_output_keeps_only_answer_and_optional_speed() {
+        let prompt = "You are USB AI.\nUser: ciao\nAssistant:";
+        let modern = format!(
+            "Loading model...\n\nllama.cpp\n\n> {prompt}\nCiao! Come posso aiutarti?\n\n[ Prompt: 482.9 t/s | Generation: 121.7 t/s ]\n\nExiting...\n"
+        );
+        assert_eq!(
+            clean_llama_output(&modern, prompt, "it").unwrap(),
+            "Ciao! Come posso aiutarti?\n\n[ Prompt: 482.9 t/s | Generation: 121.7 t/s ]"
+        );
+        assert_eq!(
+            clean_llama_output("Prima riga\nSeconda riga\n", prompt, "en").unwrap(),
+            "Prima riga\nSeconda riga"
+        );
+        assert_eq!(
+            clean_llama_output("Exiting...\n", prompt, "it").unwrap_err(),
+            "llama-cli: risposta vuota"
+        );
+    }
     #[test]
     fn language_defaults_to_english_and_persists_selection() {
         assert_eq!(normalize_language(""), "en");
