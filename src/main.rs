@@ -482,7 +482,7 @@ impl App {
                     "0.3",
                     "--simple-io",
                     "--no-display-prompt",
-                    "-st",
+                    "--no-conversation",
                 ])
                 .output()
                 .map_err(|e| format!("llama-cli: {e}"))?;
@@ -570,10 +570,16 @@ impl App {
 
 fn clean_llama_output(stdout: &str, prompt: &str, language: &str) -> Result<String, String> {
     let normalized = stdout.replace("\r\n", "\n");
-    let response = normalized
-        .rfind(prompt)
-        .map(|index| &normalized[index + prompt.len()..])
-        .unwrap_or(&normalized);
+    // Older llama-cli builds can echo the prompt despite --no-display-prompt.
+    // Its banner and the echoed conversation must never become a chat message.
+    let response = if let Some(index) = normalized.rfind(prompt) {
+        &normalized[index + prompt.len()..]
+    } else if normalized.contains("Loading model...") || normalized.contains("available commands:")
+    {
+        return Err(localized_empty_response(language).into());
+    } else {
+        &normalized
+    };
     let mut lines: Vec<&str> = response.trim().lines().collect();
     while lines.last().is_some_and(|line| line.trim().is_empty()) {
         lines.pop();
@@ -584,22 +590,17 @@ fn clean_llama_output(stdout: &str, prompt: &str, language: &str) -> Result<Stri
     while lines.last().is_some_and(|line| line.trim().is_empty()) {
         lines.pop();
     }
-    let timing = if lines
-        .last()
-        .is_some_and(|line| line.trim().starts_with("[ Prompt:") && line.contains("| Generation:"))
-    {
-        Some(lines.pop().unwrap().trim())
-    } else {
-        None
-    };
+    while lines.last().is_some_and(|line| {
+        line.trim().is_empty()
+            || (line.trim().starts_with("[ Prompt:") && line.contains("| Generation:"))
+    }) {
+        lines.pop();
+    }
     let answer = lines.join("\n").trim().to_owned();
     if answer.is_empty() {
         return Err(localized_empty_response(language).into());
     }
-    Ok(match timing {
-        Some(timing) => format!("{answer}\n\n{timing}"),
-        None => answer,
-    })
+    Ok(answer)
 }
 
 fn sha256_file(path: &Path) -> Result<String, String> {
@@ -911,14 +912,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 mod tests {
     use super::*;
     #[test]
-    fn llama_output_keeps_only_answer_and_optional_speed() {
+    fn llama_output_keeps_only_answer() {
         let prompt = "You are USB AI.\nUser: ciao\nAssistant:";
         let modern = format!(
             "Loading model...\n\nllama.cpp\n\n> {prompt}\nCiao! Come posso aiutarti?\n\n[ Prompt: 482.9 t/s | Generation: 121.7 t/s ]\n\nExiting...\n"
         );
         assert_eq!(
             clean_llama_output(&modern, prompt, "it").unwrap(),
-            "Ciao! Come posso aiutarti?\n\n[ Prompt: 482.9 t/s | Generation: 121.7 t/s ]"
+            "Ciao! Come posso aiutarti?"
         );
         assert_eq!(
             clean_llama_output("Prima riga\nSeconda riga\n", prompt, "en").unwrap(),
@@ -928,6 +929,12 @@ mod tests {
             clean_llama_output("Exiting...\n", prompt, "it").unwrap_err(),
             "llama-cli: risposta vuota"
         );
+        let leaked = format!("Loading model...\n\nlogo\navailable commands:\n\n> {prompt}\nDue figli. [1]\n\n[ Prompt: 184.1 t/s | Generation: 9.0 t/s ]\n");
+        assert_eq!(
+            clean_llama_output(&leaked, prompt, "it").unwrap(),
+            "Due figli. [1]"
+        );
+        assert!(clean_llama_output("Loading model...\nlogo\n", prompt, "it").is_err());
     }
     #[test]
     fn language_defaults_to_english_and_persists_selection() {
