@@ -16,13 +16,10 @@ try {
   New-Item (Join-Path $out 'models') -ItemType Directory -Force | Out-Null
   New-Item $data -ItemType Directory -Force | Out-Null
   $workspaceFile = Join-Path $data 'workspace.json'
-  if (Test-Path $workspaceFile) {
-    $workspace = Get-Content $workspaceFile -Raw | ConvertFrom-Json
-    $workspace.chats = @()
-  } else {
+  if (-not (Test-Path $workspaceFile)) {
     $workspace = @{ chats = @(); documents = @() }
+    [System.IO.File]::WriteAllText($workspaceFile, ($workspace | ConvertTo-Json -Depth 100), (New-Object System.Text.UTF8Encoding($false)))
   }
-  [System.IO.File]::WriteAllText($workspaceFile, ($workspace | ConvertTo-Json -Depth 100), (New-Object System.Text.UTF8Encoding($false)))
   Copy-Item (Join-Path $root 'target\release\usb-ai-rust.exe') $bin
   Copy-Item $llama $bin
   Copy-Item $pdf $bin
