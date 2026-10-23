@@ -16,9 +16,9 @@ The browser normally opens at `http://127.0.0.1:48157`. If that port is occupied
 
 On macOS, run `python3 scripts/package-mac.py`. Copy the entire `release/USB-AI-Rust-mac-<architecture>/` folder to your USB drive and double-click `Avvia USB AI Rust.command`. The package contains the local model files and the required tools and libraries. Build on a Mac with the same architecture as the target Mac. The build is not Developer ID signed or notarized.
 
-On Windows x64, install Rust, `llama-cli.exe`, and `pdftotext.exe` on a Windows PC, then run `powershell -ExecutionPolicy Bypass -File scripts\package-windows.ps1`. Copy the entire `release\USB-AI-Rust-Windows-x64\` folder and double-click `Avvia USB AI Rust.cmd`. Some installations may need additional DLLs beyond those found next to the tools. The Windows package has not been tested in this macOS environment.
+On Windows x64, download **USB-AI-Rust-Windows-x64.zip** from the [portable Windows release](https://github.com/fipra/usb-ai/releases/tag/rust-windows-portable). Extract the complete folder and double-click `Avvia USB AI Rust.cmd`. The destination PC needs no Rust, Cargo, PowerShell setup, or other installation. Choose and download a model in the interface on first use; afterward the USB folder works offline. Data and downloaded models remain in the portable folder. This x64 build still needs testing on a physical Windows PC. The old `Prepara.USB.AI.0.1.0.exe` release is the former Electron app.
 
-Packaging clears conversations from the package workspace without changing the main `PocketAI-data/`. Check the package workspace before sharing it, since indexed documents may remain.
+Developers can recreate the package on Windows with `scripts/package-windows.ps1` after installing Rust, `llama-cli.exe`, and `pdftotext.exe`. GitHub Actions generates the release above automatically.
 
 ## Current limits
 

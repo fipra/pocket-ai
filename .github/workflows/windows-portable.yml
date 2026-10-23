@@ -1,0 +1,81 @@
+name: Windows portable
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'web/**'
+      - 'models/catalog.json'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'scripts/package-windows.ps1'
+      - '.github/workflows/windows-portable.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-x64:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        run: rustup update stable
+      - name: Download portable runtime tools
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $tools = Join-Path $env:RUNNER_TEMP 'usb-ai-tools'
+          New-Item $tools -ItemType Directory -Force | Out-Null
+          $llamaZip = Join-Path $tools 'llama.zip'
+          $popplerZip = Join-Path $tools 'poppler.zip'
+          Invoke-WebRequest 'https://github.com/ggml-org/llama.cpp/releases/download/b11836/llama-b11836-bin-win-cpu-x64.zip' -OutFile $llamaZip
+          Invoke-WebRequest 'https://github.com/oschwartz10612/poppler-windows/releases/download/v26.09.0-0/Release-26.09.0-0.zip' -OutFile $popplerZip
+          Expand-Archive $llamaZip (Join-Path $tools 'llama')
+          Expand-Archive $popplerZip (Join-Path $tools 'poppler')
+          $llama = Get-ChildItem (Join-Path $tools 'llama') -Filter 'llama-cli.exe' -Recurse -File | Select-Object -First 1
+          $pdf = Get-ChildItem (Join-Path $tools 'poppler') -Filter 'pdftotext.exe' -Recurse -File | Select-Object -First 1
+          if (!$llama -or !$pdf) { throw 'Required runtime executable missing from downloaded archives' }
+          Add-Content $env:GITHUB_PATH $llama.DirectoryName
+          Add-Content $env:GITHUB_PATH $pdf.DirectoryName
+      - name: Test and package
+        shell: pwsh
+        run: |
+          cargo test --locked
+          if ($LASTEXITCODE -ne 0) { throw 'Rust tests failed' }
+          & scripts/package-windows.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Windows package failed' }
+          $folder = 'release/USB-AI-Rust-Windows-x64'
+          foreach ($required in @('Avvia USB AI Rust.cmd','bin/usb-ai-rust.exe','bin/llama-cli.exe','bin/pdftotext.exe','models/catalog.json','PocketAI-data/workspace.json')) {
+            if (!(Test-Path (Join-Path $folder $required))) { throw "Package is missing $required" }
+          }
+          $workspace = Get-Content (Join-Path $folder 'PocketAI-data/workspace.json') -Raw | ConvertFrom-Json
+          if (@($workspace.chats).Count -ne 0) { throw 'Package contains conversations' }
+          & (Join-Path $folder 'bin/llama-cli.exe') --help *> $null
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged llama-cli cannot start' }
+          & (Join-Path $folder 'bin/pdftotext.exe') -v 2>$null
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged pdftotext cannot start' }
+          Compress-Archive -Path $folder -DestinationPath 'USB-AI-Rust-Windows-x64.zip' -Force
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: USB-AI-Rust-Windows-x64
+          path: USB-AI-Rust-Windows-x64.zip
+          if-no-files-found: error
+      - name: Publish portable download
+        if: github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'rust-windows-portable'
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title 'USB AI Rust for Windows x64' --notes 'Portable Windows build. Extract the ZIP and double-click Avvia USB AI Rust.cmd. Choose and download a model on first use. No Rust or PowerShell setup is needed.' --prerelease
+            if ($LASTEXITCODE -ne 0) { throw 'Could not create release' }
+          }
+          gh release upload $tag 'USB-AI-Rust-Windows-x64.zip' --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Could not upload Windows ZIP' }
