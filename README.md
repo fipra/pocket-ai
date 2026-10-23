@@ -22,7 +22,7 @@ cargo run --release
 
 Il browser si apre automaticamente. Se manca un modello, premi **Scarica modello base (491 MB)** nell'interfaccia: il download parte solo dopo il clic, mostra l'avanzamento e verifica dimensione e SHA-256 prima dell'uso. Per scaricarlo serve Internet una volta; chat e documenti funzionano offline dopo il download. Puoi anche copiare un tuo modello `.gguf` in `models/`.
 
-Puoi avviare con doppio clic su `Avvia-Mac.command`, se gli strumenti necessari sono già installati. Su Windows, installa Rust, `llama-cli.exe` e `pdftotext.exe` nel PATH e usa `Avvia-Windows.cmd`.
+Su Windows, installa Rust, `llama-cli.exe` e `pdftotext.exe` nel PATH, poi esegui `cargo run --release` da PowerShell.
 
 Questa repo non contiene pesi GGUF nel controllo versione. Una copia locale del modello rimane in `models/` e viene inclusa nel pacchetto portabile. Usa un modello *instruct* compatibile e controlla la sua licenza prima di distribuirlo.
 
