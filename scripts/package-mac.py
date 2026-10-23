@@ -41,6 +41,29 @@ def resolve(source, dep):
     raise RuntimeError(f"Dependency not found: {dep} (from {source})")
 
 
+def runtime_backends(llama):
+    """Find GGML modules loaded with dlopen (and therefore absent from otool -L)."""
+    directories = [llama.parent, llama.parent.parent / "lib", llama.parent.parent / "libexec"]
+    # Homebrew now ships GGML as a separate formula. Its dlopen modules live
+    # in ggml's libexec, not alongside the llama.cpp executable or libraries.
+    linked = [llama]
+    for dep in dependencies(llama):
+        if pathlib.Path(dep).name == "libllama.dylib":
+            linked.append(resolve(llama, dep))
+    for binary in linked:
+        for dep in dependencies(binary):
+            if pathlib.Path(dep).name.startswith("libggml"):
+                ggml = resolve(binary, dep)
+                if ggml is not None:
+                    directories.extend([ggml.parent, ggml.parent.parent / "libexec"])
+    found = {}
+    for directory in directories:
+        for path in directory.glob("libggml-*.so"):
+            if path.is_file() and path.name not in found:
+                found[path.name] = path.resolve()
+    return list(found.values())
+
+
 def main():
     subprocess.run(["cargo", "build", "--release", "--locked"], cwd=ROOT, check=True)
     tools = {"llama-cli": shutil.which("llama-cli"), "pdftotext": shutil.which("pdftotext")}
@@ -66,6 +89,19 @@ def main():
         shutil.copy2(source, target)
         target.chmod(target.stat().st_mode | 0o200)
         queue.append((source, target, False))
+    llama = pathlib.Path(tools["llama-cli"]).resolve()
+    backends = runtime_backends(llama)
+    for source in backends:
+        # ggml_backend_load_all() searches beside the llama-cli executable.
+        # Dynamic modules do not appear in its otool -L dependency list.
+        target = BIN / source.name
+        shutil.copy2(source, target)
+        target.chmod(target.stat().st_mode | 0o200)
+        queue.append((source, target, False))
+    if not any(path.name.startswith("libggml-cpu") for path in backends) and not any(
+        "libggml-cpu" in dep for dep in dependencies(llama)
+    ):
+        raise RuntimeError("Missing llama.cpp CPU backend (dynamic module or linked library)")
     seen = set()
     signed = []
     while queue:
