@@ -546,14 +546,35 @@ fn tool_path(override_name: &str, name: &str) -> PathBuf {
     PathBuf::from(name)
 }
 
-fn open_browser() {
-    let url = "http://127.0.0.1:48157";
+fn open_browser(port: u16) {
+    let url = format!("http://127.0.0.1:{port}");
     #[cfg(target_os = "macos")]
-    let _ = Command::new("open").arg(url).spawn();
+    let _ = Command::new("open").arg(&url).spawn();
     #[cfg(target_os = "windows")]
-    let _ = Command::new("cmd").args(["/C", "start", "", url]).spawn();
+    let _ = Command::new("cmd").args(["/C", "start", "", &url]).spawn();
     #[cfg(target_os = "linux")]
-    let _ = Command::new("xdg-open").arg(url).spawn();
+    let _ = Command::new("xdg-open").arg(&url).spawn();
+}
+
+fn bind_first_available<T>(
+    mut bind: impl FnMut(u16) -> Result<T, String>,
+) -> Result<(T, u16), String> {
+    let mut last_error = String::new();
+    for port in 48157..=48167 {
+        match bind(port) {
+            Ok(server) => return Ok((server, port)),
+            Err(error) => last_error = error,
+        }
+    }
+    Err(format!(
+        "Nessuna porta disponibile tra 48157 e 48167: {last_error}"
+    ))
+}
+
+fn bind_server() -> Result<(Server, u16), String> {
+    bind_first_available(|port| {
+        Server::http(format!("127.0.0.1:{port}")).map_err(|e| e.to_string())
+    })
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let packaged = env::current_exe()?
@@ -590,9 +611,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         downloading: false,
         download_error: None,
     }));
-    let server = Server::http("127.0.0.1:48157").map_err(|e| format!("server: {e}"))?;
-    println!("USB AI Rust: http://127.0.0.1:48157");
-    open_browser();
+    let (server, port) = bind_server()?;
+    let origin = format!("http://127.0.0.1:{port}");
+    println!("USB AI Rust: {origin}");
+    open_browser(port);
     for mut request in server.incoming_requests() {
         let url = request.url().to_owned();
         let method = request.method().clone();
@@ -600,7 +622,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .headers()
             .iter()
             .find(|h| h.field.equiv("Origin"))
-            .map(|h| h.value.as_str() == "http://127.0.0.1:48157")
+            .map(|h| h.value.as_str() == origin)
             .unwrap_or(true);
         let (code, mime, body) = if method == Method::Get && url == "/" {
             (200, "text/html; charset=utf-8", INDEX.as_bytes().to_vec())
@@ -707,5 +729,17 @@ mod tests {
         model.size = 3;
         assert!(verify_model(&file, &model).is_err());
         fs::remove_file(file).unwrap();
+    }
+    #[test]
+    fn selects_next_port_when_default_is_busy() {
+        let (server, port) = bind_first_available(|port| {
+            if port == 48157 {
+                Err("in use".into())
+            } else {
+                Ok("ready")
+            }
+        })
+        .unwrap();
+        assert_eq!((server, port), ("ready", 48158));
     }
 }
