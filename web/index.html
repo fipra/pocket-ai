@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>USB AI Rust</title>
+  <style>
+    :root{font-family:system-ui,sans-serif;color:#1d2932;background:#f5f6f2}*{box-sizing:border-box}body{margin:0;display:grid;grid-template-columns:245px 1fr 235px;height:100vh}aside{background:#e9eee9;padding:20px;overflow:auto}main{display:flex;flex-direction:column;min-width:0}header{padding:18px 24px;border-bottom:1px solid #d7ddd8;display:flex;justify-content:space-between;align-items:center}h1{font-size:20px;margin:0}h2{font-size:15px;margin:25px 0 10px}button,select,input,textarea{font:inherit}button{border:1px solid #c3cdc5;background:white;border-radius:8px;padding:8px 10px;cursor:pointer}button:hover{background:#e6f4e9}button:disabled{opacity:.55;cursor:wait}.primary{background:#136b48;color:white;border-color:#136b48}.primary:hover{background:#0f553a;color:white}nav button{display:block;width:100%;text-align:left;margin:6px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.active{border-color:#136b48;background:#d8efdf}.muted{font-size:12px;color:#627169}.row{display:flex;gap:8px;align-items:center}.row>*{min-width:0}#messages{flex:1;overflow:auto;padding:24px;max-width:850px;width:100%;margin:auto}.bubble{padding:14px 18px;border-radius:14px;margin:12px 0;white-space:pre-wrap;line-height:1.5;background:white;box-shadow:0 2px 12px #0000000a}.bubble.user{background:#daf0e0;margin-left:12%}.who{font-size:12px;font-weight:700;margin-bottom:6px;color:#136b48}details{margin-top:8px;font-size:13px}form{padding:15px 24px;border-top:1px solid #d7ddd8}textarea{width:100%;min-height:75px;resize:vertical;border:1px solid #c3cdc5;border-radius:10px;padding:12px}.actions{display:flex;justify-content:space-between;align-items:center;margin-top:7px}#status{font-size:12px;color:#627169;margin-top:5px}#notice{min-height:24px;color:#9e3b32}select{width:100%;padding:8px}.doc{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:13px;margin:8px 0;overflow-wrap:anywhere}.doc button{padding:2px 7px}.spinner{display:inline-block;width:16px;height:16px;border:2px solid #b8d9c4;border-top-color:#136b48;border-radius:50%;animation:spin .75s linear infinite;vertical-align:middle;margin-right:6px}[hidden]{display:none!important}@keyframes spin{to{transform:rotate(360deg)}}#download{width:100%;margin-top:8px}#download-info{min-height:34px}@media(max-width:850px){body{grid-template-columns:175px 1fr;grid-template-rows:minmax(0,1fr) 240px}main{grid-column:2;grid-row:1/3}aside:last-child{grid-column:1;grid-row:2;padding-top:5px}aside:last-child h2{margin:8px 0}}@media(max-width:550px){body{display:flex;flex-direction:column;height:100dvh}aside:first-child{height:105px;padding:8px;flex:none}aside:first-child h2,aside:first-child nav{display:none}main{height:calc(100dvh - 265px);flex:none}aside:last-child{height:160px;flex:none}header{padding:8px}#messages{padding:10px}form{padding:8px}}
+  </style>
+</head>
+<body>
+  <aside><h1>USB AI <small>Rust</small></h1><p class="muted">Assistente locale portatile</p><button class="primary" id="new">＋ Nuova chat</button><h2>Conversazioni</h2><nav id="chats"></nav></aside>
+  <main>
+    <header><div><strong id="title">La tua chat</strong><div id="status"></div></div><div class="row"><button id="export">Esporta</button><button id="delete">Elimina</button></div></header>
+    <section id="messages"><p>Seleziona un modello GGUF e scrivi un messaggio.</p></section>
+    <form id="form"><div id="notice" role="status"></div><textarea id="prompt" placeholder="Scrivi un messaggio…"></textarea><div class="actions"><label><input id="rag" type="checkbox"> Cerca nei documenti</label><button class="primary" id="send">Invia ↑</button></div></form>
+  </main>
+  <aside>
+    <h2>Modello locale</h2><select id="models"></select><button id="load">Seleziona modello</button>
+    <button id="download">Scarica modello base (491 MB)</button>
+    <p id="download-info" class="muted"></p>
+    <p class="muted">Puoi anche copiare un GGUF in models/ o PocketAI-data/models/, poi aggiornare la pagina.</p>
+    <h2>Documenti</h2><label class="primary" style="display:block;cursor:pointer;padding:8px;border-radius:8px">Importa PDF, TXT, MD<input id="doc-file" type="file" accept=".pdf,.txt,.md" multiple hidden></label><div id="docs"></div><p class="muted">I dati sono salvati localmente in <span id="root"></span>.</p>
+  </aside>
+  <script>
+    const $=id=>document.getElementById(id);let state,active,busy=false;
+    const el=(tag,text)=>{const node=document.createElement(tag);node.textContent=text;return node};
+    async function call(action,data={}){const response=await fetch('/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...data})});const value=await response.json();if(!response.ok)throw Error(value.error||'Errore');return value}
+    async function run(fn){try{$('notice').textContent='';await fn()}catch(error){$('notice').textContent=error.message}}
+    function waitMessage(message){$('notice').replaceChildren();const spinner=el('span','');spinner.className='spinner';$('notice').append(spinner,document.createTextNode(message))}
+    function render(){
+      if(!state)return;
+      $('root').textContent=state.root;$('status').textContent=state.model?'● '+state.model:'Nessun modello selezionato';
+      $('chats').replaceChildren();for(const chat of state.chats){const button=el('button',chat.title);if(chat.id===active)button.className='active';button.onclick=()=>{active=chat.id;render()};$('chats').append(button)}
+      $('models').replaceChildren();for(const name of state.models){const option=el('option',name);option.value=name;$('models').append(option)}if(state.model)$('models').value=state.model;
+      $('docs').replaceChildren();for(const doc of state.documents){const row=el('div',doc.name);row.className='doc';const button=el('button','×');button.title='Elimina documento';button.onclick=()=>run(async()=>{state=await call('delete-document',{id:doc.id});render()});row.append(button);$('docs').append(row)}
+      const chat=state.chats.find(item=>item.id===active);$('title').textContent=chat?.title||'La tua chat';$('messages').replaceChildren();if(!chat?.messages.length)$('messages').append(el('p','Scrivi un messaggio per iniziare.'));
+      for(const message of chat?.messages||[]){const box=el('div','');box.className='bubble '+message.role;const who=el('div',message.role==='user'?'Tu':'USB AI');who.className='who';box.append(who,el('div',message.text));for(const [i,source] of (message.sources||[]).entries()){const details=el('details','');details.append(el('summary',`[${i+1}] ${source.name}${source.page?' · pagina '+source.page:''}`),el('div',source.text));box.append(details)}$('messages').append(box)}$('messages').scrollTop=$('messages').scrollHeight;
+      $('send').disabled=busy||!state.model;$('download').disabled=state.download.active;$('load').disabled=busy||!state.models.length;
+      const info=$('download-info');info.replaceChildren();if(state.download.active){const spinner=el('span','');spinner.className='spinner';const mb=(state.download.bytes/1048576).toFixed(0),total=(state.download.total/1048576).toFixed(0);info.append(spinner,document.createTextNode(`Download in corso: ${mb} / ${total} MB`))}else if(state.download.error){info.textContent=state.download.error}else if(state.models.length===0){info.textContent='Nessun modello trovato. Scaricane uno per iniziare.'}else{info.textContent='Modello pronto per l’uso.'}
+    }
+    $('new').onclick=()=>run(async()=>{const chat=await call('new-chat');active=chat.id;state=await call('state');render()});
+    $('delete').onclick=()=>run(async()=>{if(active&&confirm('Eliminare questa chat?')){state=await call('delete-chat',{id:active});active=state.chats[0]?.id;render()}});
+    $('load').onclick=()=>run(async()=>{state=await call('select-model',{name:$('models').value});render()});
+    $('download').onclick=()=>run(async()=>{state=await call('download-model');render()});
+    $('form').onsubmit=event=>{event.preventDefault();run(async()=>{if(busy)return;const text=$('prompt').value.trim();if(!text)return;if(!active){const chat=await call('new-chat');active=chat.id}busy=true;$('send').disabled=true;waitMessage('Generazione in corso…');try{state=await call('send',{chatId:active,text,documents:$('rag').checked});$('prompt').value=''}finally{busy=false;render();$('notice').textContent=''}})};
+    $('prompt').onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();$('form').requestSubmit()}};
+    $('export').onclick=()=>{const chat=state?.chats.find(item=>item.id===active);if(!chat)return;const text=chat.messages.map(message=>`## ${message.role==='user'?'Tu':'USB AI'}\n\n${message.text}\n\n${(message.sources||[]).map((source,i)=>`[${i+1}] ${source.name}${source.page?' pagina '+source.page:''}\n${source.text}`).join('\n\n')}`).join('\n\n');const link=el('a','');link.href=URL.createObjectURL(new Blob([text],{type:'text/markdown'}));link.download='chat.md';link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000)};
+    async function upload(file){const response=await fetch('/upload/'+encodeURIComponent(file.name),{method:'POST',body:file});const value=await response.json();if(!response.ok)throw Error(value.error);state=value;render()}
+    $('doc-file').onchange=event=>run(async()=>{waitMessage('Importazione documenti…');for(const file of event.target.files)await upload(file);event.target.value='';$('notice').textContent=''});
+    setInterval(async()=>{if(!state?.download?.active)return;try{state=await call('state');render()}catch(error){$('download-info').textContent=error.message}},1000);
+    run(async()=>{state=await call('state');active=state.chats[0]?.id;render()});
+  </script>
+</body>
+</html>

@@ -1,25 +1,7 @@
-# Contributing to USB AI
+# Contributing to USB AI Rust
 
-Thanks for helping make local AI more accessible!
+Please include your OS and architecture, reproduction steps, and expected versus actual behavior in bug reports. Do not attach private documents, chats, model weights, or secrets.
 
-## Before you start
+For code changes, run `cargo fmt --check`, `cargo test --offline`, and `cargo build --release --locked`. Add focused tests for behavior changes. If you modify packaging, verify the package on the target operating system and list any checks you could not run.
 
-Check existing issues and open a discussion for major design changes. For bugs, include your OS, architecture, Node version, exact steps to reproduce, expected behavior and actual behavior. **Never upload private documents, chats, model files or secrets.**
-
-## Development
-
-1. Fork the repository and create a feature branch.
-2. Install Node.js 22+, run `npm ci` and `npm run model:download`.
-3. Make a focused change with tests where applicable.
-4. Run `npm test` before opening a pull request.
-5. Explain what changed, why, and how it was tested.
-
-## Principles
-
-- Keep core inference offline and avoid unnecessary telemetry.
-- Preserve backward compatibility of the portable data folder where possible.
-- Make security trade-offs explicit; do not silently weaken Electron isolation.
-- Respect third-party model and dependency licenses.
-- Keep interface translations consistent.
-
-By contributing, you agree that your contributions are licensed under the repository's MIT License.
+Keep inference local, preserve the portable workspace format where practical, and respect model and tool licenses. Contributions to the application source are licensed under [MIT](LICENSE).

@@ -1,5 +1,6 @@
-node_modules/
-PocketAI-data/
-release/
-models/*.gguf
+/target/
+/release/
+/PocketAI-data/
+/models/*.gguf
+__pycache__/
 .DS_Store

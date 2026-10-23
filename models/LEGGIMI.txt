@@ -1,1 +1,0 @@
-Il modello viene scaricato dal comando npm run model:download prima del packaging. Il pacchetto finale include il GGUF e non richiede Ollama. Puoi sostituirlo con un GGUF compatibile, conservando la relativa licenza.

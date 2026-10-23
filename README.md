@@ -1,103 +1,65 @@
-# USB AI
+# USB AI Rust
 
-**Created by FipraAI** · Contact: [fabrizio.casula@gmail.com](mailto:fabrizio.casula@gmail.com)
-**Your private AI assistant. Offline. Portable. Yours.**
+Assistente AI locale e portatile. L'applicazione è scritta in Rust, apre la propria interfaccia nel browser e usa `llama-cli` per eseguire modelli GGUF sul computer. Non richiede account o API cloud. Conversazioni, documenti indicizzati e modelli possono restare sulla stessa chiavetta USB.
 
-USB AI is an open-source desktop assistant that runs language models locally using Electron and `node-llama-cpp`. Chat, search your own documents, and carry your workspace on a USB drive — without an account, cloud API, or Ollama.
+## Funzioni
 
-> **Project status:** early release (v0.1.0). Builds are not code-signed. The default 0.5B model is small and has limited accuracy.
+- Chat con un modello GGUF locale.
+- Importazione di PDF testuali, TXT e Markdown (massimo 20 MB per file).
+- Ricerca per parole chiave nei documenti, con estratti e numeri di pagina per i PDF.
+- Conversazioni persistenti ed esportazione Markdown.
+- Pacchetti portabili separati per Mac e Windows.
 
-[English guide](README.en.md) · [Guida italiana](README.it.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
+L'interfaccia si apre su `http://127.0.0.1:48157`; il server ascolta solo sul computer locale. I dati sono salvati senza cifratura in `PocketAI-data/`.
 
-## Highlights
+## Avvio dal sorgente
 
-- **Local chat:** inference runs on your computer; stop generation and export conversations as Markdown.
-- **Ask your documents:** import text-based PDF, TXT and Markdown, and inspect retrieved excerpts (with PDF page references).
-- **Portable workspace:** conversations, imported models and indexed text live in `PocketAI-data/`.
-- **Five interface languages:** English, Italian, German, French and Spanish.
-- **Bring your own model:** import a compatible *instruct* GGUF model.
-- **Windows and macOS builds:** platform-specific packages can be built from source.
-
-## Quick start (developers)
-
-Requires **Node.js 22+**, a supported Windows/macOS machine, and an internet connection **once** to install dependencies and download the default model.
+Servono Rust, `llama-cli` di llama.cpp e, per leggere i PDF, `pdftotext` di Poppler. Su macOS puoi installare gli ultimi due con `brew install llama.cpp poppler`. Poi esegui:
 
 ```bash
-git clone https://github.com/fipra/usb-ai.git
-cd usb-ai
-npm ci
-npm run model:download
-npm start
+cargo run --release
 ```
 
-Replace `YOUR-USERNAME` with the repository owner. `model:download` checks the downloaded model against the manifest. To run tests: `npm test`.
+Il browser si apre automaticamente. Se manca un modello, premi **Scarica modello base (491 MB)** nell'interfaccia: il download parte solo dopo il clic, mostra l'avanzamento e verifica dimensione e SHA-256 prima dell'uso. Per scaricarlo serve Internet una volta; chat e documenti funzionano offline dopo il download. Puoi anche copiare un tuo modello `.gguf` in `models/`.
 
-On macOS, you can double-click `Avvia-Mac.command` after installing Node.js 22+. It installs dependencies on first launch, which requires Internet access. If macOS blocks the downloaded launcher, run `xattr -d com.apple.quarantine Avvia-Mac.command` from the extracted project folder in Terminal and try again. If copying removed its executable permission, also run `chmod +x Avvia-Mac.command`.
+Puoi avviare con doppio clic su `Avvia-Mac.command`, se gli strumenti necessari sono già installati. Su Windows, installa Rust, `llama-cli.exe` e `pdftotext.exe` nel PATH e usa `Avvia-Windows.cmd`.
 
-## For non-developers
+Questa repo non contiene pesi GGUF nel controllo versione. Una copia locale del modello rimane in `models/` e viene inclusa nel pacchetto portabile. Usa un modello *instruct* compatibile e controlla la sua licenza prima di distribuirlo.
 
-Download a Windows portable EXE or macOS package from **Releases**, *when a release is available*. GitHub's **Code → Download ZIP** downloads the source, not a ready-to-run application. Open the app from a writable folder, select a model and click **Load model**. Prebuilt packages are intended to contain the default model. The app is not currently signed or notarized, so your OS may display a warning.
+## Pacchetto per chiavetta USB
 
-## Use it from a USB drive
-
-Put the extracted portable app in a writable USB folder. USB AI stores its workspace in `PocketAI-data/` next to the app (or in the absolute path specified by `POCKET_AI_HOME`). Close the application before ejecting the drive. Windows and macOS can use the same data folder, **not simultaneously**.
-
-**Privacy limitations:** inference is local, but the data folder is **not encrypted**. The host OS may retain metadata or caches. Avoid untrusted machines for sensitive data. Installation and model downloads require network access; offline use starts after setup.
-
-## Document support
-
-| Supported | Limitations |
-|---|---|
-| Text PDFs, TXT, Markdown | 20 MB per file |
-| Keyword-based retrieval | Not semantic search; synonyms may be missed |
-| PDF page references | Scanned PDFs need external OCR |
-| Up to four retrieved excerpts | Always verify AI answers against originals |
-
-Word, Excel and image imports are not supported in this version.
-
-## Models and performance
-
-The default build uses a small Qwen2.5 0.5B Instruct GGUF model. It prioritizes portability, **not answer quality**. Larger compatible single-file GGUF instruct models can be imported through the application; memory and speed depend on model, quantization, context length and hardware. See [the Italian guide](README.it.md#scegliere-un-modello-più-potente) for example sizes and RAM estimates. Check model licenses before redistribution.
-
-For detailed model download instructions, see the [English GGUF guide](README.en.md) or [Italian guide](README.it.md).
-
-## Build packages
+**Mac:** su un Mac della stessa architettura del computer di destinazione, esegui:
 
 ```bash
-npm ci
-npm run model:download
-npm test
-npm run dist:win   # on Windows x64
-npm run dist:mac   # on macOS
+python3 scripts/package-mac.py
 ```
 
-Outputs are written to `release/`. Native dependencies must be installed on the target platform. Apple Silicon and Intel require separate builds. The GitHub Actions build is manually triggered and uploads artifacts; it does **not** automatically publish a GitHub Release.
+La cartella `release/USB-AI-Rust-mac-<architettura>/` include l'eseguibile Rust, `llama-cli`, `pdftotext`, le librerie richieste e i GGUF presenti in `models/`. Se non contiene un modello, chi usa la chiavetta può scaricare quello base dall'interfaccia quando ha Internet. Copia **tutta la cartella** sulla chiavetta e fai doppio clic su `Avvia USB AI Rust.command`. Il pacchetto creato qui è per Apple Silicon (`arm64`); per Intel serve una build su Mac Intel. La build è firmata localmente per integrità, ma non ha firma Developer ID né notarizzazione Apple.
 
-## Architecture
+**Windows x64:** su un PC Windows con Rust, `llama-cli.exe` e `pdftotext.exe` nel PATH, esegui in PowerShell:
 
-```text
-src/       Electron main process and local assistant logic
-ui/        Desktop interface and translations
-scripts/   Model setup and build helpers
-tests/     Automated tests
-models/    Model manifest, attribution and licensing notices
-.github/   Build and collaboration workflows
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\package-windows.ps1
 ```
 
-## Roadmap
+Copia `release\USB-AI-Rust-Windows-x64\` sulla chiavetta e fai doppio clic su `Avvia USB AI Rust.cmd`. Lo script copia le DLL trovate accanto agli strumenti; alcune installazioni possono richiedere altre DLL. La build Windows va compilata e verificata su Windows: il pacchetto Mac non funziona su Windows.
 
-- [ ] Verified signed/notarized releases
-- [ ] Improved document retrieval
-- [ ] Optional local data encryption
-- [ ] Expanded model compatibility tests
-- [ ] Usability improvements and screenshots
+Le conversazioni nella cartella `release/` vengono svuotate a ogni creazione del pacchetto. Il workspace principale in `PocketAI-data/` resta intatto. Il pacchetto include eventuali documenti già presenti nel proprio workspace, quindi controlla la cartella prima di condividerla.
 
-## Contribute
+## Dati e requisiti
 
-Bug reports, documentation fixes and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md). For security issues, see [SECURITY.md](SECURITY.md).
+- `POCKET_AI_HOME` sceglie una cartella dati alternativa.
+- `USB_AI_DIR` sceglie la cartella base che contiene `models/` e, per impostazione predefinita, `PocketAI-data/`.
+- `LLAMA_CLI` e `PDFTOTEXT` indicano eseguibili esterni alternativi.
+- L'app usa `llama-cli` come processo per ogni risposta: il modello viene ricaricato a ogni messaggio. Non sono ancora disponibili streaming e pulsante per interrompere la generazione.
+- I PDF scansionati richiedono OCR esterno; la ricerca nei documenti è lessicale, non semantica.
 
-## License
+## Sviluppo e verifica
 
-The **application source code** is released under the [MIT License](LICENSE). Model weights and third-party dependencies retain their **own** licenses; see `models/` for the default model's notices.
+```bash
+cargo fmt --check
+cargo test --offline
+cargo build --release --locked
+```
 
-Created by Fabrizio Casula.
+Vedi [VERIFICHE.md](VERIFICHE.md) per lo stato dei controlli e [README.en.md](README.en.md) per la guida in inglese. Il codice dell'applicazione è sotto [licenza MIT](LICENSE); modelli e strumenti di terzi conservano le rispettive licenze.
