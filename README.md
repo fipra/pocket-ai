@@ -10,6 +10,7 @@ Assistente AI locale e portatile. L'applicazione è scritta in Rust, apre la pro
 - Conversazioni persistenti ed esportazione Markdown.
 - Pacchetti portabili separati per Mac e Windows.
 - Scelta tra modelli 0,5B, 3B, 7B e 9B con indicazione della RAM del computer e stima di compatibilità.
+- Interfaccia in inglese per impostazione predefinita; italiano, tedesco, francese e spagnolo selezionabili dal menu nella barra laterale. La preferenza resta salvata e guida la lingua delle risposte, salvo richiesta esplicita diversa.
 
 L'interfaccia si apre normalmente su `http://127.0.0.1:48157`. Se la porta è occupata, l'app sceglie automaticamente una porta libera tra `48158` e `48167` e apre l'indirizzo corretto nel browser. Il server ascolta solo sul computer locale. I dati sono salvati senza cifratura in `PocketAI-data/`.
 

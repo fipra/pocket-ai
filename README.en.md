@@ -1,6 +1,6 @@
 # USB AI Rust
 
-USB AI Rust is a local, portable assistant. The Rust application opens its interface in your browser and runs GGUF models through `llama-cli`. It supports local chat, keyword search over text PDFs/TXT/Markdown, PDF page references, persistent conversations, and Markdown export. It does not require an account or cloud API.
+USB AI Rust is a local, portable assistant. The Rust application opens its interface in your browser and runs GGUF models through `llama-cli`. It supports local chat, keyword search over text PDFs/TXT/Markdown, PDF page references, persistent conversations, and Markdown export. It does not require an account or cloud API. The interface defaults to English. Select Italian, German, French or Spanish from the sidebar; the choice is saved and guides the response language unless you ask for another language.
 
 ## Run from source
 

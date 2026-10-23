@@ -1,9 +1,9 @@
 [
   {
     "id": "qwen-0.5b",
-    "name": "Qwen 2.5 · 0,5B",
+    "name": "Qwen 2.5 · 0.5B",
     "family": "Qwen2.5 Instruct",
-    "parameters": "0,5B",
+    "parameters": "0.5B",
     "file": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
     "url": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/9217f5db79a29953eb74d5343926648285ec7e67/qwen2.5-0.5b-instruct-q4_k_m.gguf",
     "source_url": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/blob/main/qwen2.5-0.5b-instruct-q4_k_m.gguf",
@@ -13,7 +13,7 @@
     "minimum_ram_gb": 4,
     "comfortable_ram_gb": 6,
     "license": "Apache 2.0",
-    "summary": "Veloce e leggero per domande semplici. Precisione limitata."
+    "summary": "Fast and light for simple questions. Limited accuracy."
   },
   {
     "id": "qwen-3b",
@@ -29,7 +29,7 @@
     "minimum_ram_gb": 8,
     "comfortable_ram_gb": 10,
     "license": "Qwen Research",
-    "summary": "Buon equilibrio per chat, riassunti e documenti quotidiani."
+    "summary": "A good balance for chat, summaries and everyday documents."
   },
   {
     "id": "qwen-7b",
@@ -45,7 +45,7 @@
     "minimum_ram_gb": 12,
     "comfortable_ram_gb": 16,
     "license": "Apache 2.0",
-    "summary": "Per istruzioni complesse e risposte più approfondite."
+    "summary": "For more complex instructions and detailed answers."
   },
   {
     "id": "gemma-9b",
@@ -61,6 +61,6 @@
     "minimum_ram_gb": 16,
     "comfortable_ram_gb": 24,
     "license": "Gemma",
-    "summary": "Per richieste articolate. Usa più RAM e richiede più attesa."
+    "summary": "For demanding tasks. Uses more RAM and takes longer."
   }
 ]

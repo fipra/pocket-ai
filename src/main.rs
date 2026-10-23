@@ -12,7 +12,48 @@ use tiny_http::{Header, Method, Response, Server, StatusCode};
 
 const INDEX: &str = include_str!("../web/index.html");
 const MODEL_CATALOG: &str = include_str!("../models/catalog.json");
+const I18N: &str = include_str!("../web/i18n.js");
 const MAX_FILE: usize = 20 * 1024 * 1024;
+
+fn normalize_language(value: &str) -> &'static str {
+    match value {
+        "it" => "it",
+        "de" => "de",
+        "fr" => "fr",
+        "es" => "es",
+        _ => "en",
+    }
+}
+
+fn response_language(value: &str) -> &'static str {
+    match normalize_language(value) {
+        "it" => "Italian",
+        "de" => "German",
+        "fr" => "French",
+        "es" => "Spanish",
+        _ => "English",
+    }
+}
+
+fn localized_new_chat(value: &str) -> &'static str {
+    match normalize_language(value) {
+        "it" => "Nuova chat",
+        "de" => "Neuer Chat",
+        "fr" => "Nouvelle discussion",
+        "es" => "Nuevo chat",
+        _ => "New chat",
+    }
+}
+
+fn localized_no_passages(value: &str) -> &'static str {
+    match normalize_language(value) {
+        "it" => "Nessun passaggio pertinente trovato nei documenti.",
+        "de" => "Keine passenden Textstellen in den Dokumenten gefunden.",
+        "fr" => "Aucun extrait pertinent trouvé dans les documents.",
+        "es" => "No se encontraron fragmentos relevantes en los documentos.",
+        _ => "No relevant passages were found in the documents.",
+    }
+}
 
 #[derive(Clone, Deserialize)]
 struct ModelDownload {
@@ -238,6 +279,9 @@ fn retrieve(query: &str, docs: &[Document]) -> Vec<Source> {
     rows.into_iter().take(4).map(|(_, s)| s).collect()
 }
 impl App {
+    fn language(&self) -> &'static str {
+        normalize_language(&self.db.language)
+    }
     fn save(&self) -> Result<(), String> {
         let data = serde_json::to_vec_pretty(&self.db).map_err(|e| e.to_string())?;
         let tmp = self.root.join("workspace.json.tmp");
@@ -305,12 +349,21 @@ impl App {
             (None, 0, 0)
         };
         json!({"chats":self.db.chats,"documents":self.db.documents.iter().map(|d|json!({"id":d.id,"name":d.name,"count":d.chunks.len()})).collect::<Vec<_>>(),
-            "models":installed,"model":self.selected,"root":self.root,"catalog":catalog,"hardware":self.hardware,
+            "models":installed,"model":self.selected,"root":self.root,"language":self.language(),"catalog":catalog,"hardware":self.hardware,
             "download":{"active":self.downloading.is_some(),"error":self.download_error,"bytes":downloaded,"total":total,"name":download_name}})
     }
     fn command(&mut self, action: &str, data: Value) -> Result<Value, String> {
         match action {
             "state" => Ok(self.state()),
+            "set-language" => {
+                let value = data["language"].as_str().ok_or("Language missing")?;
+                if !["en", "it", "de", "fr", "es"].contains(&value) {
+                    return Err("Unsupported language".into());
+                }
+                self.db.language = value.to_owned();
+                self.save()?;
+                Ok(self.state())
+            }
             "select-model" => {
                 let name = data["name"].as_str().ok_or("Nome mancante")?;
                 let path = self.model_path(name)?;
@@ -326,7 +379,7 @@ impl App {
             "new-chat" => {
                 let chat = Chat {
                     id: id(),
-                    title: "Nuova chat".into(),
+                    title: localized_new_chat(self.language()).into(),
                     messages: vec![],
                 };
                 let chat_id = chat.id.clone();
@@ -377,7 +430,7 @@ impl App {
             .take(8)
             .cloned()
             .collect::<Vec<_>>();
-        let mut prompt = String::from("You are USB AI, a local assistant. Answer in the language of the user's question. Be clear and honest. Do not invent facts.\n");
+        let mut prompt = format!("You are USB AI, a local assistant. Answer in {} unless the user explicitly requests another language. Be clear and honest. Do not invent facts.\n", response_language(self.language()));
         for message in history.iter().rev() {
             prompt.push_str(&format!(
                 "{}: {}\n",
@@ -403,7 +456,7 @@ impl App {
         }
         prompt.push_str(&format!("User: {text}\nAssistant:"));
         let answer = if use_docs && sources.is_empty() {
-            "Nessun passaggio pertinente trovato nei documenti.".to_owned()
+            localized_no_passages(self.language()).to_owned()
         } else {
             let output = Command::new(tool_path("LLAMA_CLI", "llama-cli"))
                 .args([
@@ -745,6 +798,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or(true);
         let (code, mime, body) = if method == Method::Get && url == "/" {
             (200, "text/html; charset=utf-8", INDEX.as_bytes().to_vec())
+        } else if method == Method::Get && url == "/i18n.js" {
+            (
+                200,
+                "text/javascript; charset=utf-8",
+                I18N.as_bytes().to_vec(),
+            )
         } else if method == Method::Post && !allowed_origin {
             (
                 403,
@@ -803,6 +862,52 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn language_defaults_to_english_and_persists_selection() {
+        assert_eq!(normalize_language(""), "en");
+        assert_eq!(normalize_language("unsupported"), "en");
+        for (code, name) in [
+            ("en", "English"),
+            ("it", "Italian"),
+            ("de", "German"),
+            ("fr", "French"),
+            ("es", "Spanish"),
+        ] {
+            assert_eq!(response_language(code), name);
+        }
+        let root = env::temp_dir().join(format!("usb-ai-language-{}", id()));
+        fs::create_dir_all(&root).unwrap();
+        let mut app = App {
+            root: root.clone(),
+            models: root.join("models"),
+            db: Workspace::default(),
+            selected: None,
+            catalog: model_catalog(),
+            hardware: Hardware {
+                os: "macos",
+                arch: "aarch64",
+                logical_cores: 8,
+                ram_gb: Some(16.0),
+            },
+            downloading: None,
+            download_error: None,
+        };
+        assert_eq!(app.state()["language"], "en");
+        assert_eq!(
+            app.command("set-language", json!({"language":"de"}))
+                .unwrap()["language"],
+            "de"
+        );
+        let saved: Workspace =
+            serde_json::from_slice(&fs::read(root.join("workspace.json")).unwrap()).unwrap();
+        assert_eq!(saved.language, "de");
+        assert!(app
+            .command("set-language", json!({"language":"xx"}))
+            .is_err());
+        assert_eq!(app.command("new-chat", json!({})).is_ok(), true);
+        assert_eq!(app.db.chats[0].title, "Neuer Chat");
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn chunks_keep_end_and_overlap() {
         let text = "a".repeat(1000);
