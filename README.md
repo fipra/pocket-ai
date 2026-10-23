@@ -30,7 +30,7 @@ The destination PC does **not** need Rust, Cargo, or a PowerShell setup. Keep th
 
 Download the ZIP that matches your Mac from the [macOS release](https://github.com/fipra/usb-ai/releases/tag/rust-mac-portable): **arm64** for Apple Silicon or **x86_64** for Intel. Extract the complete folder to your USB drive and double-click `Avvia USB AI Rust.command`. Choose and download a model in the app on first use. The ZIP includes the app, `llama-cli`, `pdftotext`, and their required libraries; it does not include model weights or personal data.
 
-The package has a local integrity signature but is not Developer ID signed or notarized. macOS may ask you to authorize it on first launch. Developers can also create the folder locally with `python3 scripts/package-mac.py` on a Mac of the same architecture.
+On first launch, the launcher verifies the bundled executables and libraries' local signatures and clears their quarantine attributes if present, before starting the app. This prevents a bundled `.dylib` from being blocked on the first prompt. The package is not Developer ID signed or notarized, so macOS may still ask you to allow the launcher itself. Developers can create the folder locally with `python3 scripts/package-mac.py` on a Mac of the same architecture.
 
 ## Models and hardware guidance
 
