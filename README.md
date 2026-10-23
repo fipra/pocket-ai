@@ -1,65 +1,72 @@
 # USB AI Rust
 
-Assistente AI locale e portatile. L'applicazione è scritta in Rust, apre la propria interfaccia nel browser e usa `llama-cli` per eseguire modelli GGUF sul computer. Non richiede account o API cloud. Conversazioni, documenti indicizzati e modelli possono restare sulla stessa chiavetta USB.
+A private, portable AI assistant that runs on your computer. The Rust app opens in your browser and uses `llama-cli` to run GGUF models locally. It needs no account or cloud API. Keep the entire folder on a USB drive to carry your models and data with you.
 
-## Funzioni
+[**Download the ready-to-use Windows x64 ZIP**](https://github.com/fipra/usb-ai/releases/latest) · [Leggi in italiano](README.it.md)
 
-- Chat con un modello GGUF locale.
-- Importazione di PDF testuali, TXT e Markdown (massimo 20 MB per file).
-- Ricerca per parole chiave nei documenti, con estratti e numeri di pagina per i PDF.
-- Conversazioni persistenti ed esportazione Markdown.
-- Pacchetti portabili separati per Mac e Windows.
-- Scelta tra modelli 0,5B, 3B, 7B e 9B con indicazione della RAM del computer e stima di compatibilità.
-- Interfaccia in inglese per impostazione predefinita; italiano, tedesco, francese e spagnolo selezionabili dal menu nella barra laterale. La preferenza resta salvata e guida la lingua delle risposte, salvo richiesta esplicita diversa.
+## Features
 
-L'interfaccia si apre normalmente su `http://127.0.0.1:48157`. Se la porta è occupata, l'app sceglie automaticamente una porta libera tra `48158` e `48167` e apre l'indirizzo corretto nel browser. Il server ascolta solo sul computer locale. I dati sono salvati senza cifratura in `PocketAI-data/`.
+- Chat with a local GGUF model.
+- Import text PDFs, TXT, and Markdown files (up to 20 MB each).
+- Search documents by keyword, with excerpts and PDF page numbers.
+- Save conversations and export them as Markdown.
+- Choose among curated 0.5B, 3B, 7B, and 9B models with guidance based on your computer's RAM and CPU cores.
+- Use the interface in English by default, or select Italian, German, French, or Spanish in the sidebar. The saved choice also guides the language of model responses unless you ask for another language.
 
-## Avvio dal sorgente
+The app normally opens at `http://127.0.0.1:48157`. If that port is busy, it picks a free port through `48167` and opens the right address. The server listens only on your computer. Data is stored **without encryption** in `PocketAI-data/`.
 
-Servono Rust, `llama-cli` di llama.cpp e, per leggere i PDF, `pdftotext` di Poppler. Su macOS puoi installare gli ultimi due con `brew install llama.cpp poppler`. Poi esegui:
+## Portable USB packages
 
-```bash
-cargo run --release
-```
+### Windows x64
 
-Il browser si apre automaticamente. Apri **Scegli un modello** per vedere RAM totale, core logici e architettura rilevati sul computer in uso. Puoi scaricare uno dei modelli del catalogo; il download parte solo dopo il clic, mostra l'avanzamento e verifica SHA-256 e formato GGUF prima dell'uso. Per scaricarlo serve Internet una volta; chat e documenti funzionano offline dopo il download. Puoi anche copiare un tuo modello `.gguf` in `models/`.
+1. Download [**USB-AI-Rust-Windows-x64.zip**](https://github.com/fipra/usb-ai/releases/download/rust-windows-portable/USB-AI-Rust-Windows-x64.zip).
+2. Extract the complete folder to your USB drive or another location.
+3. Double-click `Avvia USB AI Rust.cmd`. Your browser opens automatically.
+4. Choose a model in the app and download it once. Chat and document search then work offline.
 
-| Modello | Download circa | RAM minima indicativa | RAM più comoda | Licenza |
-|---|---:|---:|---:|---|
-| Qwen 2.5 0,5B | 0,49 GB | 4 GB | 6 GB | Apache 2.0 |
-| Qwen 2.5 3B | 2,1 GB | 8 GB | 10 GB | Qwen Research |
-| Qwen 2.5 7B | 4,68 GB | 12 GB | 16 GB | Apache 2.0 |
-| Gemma 2 9B | 5,76 GB | 16 GB | 24 GB | Gemma |
+The destination PC does **not** need Rust, Cargo, or a PowerShell setup. Keep the whole folder together; downloaded models and data stay inside it. This build is for Windows x64. The automated Windows build checks the package and included tools, but use on a physical Windows PC and USB drive still needs testing. The old `Prepara.USB.AI.0.1.0.exe` release belongs to the former Electron app.
 
-Queste soglie sono stime prudenti basate sulla **RAM totale**, non una misura della memoria libera. Velocità e capacità effettive dipendono anche da GPU, contesto e programmi aperti. Il catalogo e le fonti dei file sono in [models/catalog.json](models/catalog.json).
+### macOS
 
-Su Windows, installa Rust, `llama-cli.exe` e `pdftotext.exe` nel PATH, poi esegui `cargo run --release` da PowerShell.
-
-Questa repo non contiene pesi GGUF nel controllo versione. Una copia locale del modello rimane in `models/` e viene inclusa nel pacchetto portabile. Usa un modello *instruct* compatibile e controlla la sua licenza prima di distribuirlo.
-
-## Pacchetto per chiavetta USB
-
-**Mac:** su un Mac della stessa architettura del computer di destinazione, esegui:
+Build on a Mac with the same architecture as the destination Mac:
 
 ```bash
 python3 scripts/package-mac.py
 ```
 
-La cartella `release/USB-AI-Rust-mac-<architettura>/` include l'eseguibile Rust, `llama-cli`, `pdftotext`, le librerie richieste e i GGUF presenti in `models/`. Se non contiene un modello, chi usa la chiavetta può sceglierne uno nel catalogo e scaricarlo quando ha Internet. Copia **tutta la cartella** sulla chiavetta e fai doppio clic su `Avvia USB AI Rust.command`. Il pacchetto creato qui è per Apple Silicon (`arm64`); per Intel serve una build su Mac Intel. La build è firmata localmente per integrità, ma non ha firma Developer ID né notarizzazione Apple.
+Copy the entire `release/USB-AI-Rust-mac-<architecture>/` folder to a USB drive and double-click `Avvia USB AI Rust.command`. The folder includes the app, `llama-cli`, `pdftotext`, their required libraries, and any GGUF files already in `models/`. If it contains no model, choose and download one in the app. Build on Apple Silicon for an `arm64` Mac or on Intel for an Intel Mac. The package has a local integrity signature but is not Developer ID signed or notarized.
 
-**Windows x64:** scarica lo ZIP **USB-AI-Rust-Windows-x64.zip** dalla [release Windows portatile](https://github.com/fipra/usb-ai/releases/tag/rust-windows-portable), estrai **tutta la cartella** e fai doppio clic su `Avvia USB AI Rust.cmd`. Non servono Rust, Cargo, PowerShell o installazioni aggiuntive sul PC di destinazione. Al primo avvio scegli un modello e scaricalo dall'interfaccia; poi puoi usare la chiavetta offline. I dati e il modello scaricato restano nella cartella portatile. La build è per Windows x64 ed è da collaudare su un PC Windows reale. Il file `Prepara.USB.AI.0.1.0.exe` della vecchia release è Electron e non appartiene alla versione Rust.
+## Models and hardware guidance
 
-Per ricreare il pacchetto da sorgente su Windows, lo script `scripts/package-windows.ps1` richiede Rust, `llama-cli.exe` e `pdftotext.exe`; la release sopra è generata automaticamente da GitHub Actions.
+Open the model picker to see detected total RAM, logical CPU cores, and architecture. A download starts only after you click a model. The app shows progress and verifies its SHA-256 hash and GGUF format before use. Internet is needed for the initial download; afterward chat and document search run locally. You can also place a compatible instruct `.gguf` file in `models/`.
 
-## Dati e requisiti
+| Model | Approximate download | Suggested minimum RAM | More comfortable RAM | License |
+|---|---:|---:|---:|---|
+| Qwen 2.5 0.5B | 0.49 GB | 4 GB | 6 GB | Apache 2.0 |
+| Qwen 2.5 3B | 2.1 GB | 8 GB | 10 GB | Qwen Research |
+| Qwen 2.5 7B | 4.68 GB | 12 GB | 16 GB | Apache 2.0 |
+| Gemma 2 9B | 5.76 GB | 16 GB | 24 GB | Gemma |
 
-- `POCKET_AI_HOME` sceglie una cartella dati alternativa.
-- `USB_AI_DIR` sceglie la cartella base che contiene `models/` e, per impostazione predefinita, `PocketAI-data/`.
-- `LLAMA_CLI` e `PDFTOTEXT` indicano eseguibili esterni alternativi.
-- L'app usa `llama-cli` come processo per ogni risposta: il modello viene ricaricato a ogni messaggio. Non sono ancora disponibili streaming e pulsante per interrompere la generazione.
-- I PDF scansionati richiedono OCR esterno; la ricerca nei documenti è lessicale, non semantica.
+These are conservative estimates based on **total RAM**, not a measurement of free memory. Actual speed also depends on available memory, GPU, context length, and other open programs. Download sources, hashes, and licenses are recorded in [models/catalog.json](models/catalog.json). Model weights are not tracked in this repository. Check each model's license before redistributing it.
 
-## Sviluppo e verifica
+## Run from source
+
+Install Rust and `llama-cli` from llama.cpp. Install `pdftotext` from Poppler if you want PDF import. On macOS, the tools can be installed with `brew install llama.cpp poppler`. Put the executables on your PATH, then run:
+
+```bash
+cargo run --release
+```
+
+On Windows, use PowerShell to run the same Cargo command after installing Rust, `llama-cli.exe`, and `pdftotext.exe`. Developers can build the portable Windows folder with `scripts/package-windows.ps1`; GitHub Actions builds the downloadable ZIP automatically.
+
+## Data, limits, and development
+
+- `POCKET_AI_HOME` selects another data directory. `USB_AI_DIR` selects the base directory containing `models/` and, by default, `PocketAI-data/`.
+- `LLAMA_CLI` and `PDFTOTEXT` select alternate tool executables.
+- Each answer starts `llama-cli` and reloads the model. Token streaming and a stop button are not available yet.
+- Document search is keyword based. Scanned PDFs require OCR before import.
+
+Before contributing, run:
 
 ```bash
 cargo fmt --check
@@ -67,4 +74,4 @@ cargo test --offline
 cargo build --release --locked
 ```
 
-Vedi [VERIFICHE.md](VERIFICHE.md) per lo stato dei controlli e [README.en.md](README.en.md) per la guida in inglese. Il codice dell'applicazione è sotto [licenza MIT](LICENSE); modelli e strumenti di terzi conservano le rispettive licenze.
+See [VERIFICHE.md](VERIFICHE.md) for verification status. The application code is under the [MIT license](LICENSE); bundled tools and models have their own licenses.
