@@ -91,6 +91,7 @@ def main():
         signed.append(target)
     for path in signed:
         run("codesign", "--force", "--sign", "-", str(path))
+        run("codesign", "--verify", "--strict", str(path))
     for model in (ROOT / "models").glob("*.gguf"):
         dest = OUT / "models" / model.name
         try:
@@ -102,10 +103,11 @@ def main():
         if source.is_file():
             shutil.copy2(source, OUT / "models" / name)
     launcher = OUT / "Avvia USB AI Rust.command"
-    launcher.write_text('#!/bin/sh\nDIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"\nexec "$DIR/bin/usb-ai-rust"\n')
+    shutil.copy2(ROOT / "scripts/mac-launcher.command", launcher)
     launcher.chmod(0o755)
     (OUT / "LEGGIMI.txt").write_text(
         "Doppio clic su Avvia USB AI Rust.command. Il browser si apre su 127.0.0.1.\n"
+        "Al primo avvio il launcher verifica i binari inclusi e rimuove la loro quarantena.\n"
         "Tieni la cartella sulla chiavetta USB; dati e modelli restano qui.\n"
         "Questa build funziona solo su macOS con la stessa architettura indicata nel nome.\n"
         "Non e' firmata con un certificato Apple: macOS puo' chiedere di autorizzarla.\n"
