@@ -13,6 +13,9 @@ const $ = id => document.getElementById(id);
 let language = preferredLanguage();
 let chats = [], documents = [], models = [], activeId, selectedId, useDocs = false, busy = false, controller, installing;
 let hubResults = [], hubNext = null, hubSearching = false;
+const STARTER_ID = 'llama-3.2-3b-iq3m';
+const STARTER_FILE = 'Llama-3.2-3B-Instruct-IQ3_M.gguf';
+const isStarterModel = model => model?.id === STARTER_ID || [model?.filename, model?.name, model?.url].some(value => typeof value === 'string' && value.endsWith(STARTER_FILE));
 const tr = key => translations[language]?.[key] || translations.en[key] || key;
 const node = (tag, text, className) => { const value = document.createElement(tag); if (text !== undefined) value.textContent = text; if (className) value.className = className; return value; };
 function setStatus(text = '', error = false, loading = false) { $('status').textContent = text; $('status').classList.toggle('error', error); $('status').classList.toggle('loading', loading); }
@@ -95,11 +98,11 @@ async function send() {
   const text = $('prompt').value.trim();
   if (!text || busy) return;
   if (!selectedId) {
-    const starter = models.find(model => model.id === 'llama-3.2-3b-iq3m') || models.find(model => !isAuxiliaryGguf(model.filename || model.url || model.name));
+    const starter = models.find(isStarterModel);
     if (starter) {
       await chooseModel(starter.id);
     } else if (navigator.onLine) {
-      const id = navigator.deviceMemory && navigator.deviceMemory < 4 ? 'qwen-0.5b' : 'llama-3.2-3b-iq3m';
+      const id = navigator.deviceMemory && navigator.deviceMemory < 4 ? 'qwen-0.5b' : STARTER_ID;
       setBusy(true);
       setStatus(tr('starterDownloading'), false, true);
       $('model-progress').classList.add('loading');
@@ -155,7 +158,7 @@ async function send() {
     setBusy(false); render();
   }
 }
-async function init() { try { const settings = await db.get('settings','main'); language = settings?.language || preferredLanguage(); selectedId = settings?.selectedId; activeId = settings?.activeId; useDocs = !!settings?.useDocs; [chats, documents, models] = await Promise.all([db.all('chats'), db.all('documents'), savedModels()]); if (isAuxiliaryGguf(models.find(model => model.id === selectedId)?.filename || models.find(model => model.id === selectedId)?.url || '')) { selectedId = undefined; await saveSettings(); } if (!chats.some(chat => chat.id === activeId)) activeId = chats[0]?.id; if (!models.some(model => model.id === selectedId)) selectedId = models.find(model => model.id === 'llama-3.2-3b-iq3m')?.id; render(); if (selectedId === 'llama-3.2-3b-iq3m' && models.some(model => model.id === selectedId)) await run(() => chooseModel(selectedId)); } catch (error) { setStatus(`${tr('error')}: ${error.message}`, true); } }
+async function init() { try { const settings = await db.get('settings','main'); language = settings?.language || preferredLanguage(); selectedId = settings?.selectedId; activeId = settings?.activeId; useDocs = !!settings?.useDocs; [chats, documents, models] = await Promise.all([db.all('chats'), db.all('documents'), savedModels()]); if (isAuxiliaryGguf(models.find(model => model.id === selectedId)?.filename || models.find(model => model.id === selectedId)?.url || '')) { selectedId = undefined; await saveSettings(); } if (!chats.some(chat => chat.id === activeId)) activeId = chats[0]?.id; if (!models.some(model => model.id === selectedId)) selectedId = models.find(isStarterModel)?.id; render(); if (isStarterModel(models.find(model => model.id === selectedId))) await run(() => chooseModel(selectedId)); } catch (error) { setStatus(`${tr('error')}: ${error.message}`, true); } }
 $('prompt-form').onsubmit = event => { event.preventDefault(); run(send); };
 $('prompt').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('prompt-form').requestSubmit(); } };
 $('stop').onclick = () => controller?.abort();
