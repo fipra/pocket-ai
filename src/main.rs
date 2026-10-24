@@ -150,7 +150,7 @@ fn valid_hub_path(path: &str) -> bool {
         && !path
             .rsplit('/')
             .next()
-            .is_some_and(|name| name.to_ascii_lowercase().starts_with("mmproj"))
+            .is_some_and(|name| name.to_ascii_lowercase().contains("mmproj"))
 }
 
 fn hub_model(repo: &str, path: &str, entry: &Value, license: &str) -> Option<ModelDownload> {
@@ -469,7 +469,10 @@ impl App {
                     let path = entry.path();
                     if path.extension().and_then(|e| e.to_str()) == Some("gguf") {
                         if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                            if !name.starts_with("._") && !out.contains(&name.to_owned()) {
+                            if !name.starts_with("._")
+                                && !name.to_ascii_lowercase().contains("mmproj")
+                                && !out.contains(&name.to_owned())
+                            {
                                 out.push(name.to_owned());
                             }
                         }
@@ -480,7 +483,11 @@ impl App {
         out
     }
     fn model_path(&self, name: &str) -> Result<PathBuf, String> {
-        if name.contains('/') || name.contains('\\') || !name.ends_with(".gguf") {
+        if name.contains('/')
+            || name.contains('\\')
+            || !name.ends_with(".gguf")
+            || name.to_ascii_lowercase().contains("mmproj")
+        {
             return Err("Nome modello non valido".into());
         }
         for dir in [&self.models, &self.root.join("models")] {
@@ -1143,6 +1150,13 @@ mod tests {
         assert!(hub_model(
             "Example/Model-GGUF",
             "model-00001-of-00002.gguf",
+            &entry,
+            "x"
+        )
+        .is_none());
+        assert!(hub_model(
+            "Example/Model-GGUF",
+            "Ternary-Bonsai-2-9B-mmproj-Q8_0.gguf",
             &entry,
             "x"
         )
