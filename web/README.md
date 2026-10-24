@@ -34,6 +34,7 @@ USB-AI Web can also be deployed as an independent Vercel project: import the rep
 - Local document retrieval supports TXT, Markdown, CSV, JSON, and text-based PDFs (up to 20 MB each). It uses lexical matching and places excerpts in the prompt; PDFs are parsed in the browser. Scanned PDFs require OCR, which is not included.
 - Five UI languages follow the browser language on first use and can be changed later. The choice is saved locally.
 - The service worker caches the shell, bundled JavaScript, PDF worker, and Wllama WASM after their first use. Downloaded models remain in browser storage and can be reused offline, subject to browser storage policy.
+- Complete HTML code blocks show **Preview app** and **Save app ZIP** in Web and desktop chats. The ZIP contains `index.html` plus generated CSS and JavaScript files with local references preserved; open `index.html` after extracting it. The preview runs in an isolated iframe without network access. If generated HTML references a local JavaScript or CSS file that the model did not provide, ZIP export is disabled and the missing filename is shown.
 
 ## Browser limits
 
