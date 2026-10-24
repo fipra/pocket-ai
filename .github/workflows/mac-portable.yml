@@ -1,6 +1,16 @@
 name: Mac portable
 
 on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'web/**'
+      - 'models/catalog.json'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'scripts/package-mac.py'
+      - 'scripts/mac-launcher.command'
+      - '.github/workflows/mac-portable.yml'
   push:
     branches: [main]
     paths:

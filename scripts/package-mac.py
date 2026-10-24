@@ -79,9 +79,8 @@ def main():
     data_dir = OUT / "PocketAI-data"
     data_dir.mkdir(exist_ok=True)
     workspace = data_dir / "workspace.json"
-    saved = json.loads(workspace.read_text()) if workspace.exists() else {"documents": []}
-    saved["chats"] = []
-    workspace.write_text(json.dumps(saved, ensure_ascii=False, indent=2))
+    if not workspace.exists():
+        workspace.write_text(json.dumps({"chats": [], "documents": []}, indent=2))
     queue = []
     for name, source in {"usb-ai-rust": ROOT / "target/release/usb-ai-rust", **tools}.items():
         source = pathlib.Path(source).resolve()

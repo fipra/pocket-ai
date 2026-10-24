@@ -87,6 +87,169 @@ fn model_catalog() -> Vec<ModelDownload> {
     serde_json::from_str(MODEL_CATALOG).expect("invalid built-in model catalog")
 }
 
+fn url_component(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || b"-._~/".contains(&byte) {
+            encoded.push(byte as char);
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    encoded
+}
+
+fn hub_json(url: &str) -> Result<Value, String> {
+    let curl = if cfg!(windows) { "curl.exe" } else { "curl" };
+    let output = Command::new(curl)
+        .args([
+            "--fail",
+            "--silent",
+            "--show-error",
+            "--max-time",
+            "20",
+            "--max-filesize",
+            "3000000",
+            url,
+        ])
+        .output()
+        .map_err(|e| format!("Hugging Face: {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "Hugging Face: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    serde_json::from_slice(&output.stdout).map_err(|e| format!("Hugging Face: {e}"))
+}
+
+fn valid_repo(repo: &str) -> bool {
+    let parts: Vec<_> = repo.split('/').collect();
+    parts.len() == 2
+        && parts.iter().all(|part| {
+            !part.is_empty()
+                && part
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+        })
+}
+
+fn valid_hub_path(path: &str) -> bool {
+    !path.is_empty()
+        && path.len() <= 220
+        && path.to_ascii_lowercase().ends_with(".gguf")
+        && path.split('/').all(|part| {
+            !part.is_empty()
+                && part != "."
+                && part != ".."
+                && part
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+        })
+        && !path.contains("-of-")
+        && !path
+            .rsplit('/')
+            .next()
+            .is_some_and(|name| name.to_ascii_lowercase().starts_with("mmproj"))
+}
+
+fn hub_model(repo: &str, path: &str, entry: &Value, license: &str) -> Option<ModelDownload> {
+    if !valid_repo(repo) || !valid_hub_path(path) {
+        return None;
+    }
+    let size = entry["size"].as_u64()?;
+    let hash = entry["lfs"]["sha256"]
+        .as_str()
+        .or_else(|| entry["lfs"]["oid"].as_str())?
+        .to_ascii_lowercase();
+    if size < 1024 * 1024 || hash.len() != 64 || !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let basename = path.rsplit('/').next()?;
+    let file = format!("hf-{}-{}", &hash[..12], basename);
+    let size_gib = size as f64 / 1_073_741_824.0;
+    Some(ModelDownload {
+        id: format!("hf:{repo}:{path}"),
+        name: format!("{repo} / {basename}"),
+        family: repo.to_owned(),
+        parameters: String::new(),
+        file,
+        url: format!(
+            "https://huggingface.co/{repo}/resolve/main/{}",
+            url_component(path)
+        ),
+        source_url: format!("https://huggingface.co/{repo}/tree/main"),
+        size_bytes: Some(size),
+        download_gb: size as f64 / 1_000_000_000.0,
+        sha256: hash,
+        minimum_ram_gb: (size_gib + 2.0).ceil() as u64,
+        comfortable_ram_gb: (size_gib * 1.3 + 4.0).ceil() as u64,
+        license: license.to_owned(),
+        summary: String::new(),
+    })
+}
+
+fn hub_files(repo: &str, license: &str) -> Result<Vec<ModelDownload>, String> {
+    if !valid_repo(repo) {
+        return Err("Repository non valido".into());
+    }
+    let url = format!("https://huggingface.co/api/models/{repo}/tree/main?recursive=true");
+    let entries = hub_json(&url)?;
+    let mut models = Vec::new();
+    for entry in entries.as_array().ok_or("Elenco modelli non valido")? {
+        if let Some(path) = entry["path"].as_str() {
+            if let Some(model) = hub_model(repo, path, entry, license) {
+                models.push(model);
+            }
+        }
+    }
+    Ok(models)
+}
+
+fn search_hub(query: &str, skip: u64) -> Result<Value, String> {
+    let query = query.trim();
+    if query.len() < 2 || query.len() > 80 || query.chars().any(char::is_control) {
+        return Err("Inserisci da 2 a 80 caratteri".into());
+    }
+    if skip > 10_000 {
+        return Err("Troppi risultati".into());
+    }
+    let url = format!("https://huggingface.co/api/models?filter=gguf&search={}&sort=downloads&direction=-1&limit=8&skip={skip}", url_component(query));
+    let repos = hub_json(&url)?;
+    let next_skip = if skip < 10_000 && repos.as_array().is_some_and(|items| items.len() == 8) {
+        Some(skip + 8)
+    } else {
+        None
+    };
+    let mut models = Vec::new();
+    for repo in repos.as_array().ok_or("Risultati non validi")? {
+        let Some(name) = repo["id"].as_str() else {
+            continue;
+        };
+        if !valid_repo(name) || repo["gated"].as_bool() == Some(true) {
+            continue;
+        }
+        let license = repo["tags"]
+            .as_array()
+            .and_then(|tags| {
+                tags.iter()
+                    .filter_map(Value::as_str)
+                    .find_map(|s| s.strip_prefix("license:"))
+            })
+            .unwrap_or("see source");
+        if let Ok(files) = hub_files(name, license) {
+            models.extend(files.into_iter().take(12));
+        }
+    }
+    Ok(
+        json!({"nextSkip":next_skip,"models": models.iter().map(|model| json!({
+        "id":model.id,"name":model.name,"file":model.file,"sourceUrl":model.source_url,
+        "downloadGb":model.download_gb,"minimumRamGb":model.minimum_ram_gb,
+        "comfortableRamGb":model.comfortable_ram_gb,"license":model.license
+    })).collect::<Vec<_>>() }),
+    )
+}
+
 #[derive(Clone, Serialize)]
 struct Hardware {
     os: &'static str,
@@ -482,7 +645,7 @@ impl App {
                     "0.3",
                     "--simple-io",
                     "--no-display-prompt",
-                    "-st",
+                    "--no-conversation",
                 ])
                 .output()
                 .map_err(|e| format!("llama-cli: {e}"))?;
@@ -570,10 +733,16 @@ impl App {
 
 fn clean_llama_output(stdout: &str, prompt: &str, language: &str) -> Result<String, String> {
     let normalized = stdout.replace("\r\n", "\n");
-    let response = normalized
-        .rfind(prompt)
-        .map(|index| &normalized[index + prompt.len()..])
-        .unwrap_or(&normalized);
+    // Older llama-cli builds can echo the prompt despite --no-display-prompt.
+    // Its banner and the echoed conversation must never become a chat message.
+    let response = if let Some(index) = normalized.rfind(prompt) {
+        &normalized[index + prompt.len()..]
+    } else if normalized.contains("Loading model...") || normalized.contains("available commands:")
+    {
+        return Err(localized_empty_response(language).into());
+    } else {
+        &normalized
+    };
     let mut lines: Vec<&str> = response.trim().lines().collect();
     while lines.last().is_some_and(|line| line.trim().is_empty()) {
         lines.pop();
@@ -584,22 +753,17 @@ fn clean_llama_output(stdout: &str, prompt: &str, language: &str) -> Result<Stri
     while lines.last().is_some_and(|line| line.trim().is_empty()) {
         lines.pop();
     }
-    let timing = if lines
-        .last()
-        .is_some_and(|line| line.trim().starts_with("[ Prompt:") && line.contains("| Generation:"))
-    {
-        Some(lines.pop().unwrap().trim())
-    } else {
-        None
-    };
+    while lines.last().is_some_and(|line| {
+        line.trim().is_empty()
+            || (line.trim().starts_with("[ Prompt:") && line.contains("| Generation:"))
+    }) {
+        lines.pop();
+    }
     let answer = lines.join("\n").trim().to_owned();
     if answer.is_empty() {
         return Err(localized_empty_response(language).into());
     }
-    Ok(match timing {
-        Some(timing) => format!("{answer}\n\n{timing}"),
-        None => answer,
-    })
+    Ok(answer)
 }
 
 fn sha256_file(path: &Path) -> Result<String, String> {
@@ -720,6 +884,46 @@ fn start_download(app: Arc<Mutex<App>>, model_id: &str) -> Result<Value, String>
         guard.downloading = Some(model.clone());
         guard.download_error = None;
         (guard.root.clone(), model)
+    };
+    let state = app.lock().unwrap().state();
+    std::thread::spawn(move || {
+        let result = run_download(&root, &model);
+        let mut guard = app.lock().unwrap();
+        match result {
+            Ok(name) => {
+                guard.selected = Some(name);
+                guard.download_error = None;
+            }
+            Err(error) => guard.download_error = Some(error),
+        }
+        guard.downloading = None;
+    });
+    Ok(state)
+}
+
+fn start_hub_download(app: Arc<Mutex<App>>, model_id: &str) -> Result<Value, String> {
+    let rest = model_id.strip_prefix("hf:").ok_or("Modello non valido")?;
+    let (repo, path) = rest.split_once(':').ok_or("Modello non valido")?;
+    if !valid_repo(repo) || !valid_hub_path(path) {
+        return Err("Modello non valido".into());
+    }
+    // Re-read the server-side metadata. Never trust a URL, size or hash from the browser.
+    let model = hub_files(repo, "see source")?
+        .into_iter()
+        .find(|model| model.id == model_id)
+        .ok_or("Modello non disponibile")?;
+    let root = {
+        let mut guard = app.lock().unwrap();
+        if guard.downloading.is_some() {
+            return Err("Download già in corso".into());
+        }
+        if guard.model_path(&model.file).is_ok() {
+            guard.selected = Some(model.file);
+            return Ok(guard.state());
+        }
+        guard.downloading = Some(model.clone());
+        guard.download_error = None;
+        guard.root.clone()
     };
     let state = app.lock().unwrap().state();
     std::thread::spawn(move || {
@@ -872,7 +1076,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 match serde_json::from_slice::<Value>(&body) {
                     Ok(v) => {
                         let action = v["action"].as_str().unwrap_or("").to_owned();
-                        if action == "download-model" {
+                        if action == "search-hub" {
+                            v["query"]
+                                .as_str()
+                                .ok_or_else(|| "Ricerca mancante".to_owned())
+                                .and_then(|query| {
+                                    search_hub(query, v["skip"].as_u64().unwrap_or(0))
+                                })
+                        } else if action == "download-hub" {
+                            v["modelId"]
+                                .as_str()
+                                .ok_or_else(|| "Modello mancante".to_owned())
+                                .and_then(|model_id| start_hub_download(app.clone(), model_id))
+                        } else if action == "download-model" {
                             v["modelId"]
                                 .as_str()
                                 .ok_or_else(|| "Scegli un modello".to_owned())
@@ -911,14 +1127,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 mod tests {
     use super::*;
     #[test]
-    fn llama_output_keeps_only_answer_and_optional_speed() {
+    fn hub_models_require_safe_paths_and_pinned_lfs_hash() {
+        let entry = json!({"size": 2_147_483_648_u64, "lfs": {"sha256": "a".repeat(64)}});
+        let model = hub_model("Example/Model-GGUF", "model-q4.gguf", &entry, "apache-2.0").unwrap();
+        assert_eq!(model.size_bytes, Some(2_147_483_648));
+        assert_eq!(model.minimum_ram_gb, 4);
+        assert_eq!(model.comfortable_ram_gb, 7);
+        assert!(hub_model("Example/Model-GGUF", "../model.gguf", &entry, "x").is_none());
+        assert!(hub_model(
+            "Example/Model-GGUF",
+            "model-00001-of-00002.gguf",
+            &entry,
+            "x"
+        )
+        .is_none());
+        assert!(hub_model(
+            "Example/Model-GGUF",
+            "model.gguf",
+            &json!({"size": 1234}),
+            "x"
+        )
+        .is_none());
+    }
+    #[test]
+    fn llama_output_keeps_only_answer() {
         let prompt = "You are USB AI.\nUser: ciao\nAssistant:";
         let modern = format!(
             "Loading model...\n\nllama.cpp\n\n> {prompt}\nCiao! Come posso aiutarti?\n\n[ Prompt: 482.9 t/s | Generation: 121.7 t/s ]\n\nExiting...\n"
         );
         assert_eq!(
             clean_llama_output(&modern, prompt, "it").unwrap(),
-            "Ciao! Come posso aiutarti?\n\n[ Prompt: 482.9 t/s | Generation: 121.7 t/s ]"
+            "Ciao! Come posso aiutarti?"
         );
         assert_eq!(
             clean_llama_output("Prima riga\nSeconda riga\n", prompt, "en").unwrap(),
@@ -928,6 +1167,12 @@ mod tests {
             clean_llama_output("Exiting...\n", prompt, "it").unwrap_err(),
             "llama-cli: risposta vuota"
         );
+        let leaked = format!("Loading model...\n\nlogo\navailable commands:\n\n> {prompt}\nDue figli. [1]\n\n[ Prompt: 184.1 t/s | Generation: 9.0 t/s ]\n");
+        assert_eq!(
+            clean_llama_output(&leaked, prompt, "it").unwrap(),
+            "Due figli. [1]"
+        );
+        assert!(clean_llama_output("Loading model...\nlogo\n", prompt, "it").is_err());
     }
     #[test]
     fn language_defaults_to_english_and_persists_selection() {
