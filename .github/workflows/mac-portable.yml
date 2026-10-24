@@ -84,7 +84,8 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # Preserve the historical MIT release assets. New licensed releases need new tags.
+    if: ${{ false }}
     steps:
       - uses: actions/download-artifact@v4
         with:

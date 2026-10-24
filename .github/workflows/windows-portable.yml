@@ -75,7 +75,8 @@ jobs:
           path: USB-AI-Rust-Windows-x64.zip
           if-no-files-found: error
       - name: Publish portable download
-        if: github.ref == 'refs/heads/main'
+        # Preserve the historical MIT release asset. New licensed releases need a new tag.
+        if: ${{ false }}
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}

@@ -2,6 +2,22 @@
 
 Assistente AI locale e portatile. L'applicazione è scritta in Rust, apre la propria interfaccia nel browser e usa `llama-cli` per eseguire modelli GGUF sul computer. Non richiede account o API cloud. Conversazioni, documenti indicizzati e modelli possono restare sulla stessa chiavetta USB.
 
+## Licenze
+
+Il codice e le release pubblicati fino al commit
+[`4cf59ef`](https://github.com/fipra/usb-ai/commit/4cf59ef7709235092ef3ceba74aab680a3001d4e)
+restano disponibili sotto [licenza MIT](LICENSE-MIT-LEGACY), compresi i relativi
+diritti per uso commerciale. I pacchetti delle release già pubblicate non
+vengono modificati da questo cambio di licenza.
+
+I contributi originali USB AI pubblicati dopo quel commit sono regolati dalla
+[USB AI Personal Use License v1.0](LICENSE), salvo diversa indicazione. L'uso
+personale, didattico e per ricerca non commerciale è gratuito; l'uso
+commerciale del nuovo materiale richiede un accordo scritto separato e a
+pagamento. Vedi [licenza commerciale](COMMERCIAL_LICENSE.md). Il nuovo testo
+non elimina i diritti MIT sul materiale precedente. Strumenti, dipendenze e
+modelli di terzi mantengono le rispettive licenze.
+
 ## Funzioni
 
 - Chat con un modello GGUF locale.
@@ -63,4 +79,4 @@ cargo test --offline
 cargo build --release --locked
 ```
 
-Vedi [VERIFICHE.md](VERIFICHE.md) per lo stato dei controlli e [README.md](README.md) per la guida principale in inglese. Il codice dell'applicazione è sotto [licenza MIT](LICENSE); modelli e strumenti di terzi conservano le rispettive licenze.
+Vedi [VERIFICHE.md](VERIFICHE.md) per lo stato dei controlli e [README.md](README.md) per la guida principale in inglese.
