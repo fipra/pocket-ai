@@ -1,6 +1,14 @@
 import { documentQuestion, recentContext } from './retrieval.js';
 
+export function appQuestion(question) {
+  const asksToBuild = /\b(crea|creare|costruisci|sviluppa|scrivi|create|build|make|develop|write|erstelle|baue|crée|construis|crea|haz)\b/i.test(question);
+  const asksForApp = /\b(app|applicazione|application|website|sito|webpage|pagina web|html|javascript)\b/i.test(question);
+  if (!asksToBuild || !asksForApp) return question;
+  return `${question}\n\nProvide a complete runnable browser app. Prefer one fenced html block with CSS and JavaScript inline. If you use separate files, include every referenced file as a complete fenced html, css, or javascript block. Ensure event handlers target existing elements and forms do not reload the page. Do not leave placeholders or omit closing code fences.`;
+}
+
 export function ragContexts(history, question, sources) {
+  question = appQuestion(question);
   if (!sources.length) return [recentContext(history, question)];
   return [
     recentContext(history, documentQuestion(question, sources, 1300), 700),

@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ragContexts, completeWithRetry } from '../rag.js';
+import { ragContexts, completeWithRetry, appQuestion } from '../rag.js';
+
+test('app requests ask for complete runnable files', () => {
+  assert.match(appQuestion('crea una piccola app in html'), /complete runnable browser app/);
+  assert.equal(appQuestion('spiega questo codice'), 'spiega questo codice');
+});
 
 test('document prompts stay short and retry with one excerpt and no history', () => {
   const sources = [{name:'report.txt',text:'a'.repeat(1100)}, {name:'report.txt',text:'b'.repeat(1100)}];

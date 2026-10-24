@@ -644,6 +644,39 @@ fn document_prompt(
     prompt.push_str(&format!("User: {question}\nAssistant:"));
     prompt
 }
+
+fn app_request(question: &str) -> bool {
+    let terms = words(question);
+    let build = [
+        "crea",
+        "creare",
+        "costruisci",
+        "sviluppa",
+        "scrivi",
+        "create",
+        "build",
+        "make",
+        "develop",
+        "write",
+        "erstelle",
+        "baue",
+        "crée",
+        "construis",
+        "haz",
+    ];
+    let target = [
+        "app",
+        "applicazione",
+        "application",
+        "website",
+        "sito",
+        "webpage",
+        "html",
+        "javascript",
+    ];
+    terms.iter().any(|term| build.contains(&term.as_str()))
+        && terms.iter().any(|term| target.contains(&term.as_str()))
+}
 impl App {
     fn language(&self) -> &'static str {
         normalize_language(&self.db.language)
@@ -843,6 +876,9 @@ impl App {
             document_prompt(self.language(), &history, text, &sources, false)
         } else {
             let mut prompt = format!("You are USB AI, a local assistant. Answer in {} unless the user explicitly requests another language. Be clear and honest. Do not invent facts.\n", response_language(self.language()));
+            if app_request(text) {
+                prompt.push_str("For browser app requests, provide a complete runnable app. Prefer one fenced html block with CSS and JavaScript inline. If using separate files, include every referenced file in complete html, css, or javascript fenced blocks. Ensure event handlers target existing elements, forms do not reload the page, and code fences close.\n");
+            }
             for message in history.iter().rev() {
                 prompt.push_str(&format!(
                     "{}: {}\n",
@@ -1876,6 +1912,12 @@ mod tests {
         assert!(prompt.contains("[4] report.txt"));
         let retry = document_prompt("it", &[], "riassumi il documento", &sources, true);
         assert!(retry.len() < 1000);
+    }
+    #[test]
+    fn app_request_guidance_targets_generated_browser_apps() {
+        assert!(app_request("crea una piccola app in html"));
+        assert!(app_request("build a website"));
+        assert!(!app_request("spiega questo codice"));
     }
     #[test]
     fn uploaded_name_is_decoded_then_validated() {
