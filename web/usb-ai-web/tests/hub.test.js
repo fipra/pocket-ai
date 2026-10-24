@@ -30,7 +30,8 @@ test('DeepSeek search reaches small distill models beyond the first eight reposi
     : repos});
   const result = await searchModels('deepseek', 0, fetcher);
   assert.equal(result.models.length, 1);
-  assert.match(result.models[0].name, /1\.5B-Q4_K_M/);
+  assert.equal(result.models[0].name, 'DeepSeek R1 Distill Qwen 1.5B');
+  assert.match(result.models[0].url, /1\.5B-Q4_K_M\.gguf$/);
   assert.equal(result.nextSkip, 24);
 });
 test('a GGUF filename searches for its model repository', () => {
@@ -46,12 +47,26 @@ test('search lists verified files from public repositories', async () => {
   assert.equal(result.models[0].license, 'apache-2.0');
   assert.equal(result.nextSkip, null);
 });
-test('search includes all usable quantizations and prioritizes Web-compatible files', async () => {
-  const entries = Array.from({length:15}, (_,i) => ({path:`model-Q${i}.gguf`,size:i === 14 ? 100_000_000 : 3_000_000_000+i,lfs:{sha256:(i+1).toString(16).padStart(64,'0')}}));
+test('search offers one complete recommended file per model', async () => {
+  const entries = [
+    {path:'model-Q2_K.gguf',size:80_000_000,lfs:{sha256:'b'.repeat(64)}},
+    {path:'model-Q4_K_M.gguf',size:120_000_000,lfs:{sha256:'c'.repeat(64)}},
+    {path:'model-Q8_0.gguf',size:210_000_000,lfs:{sha256:'d'.repeat(64)}}
+  ];
   const fetcher = async url => ({ok:true,json:async () => url.includes('/tree/') ? entries : [{id:'owner/repo',tags:[]}]});
   const result = await searchModels('model', 0, fetcher);
-  assert.equal(result.models.length, 15);
-  assert.equal(result.models[0].tooLargeForWeb, false);
+  assert.equal(result.models.length, 1);
+  assert.equal(result.models[0].name, 'repo');
+  assert.match(result.models[0].url, /model-Q4_K_M\.gguf$/);
+});
+test('search merges duplicate publishers of the same base model', async () => {
+  const repos = ['publisher-a/DeepSeek-R1-GGUF','publisher-b/DeepSeek-R1-GGUF'].map(id => ({id,tags:['base_model:deepseek-ai/DeepSeek-R1']}));
+  const fetcher = async url => ({ok:true,json:async () => url.includes('/tree/')
+    ? [{path:'DeepSeek-R1-Q4_K_M.gguf',size:900_000_000,lfs:{sha256:hash}}]
+    : repos});
+  const result = await searchModels('DeepSeek R1', 0, fetcher);
+  assert.equal(result.models.length, 1);
+  assert.equal(result.models[0].name, 'DeepSeek R1');
 });
 test('memory estimate includes browser and inference overhead', () => {
   assert.deepEqual(estimateMemory(1_073_741_824), {minimum:3,recommended:6});
@@ -75,11 +90,11 @@ test('search includes split repositories before single files above 2 GB', async 
       ? [{id:'owner/split',tags:[]}]
       : [{id:'owner/single',tags:[]}]});
   const result = await searchModels('Qwen 3.5 9B', 0, fetcher);
+  assert.equal(result.models.length, 1);
   assert.equal(result.models[0].shards.length, 2);
   assert.equal(result.models[0].tooLargeForWeb, false);
-  assert.equal(result.models[1].tooLargeForWeb, true);
 });
-test('full Qwen GGUF filename finds large files but marks them unavailable in Web', async () => {
+test('Web search hides a single GGUF too large for the browser to load', async () => {
   const urls = [];
   const fetcher = async url => {
     urls.push(url);
@@ -89,16 +104,15 @@ test('full Qwen GGUF filename finds large files but marks them unavailable in We
   };
   const result = await searchModels('Qwen_Qwen3.5-9B-Q4_K_M.gguf', 0, fetcher);
   assert.match(urls[0], /search=Qwen3\.5-9B/);
-  assert.equal(result.models[0].tooLargeForWeb, true);
-  assert.match(result.models[0].name, /Qwen3\.5-9B-Q4_K_M\.gguf/);
+  assert.equal(result.models.length, 0);
 });
 test('exact GGUF filename takes priority over similar quantizations', async () => {
   const fetcher = async url => ({ ok:true, json:async () => url.includes('/tree/')
     ? [
-      {path:'Qwen_Qwen3.5-9B-Q3_K_M.gguf',size:4_000_000_000,lfs:{sha256:hash}},
-      {path:'Qwen_Qwen3.5-9B-Q4_K_M.gguf',size:6_000_000_000,lfs:{sha256:'b'.repeat(64)}}
+      {path:'Qwen_Qwen3.5-9B-Q3_K_M.gguf',size:1_400_000_000,lfs:{sha256:hash}},
+      {path:'Qwen_Qwen3.5-9B-Q4_K_M.gguf',size:1_600_000_000,lfs:{sha256:'b'.repeat(64)}}
     ] : [{id:'bartowski/Qwen_Qwen3.5-9B-GGUF',tags:[]}] });
   const result = await searchModels('Qwen_Qwen3.5-9B-Q4_K_M.gguf', 0, fetcher);
   assert.equal(result.models.length, 1);
-  assert.match(result.models[0].name, /Qwen_Qwen3\.5-9B-Q4_K_M\.gguf/);
+  assert.match(result.models[0].url, /Qwen_Qwen3\.5-9B-Q4_K_M\.gguf/);
 });

@@ -26,22 +26,15 @@ function renderModels() { const catalog = $('catalog'); catalog.replaceChildren(
 function renderDocs() { const box = $('doc-list'); box.replaceChildren(); if (!documents.length) box.append(node('p', tr('noDocs'), 'hint')); for (const doc of documents) { const card = node('div', undefined, 'doc-card'); card.append(node('span', `${doc.name} · ${doc.chunks.length}`)); const button = node('button', tr('remove'), 'action subtle'); button.onclick = () => run(async () => { await db.remove('documents', doc.id); documents = documents.filter(item => item.id !== doc.id); renderDocs(); }); card.append(button); box.append(card); } }
 function renderSearch() {
   const box = $('hub-results'); box.replaceChildren();
-  const mobile = /iP(hone|ad|od)|Android/.test(navigator.userAgent);
-  const visible = mobile ? [...hubResults].sort((a,b) => a.size - b.size) : hubResults;
-  const desktopOnly = node('details', undefined, 'desktop-only-results');
-  desktopOnly.append(node('summary', `${tr('desktopOnlyResults')} (${visible.filter(item => item.tooLargeForWeb).length})`));
-  for (const item of visible) {
+  for (const item of hubResults) {
     const card = node('div', undefined, 'model-card');
     const info = node('div'); info.append(node('strong', item.name), node('small', `${(item.size/1e6).toFixed(0)} MB · ${item.license}`));
-    if (item.shards) info.append(node('small', tr('splitParts').replace('{count}', item.shards.length)));
     const memory = estimateMemory(item.size);
     info.append(node('small', tr('memoryEstimate').replace('{minimum}', memory.minimum).replace('{recommended}', memory.recommended)));
-    if (item.tooLargeForWeb) info.append(node('small', tr('webFileLimit'), 'warning'));
-    if (mobile && item.size > 500_000_000) info.append(node('small', tr('tooLarge'), 'warning'));
     const link = node('a', tr('source')); link.href = item.source; link.target = '_blank'; link.rel = 'noopener noreferrer'; info.append(link); card.append(info);
     const installed = models.some(model => model.id === item.id);
-    const button = node('button', item.tooLargeForWeb ? tr('webFileLimitShort') : installed ? tr('load') : tr('download'), 'action');
-    button.disabled = item.tooLargeForWeb || busy || (!installed && !navigator.onLine);
+    const button = node('button', installed ? tr('load') : tr('download'), 'action');
+    button.disabled = busy || (!installed && !navigator.onLine);
     button.onclick = () => run(async () => {
       if (!installed) {
         setBusy(true); setStatus(tr('downloading')); $('model-progress').classList.add('loading');
@@ -51,9 +44,8 @@ function renderSearch() {
       }
       await chooseModel(item.id);
     });
-    card.append(button); (item.tooLargeForWeb ? desktopOnly : box).append(card);
+    card.append(button); box.append(card);
   }
-  if (desktopOnly.querySelector('.model-card')) box.append(desktopOnly);
   $('hub-more').hidden = hubNext == null || hubSearching;
   $('hub-more').disabled = busy;
 }
@@ -64,7 +56,7 @@ async function searchHub(skip = 0) {
   if (skip === 0) { hubResults = []; hubNext = null; renderSearch(); }
   try {
     const result = await searchModels(query, skip);
-    hubResults.push(...result.models); hubNext = result.nextSkip;
+    hubResults.push(...result.models.filter(model => !hubResults.some(existing => existing.name.toLowerCase() === model.name.toLowerCase()))); hubNext = result.nextSkip;
     $('hub-status').textContent = hubResults.length ? '' : tr('noResults');
   } catch (error) { $('hub-status').textContent = `${tr('error')}: ${error.message}`; }
   finally { hubSearching = false; renderSearch(); }

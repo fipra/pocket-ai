@@ -30,4 +30,12 @@ const documentStrings = {
   es: { retryingAnswer:'Reintentando con un fragmento más corto…', readingDocument:'Leyendo el documento…', documentReady:'{count} documento(s) listo(s). Haz una pregunta o pide un resumen.', documentNoText:'No se encontró texto legible. Los PDF escaneados necesitan OCR.', emptyResponse:'El modelo no devolvió texto. Prueba una pregunta más corta u otro modelo.' }
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], documentStrings[language]);
+const simpleSearchStrings = {
+  en: { searchModels:'Find a model', searchHint:'Enter a model name. USB-AI shows one complete, ready-to-download version per compatible model.', searchPlaceholder:'Model name…', noResults:'No compatible model found on this page.' },
+  it: { searchModels:'Trova un modello', searchHint:'Scrivi il nome di un modello. USB-AI mostra una sola versione completa e scaricabile per ogni modello compatibile.', searchPlaceholder:'Nome del modello…', noResults:'Nessun modello compatibile in questa pagina.' },
+  fr: { searchModels:'Trouver un modèle', searchHint:'Saisissez un nom. USB-AI affiche une version complète et téléchargeable par modèle compatible.', searchPlaceholder:'Nom du modèle…', noResults:'Aucun modèle compatible sur cette page.' },
+  de: { searchModels:'Modell finden', searchHint:'Gib einen Modellnamen ein. USB-AI zeigt eine vollständige, herunterladbare Version je kompatiblem Modell.', searchPlaceholder:'Modellname…', noResults:'Auf dieser Seite kein kompatibles Modell gefunden.' },
+  es: { searchModels:'Buscar un modelo', searchHint:'Escribe el nombre de un modelo. USB-AI muestra una versión completa y descargable por cada modelo compatible.', searchPlaceholder:'Nombre del modelo…', noResults:'No hay modelos compatibles en esta página.' }
+};
+for (const language of Object.keys(translations)) Object.assign(translations[language], simpleSearchStrings[language]);
 export function preferredLanguage(value = navigator.language) { return translations[value?.slice(0,2).toLowerCase()] ? value.slice(0,2).toLowerCase() : 'en'; }

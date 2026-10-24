@@ -59,6 +59,36 @@ export function modelsFromEntries(repo, entries, license = 'see source') {
   return models;
 }
 
+function familyName(repo) {
+  const base = repo.tags?.find(tag => tag.startsWith('base_model:') && !tag.startsWith('base_model:quantized:'))?.slice(11);
+  return (base || repo.id).split('/').at(-1).replace(/[-_.]?GGUF$/i, '').replace(/[-_]/g, ' ').trim();
+}
+
+function quantizationRank(model) {
+  const name = model.name.toUpperCase();
+  const preferred = ['Q4_K_M', 'Q4_K_S', 'Q5_K_M', 'Q4_0', 'Q3_K_M', 'Q5_K_S', 'Q6_K', 'Q8_0', 'Q3', 'Q2', 'IQ'];
+  const index = preferred.findIndex(quant => name.includes(quant));
+  return index < 0 ? preferred.length : index;
+}
+
+function bestCompleteModels(candidates) {
+  const chosen = new Map();
+  for (const { repo, files } of candidates) {
+    const family = familyName(repo);
+    const key = family.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const usable = files.filter(file => !file.tooLargeForWeb);
+    usable.sort((a, b) => quantizationRank(a) - quantizationRank(b) || a.size - b.size);
+    const candidate = usable[0];
+    if (!candidate) continue;
+    const previous = chosen.get(key);
+    if (!previous || quantizationRank(candidate) < quantizationRank(previous) ||
+      (quantizationRank(candidate) === quantizationRank(previous) && candidate.size < previous.size)) {
+      chosen.set(key, { ...candidate, name: family });
+    }
+  }
+  return [...chosen.values()].sort((a, b) => a.size - b.size);
+}
+
 export async function searchModels(query, skip = 0, fetcher = fetch) {
   const term = searchTerm(query);
   const requestedName = query.trim().split('/').at(-1).toLowerCase();
@@ -80,7 +110,7 @@ export async function searchModels(query, skip = 0, fetcher = fetch) {
       }
     }
   }
-  const models = [];
+  const candidates = [];
   for (let start = 0; start < repos.length; start += 6) {
     const batch = await Promise.all(repos.slice(start, start + 6).map(async repo => {
       if (!REPO.test(repo.id || '') || repo.gated) return [];
@@ -95,14 +125,16 @@ export async function searchModels(query, skip = 0, fetcher = fetch) {
           const score = item => item.name.toLowerCase().endsWith(` / ${requestedName}`) ? 2 : item.name.toLowerCase().endsWith(` / ${alternateName}`) ? 1 : 0;
           return score(b) - score(a);
         });
-        return files;
+        return { repo, files };
       } catch { return []; }
     }));
-    models.push(...batch.flat());
+    candidates.push(...batch.filter(item => item && !Array.isArray(item)));
   }
+  const models = candidates.flatMap(item => item.files);
   const exact = filenameSearch ? models.filter(item => item.name.toLowerCase().endsWith(` / ${requestedName}`)) : [];
   const alternate = filenameSearch ? models.filter(item => item.name.toLowerCase().endsWith(` / ${alternateName}`)) : [];
-  const selected = exact.length ? exact : alternate.length ? alternate : models;
-  selected.sort((a, b) => Number(a.tooLargeForWeb) - Number(b.tooLargeForWeb) || a.size - b.size);
+  const selected = filenameSearch && (exact.length || alternate.length)
+    ? bestCompleteModels(candidates.map(item => ({...item, files:item.files.filter(file => (exact.length ? exact : alternate).includes(file))})))
+    : bestCompleteModels(candidates);
   return { models: selected, nextSkip: primaryRepos.length === SEARCH_PAGE_SIZE ? skip + SEARCH_PAGE_SIZE : null };
 }

@@ -231,6 +231,36 @@ fn hub_files(repo: &str, license: &str) -> Result<Vec<ModelDownload>, String> {
     Ok(models)
 }
 
+fn hub_family(repo: &Value, name: &str) -> String {
+    let base = repo["tags"].as_array().and_then(|tags| {
+        tags.iter().filter_map(Value::as_str).find_map(|tag| {
+            tag.strip_prefix("base_model:")
+                .filter(|value| !value.starts_with("quantized:"))
+        })
+    });
+    let slug = base.unwrap_or(name).rsplit('/').next().unwrap_or(name);
+    slug.trim_end_matches("-GGUF")
+        .trim_end_matches("-gguf")
+        .replace('-', " ")
+        .replace('_', " ")
+}
+
+fn hub_quantization_rank(model: &ModelDownload) -> usize {
+    let filename = model.file.to_ascii_uppercase();
+    [
+        "Q4_K_M", "Q4_K_S", "Q5_K_M", "Q4_0", "Q3_K_M", "Q5_K_S", "Q6_K", "Q8_0", "Q3", "Q2", "IQ",
+    ]
+    .iter()
+    .position(|quant| filename.contains(quant))
+    .unwrap_or(11)
+}
+
+fn prefer_hub_model(candidate: &ModelDownload, previous: &ModelDownload) -> bool {
+    hub_quantization_rank(candidate) < hub_quantization_rank(previous)
+        || (hub_quantization_rank(candidate) == hub_quantization_rank(previous)
+            && candidate.download_gb < previous.download_gb)
+}
+
 fn search_hub(query: &str, skip: u64) -> Result<Value, String> {
     let query = query.trim();
     if query.len() < 2 || query.len() > 80 || query.chars().any(char::is_control) {
@@ -267,23 +297,37 @@ fn search_hub(query: &str, skip: u64) -> Result<Value, String> {
                     .find_map(|s| s.strip_prefix("license:"))
             })
             .unwrap_or("see source");
-        selected_repos.push((name.to_owned(), license.to_owned()));
+        selected_repos.push((name.to_owned(), license.to_owned(), hub_family(repo, name)));
     }
-    let mut models = Vec::new();
+    let mut selected = std::collections::HashMap::<String, ModelDownload>::new();
     for batch in selected_repos.chunks(6) {
         let handles: Vec<_> = batch
             .iter()
-            .map(|(name, license)| {
-                let (name, license) = (name.clone(), license.clone());
-                thread::spawn(move || hub_files(&name, &license).unwrap_or_default())
+            .map(|(name, license, family)| {
+                let (name, license, family) = (name.clone(), license.clone(), family.clone());
+                thread::spawn(move || (family, hub_files(&name, &license).unwrap_or_default()))
             })
             .collect();
         for handle in handles {
-            if let Ok(files) = handle.join() {
-                models.extend(files);
+            if let Ok((family, files)) = handle.join() {
+                let key: String = family
+                    .chars()
+                    .filter(|c| c.is_ascii_alphanumeric())
+                    .flat_map(char::to_lowercase)
+                    .collect();
+                for mut model in files {
+                    let replace = selected
+                        .get(&key)
+                        .is_none_or(|previous| prefer_hub_model(&model, previous));
+                    if replace {
+                        model.name = family.clone();
+                        selected.insert(key.clone(), model);
+                    }
+                }
             }
         }
     }
+    let mut models: Vec<_> = selected.into_values().collect();
     models.sort_by(|a, b| a.download_gb.total_cmp(&b.download_gb));
     Ok(
         json!({"nextSkip":next_skip,"models": models.iter().map(|model| json!({
@@ -1812,6 +1856,19 @@ mod tests {
             "x"
         )
         .is_none());
+    }
+    #[test]
+    fn hub_search_chooses_one_complete_q4_model() {
+        let repo = json!({"tags": ["base_model:deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"]});
+        assert_eq!(
+            hub_family(&repo, "owner/repo"),
+            "DeepSeek R1 Distill Qwen 1.5B"
+        );
+        let entry = json!({"size": 1_100_000_000_u64, "lfs": {"sha256": "a".repeat(64)}});
+        let q2 = hub_model("owner/repo", "model-Q2_K.gguf", &entry, "x").unwrap();
+        let q4 = hub_model("owner/repo", "model-Q4_K_M.gguf", &entry, "x").unwrap();
+        assert!(prefer_hub_model(&q4, &q2));
+        assert!(!prefer_hub_model(&q2, &q4));
     }
     #[test]
     fn manually_copied_model_is_listed_but_mmproj_is_explained() {
