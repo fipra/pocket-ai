@@ -62,7 +62,31 @@ async function searchHub(skip = 0) {
 function render() { translate(); renderChats(); renderMessages(); renderModels(); renderSearch(); renderDocs(); $('model-trigger').textContent = `${models.find(model => model.id === selectedId)?.name || tr('chooseModel')} ⌄`; $('send').disabled = busy || !selectedId; $('stop').hidden = !controller; $('use-docs').classList.toggle('on', useDocs); $('use-docs').textContent = useDocs ? `▣ ${tr('useDocs')}` : `▤ ${tr('useDocs')}`; $('capability').textContent = `${navigator.gpu ? tr('capabilityGpu') : tr('capabilityWasm')} · ${navigator.onLine ? tr('private') : tr('offline')}`; }
 function setBusy(value) { busy = value; render(); }
 async function run(callback) { try { await callback(); } catch (error) { console.error(error); const message = error.message === 'LOAD_TIMEOUT' ? tr('loadTimeout') : /QuotaExceeded|storage|no space/i.test(error.name + ' ' + error.message) ? tr('storageError') : error.message; setStatus(`${tr('error')}: ${message}`, true); $('model-progress').classList.remove('loading'); $('model-progress').textContent = `${tr('error')}: ${message}`; } finally { if (busy && !controller) setBusy(false); } }
-async function chooseModel(id) { if (busy && controller) return; setBusy(true); setStatus(tr('loading')); $('model-progress').classList.add('loading'); $('model-progress').textContent = tr('loading'); try { await loadModel(id); selectedId = id; await saveSettings(); setStatus(tr('ready')); $('model-progress').textContent = ''; $('models-dialog').close(); } finally { $('model-progress').classList.remove('loading'); setBusy(false); } }
+async function chooseModel(id) {
+  if (busy && controller) return;
+  setBusy(true);
+  setStatus(tr('loading'));
+  const progress = $('model-progress');
+  progress.classList.add('loading');
+  progress.textContent = tr('loading');
+  const started = Date.now();
+  const elapsed = setInterval(() => {
+    const seconds = Math.floor((Date.now() - started) / 1000);
+    progress.textContent = `${tr('loading')} ${seconds} s${seconds >= 60 ? ` · ${tr('loadSlow')}` : ''}`;
+  }, 1000);
+  try {
+    await loadModel(id);
+    selectedId = id;
+    await saveSettings();
+    setStatus(tr('ready'));
+    progress.textContent = '';
+    $('models-dialog').close();
+  } finally {
+    clearInterval(elapsed);
+    progress.classList.remove('loading');
+    setBusy(false);
+  }
+}
 async function newChat() { const chat = { id: crypto.randomUUID(), title: tr('newChat').replace('＋ ',''), messages: [], updated: Date.now() }; chats.unshift(chat); activeId = chat.id; await db.put('chats', chat); await saveSettings(); render(); closeSidebar(); $('prompt').focus(); }
 async function send() { const text = $('prompt').value.trim(); if (!text || busy) return; if (!selectedId) { $('models-dialog').showModal(); setStatus(tr('noModel'), true); return; } let chat = chats.find(item => item.id === activeId); if (!chat) { await newChat(); chat = chats.find(item => item.id === activeId); } const sources = useDocs ? retrieve(text, documents) : []; const question = sources.length ? `${text}\n\nRelevant local document excerpts:\n${sources.map((source,i) => `[${i+1}] ${source.name}: ${source.text}`).join('\n\n')}\n\nUse these excerpts when relevant and cite their numbers.` : text; const context = chat.messages.map(message => ({ role: message.role, content: message.text })); context.push({ role:'user', content: question }); const answer = { role:'assistant', text:'', sources: sources.map(({name,text}) => ({name,text})) }; chat.messages.push({ role:'user', text }, answer); chat.title = chat.messages.find(message => message.role === 'user')?.text.slice(0,55) || chat.title; chat.updated = Date.now(); $('prompt').value = ''; controller = new AbortController(); setBusy(true); setStatus(tr('generating')); renderMessages(); try { if (loadedModelId() !== selectedId) await loadModel(selectedId); await streamChat(context.slice(-12), token => { answer.text += token; const body = $('messages').lastElementChild?.querySelector('.message-body'); if (body) { body.textContent = answer.text; $('thread').scrollTop = $('thread').scrollHeight; } }, controller.signal); setStatus(controller.signal.aborted ? tr('stopped') : tr('ready')); } catch (error) { if (!controller.signal.aborted) { answer.text ||= `${tr('error')}: ${error.message}`; setStatus(answer.text, true); } } finally { controller = undefined; chat.updated = Date.now(); await db.put('chats', chat); setBusy(false); render(); } }
 async function init() { try { const settings = await db.get('settings','main'); language = settings?.language || preferredLanguage(); selectedId = settings?.selectedId; activeId = settings?.activeId; useDocs = !!settings?.useDocs; [chats, documents, models] = await Promise.all([db.all('chats'), db.all('documents'), savedModels()]); if (!chats.some(chat => chat.id === activeId)) activeId = chats[0]?.id; render(); if (!models.length) $('models-dialog').showModal(); } catch (error) { setStatus(`${tr('error')}: ${error.message}`, true); } }

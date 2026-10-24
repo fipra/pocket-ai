@@ -94,7 +94,9 @@ export async function loadModel(id) {
       if (!cached) throw Error('Cached model unavailable. Download it again.');
       return next.loadModel(cached, options);
     })();
-    await Promise.race([loading, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('LOAD_TIMEOUT')), mobileSafari ? 90_000 : 180_000); })]);
+    // Safari's compatibility WASM can spend well over 90 seconds compiling on a
+    // phone. A short deadline incorrectly reported a healthy load as a failure.
+    await Promise.race([loading, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('LOAD_TIMEOUT')), 300_000); })]);
     engine = next; loadedId = id;
   } catch (error) { void next.exit().catch(() => {}); throw error; }
   finally { clearTimeout(timer); }

@@ -36,7 +36,7 @@ Browser memory, GPU support, IndexedDB quota, and persistent storage vary by dev
 
 Safari needs Wllama's compatibility WASM and worker. These assets are bundled and served from the same site. On iPhone/iPad, model loading uses CPU mode with a smaller context and batch to reduce memory pressure. A model can still fail if the device or browser cannot allocate enough memory. Try a smaller quantized GGUF and keep the tab open while it loads.
 
-The model dialog displays a spinner and loading text while downloading or opening a model. A load that has not completed within 90 seconds on iPhone/iPad (180 seconds elsewhere) reports an error so the controls do not remain disabled indefinitely. After a timeout, reopen the page before trying another model because the browser worker may still hold memory.
+The model dialog displays a spinner and loading text while downloading or opening a model. Safari's compatibility WebAssembly may take several minutes to compile on a phone; the previous 90-second timeout could falsely report a failed load. The load now has a five-minute safety limit. After a timeout, reopen the page before trying another model because the browser worker may still hold memory.
 
 Model downloads require internet the first time and the model host must allow browser cross-origin requests. The PWA is offline-capable after the app shell and a model have been loaded at least once. Browser inference performance will usually differ from native desktop inference.
 
