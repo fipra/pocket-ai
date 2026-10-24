@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "buildCommand": "mkdir -p .vercel-static && cp index.html landing-i18n.js robots.txt sitemap.xml .vercel-static/",
+  "buildCommand": "mkdir -p .vercel-static && cp index.html landing-i18n.js landing-demo.js robots.txt sitemap.xml .vercel-static/",
   "outputDirectory": ".vercel-static"
 }
