@@ -1,6 +1,6 @@
 # USB AI Rust
 
-A private, portable AI assistant that runs on your computer. The Rust app opens in your browser and uses `llama-cli` to run GGUF models locally. It needs no account or cloud API. Keep the entire folder on a USB drive to carry your models and data with you.
+A private, portable AI assistant that runs on your computer. The Rust app opens in your browser and uses `llama-server` to keep GGUF models loaded locally. It needs no account or cloud API. Keep the entire folder on a USB drive to carry your models and data with you.
 
 [**Download for Windows x64**](https://github.com/fipra/usb-ai/releases/tag/rust-windows-portable) · [**Download for macOS**](https://github.com/fipra/usb-ai/releases/tag/rust-mac-portable) · [Leggi in italiano](README.it.md)
 
@@ -48,7 +48,7 @@ The destination PC does **not** need Rust, Cargo, or a PowerShell setup. Keep th
 
 ### macOS
 
-Download the ZIP that matches your Mac from the [macOS release](https://github.com/fipra/usb-ai/releases/tag/rust-mac-portable): **arm64** for Apple Silicon or **x86_64** for Intel. Extract the complete folder to your USB drive and double-click `Avvia USB AI Rust.command`. Choose and download a model in the app on first use. The ZIP includes the app, `llama-cli`, `pdftotext`, and their required libraries; it does not include model weights or personal data.
+Download the ZIP that matches your Mac from the [macOS release](https://github.com/fipra/usb-ai/releases/tag/rust-mac-portable): **arm64** for Apple Silicon or **x86_64** for Intel. Extract the complete folder to your USB drive and double-click `Avvia USB AI Rust.command`. Choose and download a model in the app on first use. The ZIP includes the app, `llama-server`, `llama-cli`, `pdftotext`, and their required libraries; it does not include model weights or personal data.
 
 On first launch, the launcher verifies the bundled executables and libraries' local signatures and clears their quarantine attributes if present, before starting the app. This prevents a bundled `.dylib` from being blocked on the first prompt. The package is not Developer ID signed or notarized, so macOS may still ask you to allow the launcher itself. Developers can create the folder locally with `python3 scripts/package-mac.py` on a Mac of the same architecture.
 
@@ -67,19 +67,19 @@ These are conservative estimates based on **total RAM**, not a measurement of fr
 
 ## Run from source
 
-Install Rust and `llama-cli` from llama.cpp. Install `pdftotext` from Poppler if you want PDF import. On macOS, the tools can be installed with `brew install llama.cpp poppler`. Put the executables on your PATH, then run:
+Install Rust, `llama-server`, and `llama-cli` from llama.cpp. Install `pdftotext` from Poppler if you want PDF import. On macOS, the tools can be installed with `brew install llama.cpp poppler`. Put the executables on your PATH, then run:
 
 ```bash
 cargo run --release
 ```
 
-On Windows, use PowerShell to run the same Cargo command after installing Rust, `llama-cli.exe`, and `pdftotext.exe`. Developers can build the portable Windows folder with `scripts/package-windows.ps1`; GitHub Actions builds the downloadable ZIP automatically.
+On Windows, use PowerShell to run the same Cargo command after installing Rust, `llama-server.exe`, `llama-cli.exe`, and `pdftotext.exe`. Developers can build the portable Windows folder with `scripts/package-windows.ps1`; GitHub Actions builds the downloadable ZIP automatically.
 
 ## Data, limits, and development
 
 - `POCKET_AI_HOME` selects another data directory. `USB_AI_DIR` selects the base directory containing `models/` and, by default, `PocketAI-data/`.
-- `LLAMA_CLI` and `PDFTOTEXT` select alternate tool executables.
-- Each answer starts `llama-cli` and reloads the model. Token streaming and a stop button are not available yet.
+- `LLAMA_SERVER` and `PDFTOTEXT` select alternate tool executables.
+- The first answer starts `llama-server`; subsequent answers reuse the loaded model until another GGUF is selected or USB AI closes. Token streaming and a stop button are not available yet.
 - Document search is keyword based. Scanned PDFs require OCR before import.
 
 Before contributing, run:

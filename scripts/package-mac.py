@@ -66,7 +66,7 @@ def runtime_backends(llama):
 
 def main():
     subprocess.run(["cargo", "build", "--release", "--locked"], cwd=ROOT, check=True)
-    tools = {"llama-cli": shutil.which("llama-cli"), "pdftotext": shutil.which("pdftotext")}
+    tools = {"llama-cli": shutil.which("llama-cli"), "llama-server": shutil.which("llama-server"), "pdftotext": shutil.which("pdftotext")}
     for name, path in tools.items():
         if not path:
             raise RuntimeError(f"Missing {name}; install llama.cpp and poppler first")
@@ -89,7 +89,7 @@ def main():
         target.chmod(target.stat().st_mode | 0o200)
         queue.append((source, target, False))
     llama = pathlib.Path(tools["llama-cli"]).resolve()
-    backends = runtime_backends(llama)
+    backends = list({path for tool in ("llama-cli", "llama-server") for path in runtime_backends(pathlib.Path(tools[tool]).resolve())})
     for source in backends:
         # ggml_backend_load_all() searches beside the llama-cli executable.
         # Dynamic modules do not appear in its otool -L dependency list.

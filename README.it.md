@@ -1,6 +1,6 @@
 # USB AI Rust
 
-Assistente AI locale e portatile. L'applicazione è scritta in Rust, apre la propria interfaccia nel browser e usa `llama-cli` per eseguire modelli GGUF sul computer. Non richiede account o API cloud. Conversazioni, documenti indicizzati e modelli possono restare sulla stessa chiavetta USB.
+Assistente AI locale e portatile. L'applicazione è scritta in Rust, apre la propria interfaccia nel browser e usa `llama-server` per mantenere i modelli GGUF caricati sul computer. Non richiede account o API cloud. Conversazioni, documenti indicizzati e modelli possono restare sulla stessa chiavetta USB.
 
 ## Licenze
 
@@ -37,7 +37,7 @@ L'interfaccia si apre normalmente su `http://127.0.0.1:48157`. Se la porta è oc
 
 ## Avvio dal sorgente
 
-Servono Rust, `llama-cli` di llama.cpp e, per leggere i PDF, `pdftotext` di Poppler. Su macOS puoi installare gli ultimi due con `brew install llama.cpp poppler`. Poi esegui:
+Servono Rust, `llama-server` e `llama-cli` di llama.cpp e, per leggere i PDF, `pdftotext` di Poppler. Su macOS puoi installare llama.cpp e Poppler con `brew install llama.cpp poppler`. Poi esegui:
 
 ```bash
 cargo run --release
@@ -54,7 +54,7 @@ Il browser si apre automaticamente. Apri **Scegli un modello** per vedere RAM to
 
 Queste soglie sono stime prudenti basate sulla **RAM totale**, non una misura della memoria libera. Velocità e capacità effettive dipendono anche da GPU, contesto e programmi aperti. Il catalogo e le fonti dei file sono in [models/catalog.json](models/catalog.json).
 
-Su Windows, installa Rust, `llama-cli.exe` e `pdftotext.exe` nel PATH, poi esegui `cargo run --release` da PowerShell.
+Su Windows, installa Rust, `llama-server.exe`, `llama-cli.exe` e `pdftotext.exe` nel PATH, poi esegui `cargo run --release` da PowerShell.
 
 Questa repo non contiene pesi GGUF nel controllo versione. Una copia locale del modello rimane in `models/` e viene inclusa nel pacchetto portabile. Usa un modello *instruct* compatibile e controlla la sua licenza prima di distribuirlo.
 
@@ -66,14 +66,14 @@ Questa repo non contiene pesi GGUF nel controllo versione. Una copia locale del 
 
 **Windows x64:** scarica lo ZIP **USB-AI-Rust-Windows-x64.zip** dalla [release Windows portatile](https://github.com/fipra/usb-ai/releases/tag/rust-windows-portable), estrai **tutta la cartella** e fai doppio clic su `Avvia USB AI Rust.cmd`. Non servono Rust, Cargo, PowerShell o installazioni aggiuntive sul PC di destinazione. Al primo avvio scegli un modello e scaricalo dall'interfaccia; poi puoi usare la chiavetta offline. I dati e il modello scaricato restano nella cartella portatile. La build è per Windows x64 ed è da collaudare su un PC Windows reale. Il file `Prepara.USB.AI.0.1.0.exe` della vecchia release è Electron e non appartiene alla versione Rust.
 
-Per ricreare il pacchetto da sorgente su Windows, lo script `scripts/package-windows.ps1` richiede Rust, `llama-cli.exe` e `pdftotext.exe`; la release sopra è generata automaticamente da GitHub Actions.
+Per ricreare il pacchetto da sorgente su Windows, lo script `scripts/package-windows.ps1` richiede Rust, `llama-server.exe`, `llama-cli.exe` e `pdftotext.exe`; la release sopra è generata automaticamente da GitHub Actions.
 
 ## Dati e requisiti
 
 - `POCKET_AI_HOME` sceglie una cartella dati alternativa.
 - `USB_AI_DIR` sceglie la cartella base che contiene `models/` e, per impostazione predefinita, `PocketAI-data/`.
-- `LLAMA_CLI` e `PDFTOTEXT` indicano eseguibili esterni alternativi.
-- L'app usa `llama-cli` come processo per ogni risposta: il modello viene ricaricato a ogni messaggio. Non sono ancora disponibili streaming e pulsante per interrompere la generazione.
+- `LLAMA_SERVER` e `PDFTOTEXT` indicano eseguibili esterni alternativi.
+- Alla prima risposta l'app avvia `llama-server`; le risposte successive riutilizzano il modello caricato fino al cambio GGUF o alla chiusura di USB AI. Non sono ancora disponibili streaming e pulsante per interrompere la generazione.
 - I PDF scansionati richiedono OCR esterno; la ricerca nei documenti è lessicale, non semantica.
 
 ## Sviluppo e verifica

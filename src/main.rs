@@ -2,11 +2,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     env, fs,
-    io::Read,
+    io::{Read, Write},
     path::{Path, PathBuf},
-    process::Command,
+    process::{Child, Command, Stdio},
     sync::{Arc, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
+    thread,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tiny_http::{Header, Method, Response, Server, StatusCode};
 
@@ -362,6 +363,20 @@ struct App {
     hardware: Hardware,
     downloading: Option<ModelDownload>,
     download_error: Option<String>,
+    inference: Option<InferenceServer>,
+}
+
+struct InferenceServer {
+    model: PathBuf,
+    port: u16,
+    child: Child,
+}
+
+impl Drop for InferenceServer {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
 }
 
 fn id() -> String {
@@ -574,6 +589,9 @@ impl App {
                 if &head != b"GGUF" {
                     return Err("File GGUF non valido".into());
                 }
+                if self.selected.as_deref() != Some(name) {
+                    self.inference = None;
+                }
                 self.selected = Some(name.to_owned());
                 Ok(self.state())
             }
@@ -659,35 +677,7 @@ impl App {
         let answer = if use_docs && sources.is_empty() {
             localized_no_passages(self.language()).to_owned()
         } else {
-            let output = Command::new(tool_path("LLAMA_CLI", "llama-cli"))
-                .args([
-                    "-m",
-                    path.to_str().ok_or("Percorso modello non valido")?,
-                    "-p",
-                    &prompt,
-                    "-n",
-                    "800",
-                    "-c",
-                    "4096",
-                    "--temp",
-                    "0.3",
-                    "--simple-io",
-                    "--no-display-prompt",
-                    "-st",
-                ])
-                .output()
-                .map_err(|e| format!("llama-cli: {e}"))?;
-            if !output.status.success() {
-                return Err(format!(
-                    "llama-cli: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                ));
-            }
-            clean_llama_output(
-                &String::from_utf8_lossy(&output.stdout),
-                &prompt,
-                self.language(),
-            )?
+            self.infer(&path, &prompt)?
         };
         let chat = &mut self.db.chats[idx];
         if chat.messages.is_empty() {
@@ -705,6 +695,125 @@ impl App {
         });
         self.save()?;
         Ok(self.state())
+    }
+    fn infer(&mut self, model: &Path, prompt: &str) -> Result<String, String> {
+        if self
+            .inference
+            .as_ref()
+            .is_some_and(|server| server.model != model)
+        {
+            self.inference = None;
+        }
+        if self
+            .inference
+            .as_mut()
+            .is_some_and(|server| server.child.try_wait().ok().flatten().is_some())
+        {
+            self.inference = None;
+        }
+        if self.inference.is_none() {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0")
+                .map_err(|e| format!("llama-server: {e}"))?;
+            let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+            drop(listener);
+            let child = Command::new(tool_path("LLAMA_SERVER", "llama-server"))
+                .args(["--host", "127.0.0.1", "--port", &port.to_string(), "-m"])
+                .arg(model)
+                .args(["-c", "4096", "--no-webui"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .map_err(|e| format!("llama-server: {e}"))?;
+            self.inference = Some(InferenceServer {
+                model: model.to_path_buf(),
+                port,
+                child,
+            });
+            let deadline = Instant::now() + Duration::from_secs(180);
+            loop {
+                let server = self.inference.as_mut().unwrap();
+                if server
+                    .child
+                    .try_wait()
+                    .map_err(|e| e.to_string())?
+                    .is_some()
+                {
+                    self.inference = None;
+                    return Err("llama-server exited while loading the model".into());
+                }
+                let status = Command::new(if cfg!(windows) { "curl.exe" } else { "curl" })
+                    .args([
+                        "--silent",
+                        "--max-time",
+                        "2",
+                        "--noproxy",
+                        "127.0.0.1",
+                        "--output",
+                        if cfg!(windows) { "NUL" } else { "/dev/null" },
+                        "--write-out",
+                        "%{http_code}",
+                        &format!("http://127.0.0.1:{port}/health"),
+                    ])
+                    .output();
+                if status.is_ok_and(|output| output.status.success() && output.stdout == b"200") {
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    self.inference = None;
+                    return Err("llama-server timed out while loading the model".into());
+                }
+                thread::sleep(Duration::from_millis(300));
+            }
+        }
+        let port = self.inference.as_ref().unwrap().port;
+        let body = json!({"prompt":prompt,"n_predict":800,"temperature":0.3,"cache_prompt":true,"stop":["\nUser:"]}).to_string();
+        let mut child = Command::new(if cfg!(windows) { "curl.exe" } else { "curl" })
+            .args([
+                "--fail",
+                "--silent",
+                "--show-error",
+                "--max-time",
+                "600",
+                "--noproxy",
+                "127.0.0.1",
+                "--header",
+                "Content-Type: application/json",
+                "--data-binary",
+                "@-",
+                &format!("http://127.0.0.1:{port}/completion"),
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("llama-server: {e}"))?;
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(body.as_bytes())
+            .map_err(|e| format!("llama-server: {e}"))?;
+        let output = child
+            .wait_with_output()
+            .map_err(|e| format!("llama-server: {e}"))?;
+        if !output.status.success() {
+            self.inference = None;
+            return Err(format!(
+                "llama-server: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            ));
+        }
+        let answer: Value = serde_json::from_slice(&output.stdout)
+            .map_err(|e| format!("llama-server: invalid response: {e}"))?;
+        let content = answer["content"]
+            .as_str()
+            .ok_or("llama-server: missing content")?
+            .trim();
+        if content.is_empty() {
+            return Err(localized_empty_response(self.language()).into());
+        }
+        Ok(content.to_owned())
     }
     fn upload(&mut self, name: &str, bytes: &[u8]) -> Result<Value, String> {
         let base = Path::new(name)
@@ -759,6 +868,7 @@ impl App {
     }
 }
 
+#[cfg(test)]
 fn clean_llama_output(stdout: &str, prompt: &str, language: &str) -> Result<String, String> {
     let normalized = stdout.replace("\r\n", "\n");
     // Older llama-cli builds can echo the prompt despite --no-display-prompt.
@@ -1060,6 +1170,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         hardware: detect_hardware(),
         downloading: None,
         download_error: None,
+        inference: None,
     };
     let installed = app_state.models();
     let preferred = recommended_id(&app_state.hardware, &app_state.catalog)
@@ -1206,6 +1317,7 @@ mod tests {
             hardware: detect_hardware(),
             downloading: None,
             download_error: None,
+            inference: None,
         };
         let state = app.state();
         assert!(state["models"]
@@ -1286,6 +1398,7 @@ mod tests {
             },
             downloading: None,
             download_error: None,
+            inference: None,
         };
         assert_eq!(app.state()["language"], "en");
         assert_eq!(
@@ -1393,6 +1506,7 @@ mod tests {
             },
             downloading: None,
             download_error: None,
+            inference: None,
         };
         let state = app.state();
         assert_eq!(state["catalog"].as_array().unwrap().len(), 4);
