@@ -6,6 +6,7 @@ import * as db from './storage.js';
 import { isSmartphone } from './phone-gate.js';
 import { canSaveToFolder, saveVerifiedFile } from './folder-models.js';
 import { isAuxiliaryGguf } from './hub.js';
+import { modelOptions, usesSafariCpu } from './browser-capability.js';
 
 const paths = { default: `${import.meta.env.BASE_URL}wasm/wllama.wasm` };
 const manager = new ModelManager();
@@ -128,9 +129,7 @@ export async function loadModel(id) {
   if (!record && !files) throw Error('Model unavailable');
   await unload();
   const next = instance();
-  const mobileSafari = /iP(hone|ad|od)/.test(navigator.userAgent);
-  const contextSize = navigator.deviceMemory && navigator.deviceMemory <= 4 ? 4096 : 8192;
-  const options = mobileSafari ? { n_ctx: 1024, n_batch: 64, n_threads: 1, n_gpu_layers: 0, jinja: true, reasoning: false } : { n_ctx: contextSize, n_threads: 1, jinja: true, reasoning: false };
+  const options = modelOptions();
   let timer;
   try {
     const loading = (async () => {
@@ -149,11 +148,46 @@ export async function loadModel(id) {
 }
 export async function streamChat(messages, onToken, signal) {
   if (!engine) throw Error('Select a model first');
-  const response = await engine.createChatCompletion({ messages, max_tokens: 3072, temperature: 0.7, stream: true, abortSignal: signal });
-  for await (const chunk of response) {
-    if (signal.aborted) break;
+  if (signal.aborted) return;
+  const current = engine;
+  const safariCpu = usesSafariCpu();
+  let settled = false;
+  let timer;
+  let rejectWait;
+  const interrupt = reason => {
+    if (settled) return;
+    settled = true;
+    if (engine === current) { engine = undefined; loadedId = undefined; }
+    // Wllama terminates its worker in exit(). A busy WASM call cannot be
+    // interrupted reliably with abortSignal alone on Safari.
+    void current.exit().catch(() => {});
+    rejectWait(Error(reason));
+  };
+  const interrupted = new Promise((_, reject) => { rejectWait = reject; });
+  const abort = () => interrupt('AbortError');
+  signal.addEventListener('abort', abort, { once: true });
+  if (signal.aborted) abort();
+  // The deadline is only for receiving the first visible token. Once text
+  // starts streaming, slow local generation can finish normally.
+  if (safariCpu && !settled) timer = setTimeout(() => interrupt('GENERATION_TIMEOUT'), 90_000);
+  const generation = current.createChatCompletion({
+    messages,
+    max_tokens: safariCpu ? 768 : 3072,
+    temperature: 0.7,
+    stream: true,
+    abortSignal: signal,
+    onData: chunk => {
+      if (settled || signal.aborted) return;
     const choice = chunk.choices?.[0];
     const token = choice?.delta?.content ?? choice?.message?.content;
-    if (token) onToken(token);
+      if (token) { clearTimeout(timer); onToken(token); }
+    }
+  });
+  try {
+    await Promise.race([generation, interrupted]);
+  } finally {
+    settled = true;
+    clearTimeout(timer);
+    signal.removeEventListener('abort', abort);
   }
 }

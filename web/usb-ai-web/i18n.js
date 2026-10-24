@@ -54,4 +54,12 @@ const starterStrings = {
   es: { starterHint:'Escribe tu primer mensaje. USB-AI descargará Llama 3.2 (1,6 GB) al enviarlo.', starterDownloading:'Descargando el modelo inicial…' }
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], starterStrings[language]);
+const safariStrings = {
+  en: { safariStarterHint:'Write your first message. USB-AI will download Qwen 0.5B (491 MB), a lighter model for Safari without WebGPU.', safariGenerationTimeout:'Safari did not produce text within 90 seconds. Try Qwen 0.5B in Models or use a browser with WebGPU for larger models.' },
+  it: { safariStarterHint:'Scrivi il primo messaggio. USB-AI scaricherà Qwen 0.5B (491 MB), più leggero per Safari senza WebGPU.', safariGenerationTimeout:'Safari non ha prodotto testo entro 90 secondi. Prova Qwen 0.5B in Modelli o usa un browser con WebGPU per modelli più grandi.' },
+  fr: { safariStarterHint:'Écrivez votre premier message. USB-AI téléchargera Qwen 0.5B (491 Mo), plus léger pour Safari sans WebGPU.', safariGenerationTimeout:'Safari n’a produit aucun texte en 90 secondes. Essayez Qwen 0.5B dans Modèles ou un navigateur WebGPU pour les grands modèles.' },
+  de: { safariStarterHint:'Schreibe die erste Nachricht. USB-AI lädt Qwen 0.5B (491 MB), ein kleineres Modell für Safari ohne WebGPU.', safariGenerationTimeout:'Safari hat in 90 Sekunden keinen Text erzeugt. Probiere Qwen 0.5B unter Modelle oder einen Browser mit WebGPU für größere Modelle.' },
+  es: { safariStarterHint:'Escribe el primer mensaje. USB-AI descargará Qwen 0.5B (491 MB), más ligero para Safari sin WebGPU.', safariGenerationTimeout:'Safari no generó texto en 90 segundos. Prueba Qwen 0.5B en Modelos o un navegador con WebGPU para modelos grandes.' }
+};
+for (const language of Object.keys(translations)) Object.assign(translations[language], safariStrings[language]);
 export function preferredLanguage(value = navigator.language) { return translations[value?.slice(0,2).toLowerCase()] ? value.slice(0,2).toLowerCase() : 'en'; }
