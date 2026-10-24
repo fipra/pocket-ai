@@ -8,14 +8,19 @@ Il codice e le release pubblicati fino al commit
 [`4cf59ef`](https://github.com/fipra/usb-ai/commit/4cf59ef7709235092ef3ceba74aab680a3001d4e)
 restano disponibili sotto [licenza MIT](LICENSE-MIT-LEGACY), compresi i relativi
 diritti per uso commerciale. I pacchetti delle release già pubblicate non
-vengono modificati da questo cambio di licenza.
+vengono modificati da questo cambio di licenza. La
+[cronologia delle licenze](LICENSING_HISTORY.md) indica il commit di riferimento
+e le impronte SHA-256 dei pacchetti storici.
 
-I contributi originali USB AI pubblicati dopo quel commit sono regolati dalla
-[USB AI Personal Use License v1.0](LICENSE), salvo diversa indicazione. L'uso
-personale, didattico e per ricerca non commerciale è gratuito; l'uso
-commerciale del nuovo materiale richiede un accordo scritto separato e a
-pagamento. Vedi [licenza commerciale](COMMERCIAL_LICENSE.md). Il nuovo testo
-non elimina i diritti MIT sul materiale precedente. Strumenti, dipendenze e
+Nelle distribuzioni future, tutto il codice USB AI di cui Fabrizio Casula
+detiene i diritti viene offerto sotto la
+[USB AI Personal Use License v1.0](LICENSE), compreso il codice già pubblicato
+in precedenza sotto MIT. L'uso personale, didattico e per ricerca non
+commerciale è gratuito. Uso commerciale, rivendita, ridistribuzione
+commerciale e integrazione in prodotti commerciali richiedono un accordo
+scritto separato e a pagamento: vedi
+[licenza commerciale](COMMERCIAL_LICENSE.md). Le copie già concesse sotto MIT
+restano utilizzabili anche per scopi commerciali. Strumenti, dipendenze e
 modelli di terzi mantengono le rispettive licenze.
 
 ## Funzioni
