@@ -137,6 +137,8 @@ def main():
         source = ROOT / "models" / name
         if source.is_file():
             shutil.copy2(source, OUT / "models" / name)
+    for name in ["LICENSE", "LICENSE-MIT-LEGACY", "COMMERCIAL_LICENSE.md", "LICENSING_HISTORY.md"]:
+        shutil.copy2(ROOT / name, OUT / name)
     launcher = OUT / "Avvia USB AI Rust.command"
     shutil.copy2(ROOT / "scripts/mac-launcher.command", launcher)
     launcher.chmod(0o755)

@@ -33,6 +33,9 @@ try {
     $file = Join-Path (Join-Path $root 'models') $name
     if (Test-Path $file) { Copy-Item $file (Join-Path $out 'models') }
   }
+  foreach ($name in @('LICENSE','LICENSE-MIT-LEGACY','COMMERCIAL_LICENSE.md','LICENSING_HISTORY.md')) {
+    Copy-Item (Join-Path $root $name) (Join-Path $out $name)
+  }
   '@echo off' + "`r`n" + '"%~dp0bin\usb-ai-rust.exe"' | Set-Content (Join-Path $out 'Avvia USB AI Rust.cmd')
   @'
 Double-click Avvia USB AI Rust.cmd. The browser opens at 127.0.0.1.

@@ -55,6 +55,8 @@ jobs:
           test -x "$folder/bin/llama-server"
           test -x "$folder/bin/pdftotext"
           test -f "$folder/models/catalog.json"
+          test -f "$folder/LICENSE"
+          test -f "$folder/LICENSING_HISTORY.md"
           python3 - "$folder/PocketAI-data/workspace.json" <<'PY'
           import json, sys
           workspace = json.load(open(sys.argv[1]))
@@ -86,8 +88,7 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
-    # Preserve the historical MIT release assets. New licensed releases need new tags.
-    if: ${{ false }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -98,9 +99,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          tag='rust-mac-portable'
+          tag='rust-mac-streaming-2026-10-24'
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title 'USB AI Rust for macOS' --notes 'Portable macOS builds for Apple Silicon and Intel. Download the ZIP matching your Mac, extract the complete folder and double-click Avvia USB AI Rust.command. Choose and download a model on first use.' --latest
+            gh release create "$tag" --target '${{ github.sha }}' --title 'USB AI Rust for macOS — streaming' --notes 'Mac builds with live response streaming and a persistent loaded model. Download the ZIP matching your Mac, extract the complete folder and launch Avvia USB AI Rust.command. The bundled LICENSE applies to this release.'
           fi
           gh release upload "$tag" USB-AI-Rust-mac-*.zip --clobber
-          gh release edit "$tag" --prerelease=false --latest
+          gh release edit "$tag" --prerelease=false

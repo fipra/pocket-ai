@@ -2,10 +2,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     env, fs,
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::{Arc, Mutex},
+    sync::{mpsc, Arc, Mutex},
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -372,6 +372,59 @@ struct InferenceServer {
     child: Child,
 }
 
+fn write_stream_response(
+    mut writer: impl Write,
+    receiver: mpsc::Receiver<Vec<u8>>,
+) -> std::io::Result<()> {
+    writer.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson; charset=utf-8\r\nTransfer-Encoding: chunked\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n\r\n")?;
+    writer.flush()?;
+    for event in receiver {
+        write!(writer, "{:x}\r\n", event.len())?;
+        writer.write_all(&event)?;
+        writer.write_all(b"\r\n")?;
+        writer.flush()?;
+    }
+    writer.write_all(b"0\r\n\r\n")?;
+    writer.flush()
+}
+
+fn read_completion_stream(
+    reader: impl BufRead,
+    answer: &mut String,
+    update: &mut dyn FnMut(&str) -> Result<(), String>,
+) -> Result<(), String> {
+    let mut finished = false;
+    for line in reader.lines() {
+        let line = line.map_err(|e| format!("llama-server: {e}"))?;
+        let Some(data) = line.strip_prefix("data: ") else {
+            continue;
+        };
+        if data == "[DONE]" {
+            finished = true;
+            continue;
+        }
+        let event: Value = serde_json::from_str(data)
+            .map_err(|e| format!("llama-server: invalid stream event: {e}"))?;
+        if let Some(error) = event.get("error") {
+            return Err(format!("llama-server: {error}"));
+        }
+        if let Some(content) = event["content"].as_str() {
+            answer.push_str(content);
+            if !content.is_empty() {
+                update(content)?;
+            }
+        }
+        if event["stop"].as_bool() == Some(true) {
+            finished = true;
+        }
+    }
+    if finished {
+        Ok(())
+    } else {
+        Err("llama-server: incomplete response".into())
+    }
+}
+
 impl Drop for InferenceServer {
     fn drop(&mut self) {
         let _ = self.child.kill();
@@ -623,6 +676,13 @@ impl App {
         }
     }
     fn send(&mut self, data: Value) -> Result<Value, String> {
+        self.send_with_updates(data, &mut |_| Ok(()))
+    }
+    fn send_with_updates(
+        &mut self,
+        data: Value,
+        update: &mut dyn FnMut(&str) -> Result<(), String>,
+    ) -> Result<Value, String> {
         let chat_id = data["chatId"].as_str().ok_or("Chat mancante")?;
         let text = data["text"].as_str().ok_or("Messaggio mancante")?.trim();
         if text.is_empty() || text.len() > 12000 {
@@ -677,7 +737,7 @@ impl App {
         let answer = if use_docs && sources.is_empty() {
             localized_no_passages(self.language()).to_owned()
         } else {
-            self.infer(&path, &prompt)?
+            self.infer_stream(&path, &prompt, update)?
         };
         let chat = &mut self.db.chats[idx];
         if chat.messages.is_empty() {
@@ -696,7 +756,12 @@ impl App {
         self.save()?;
         Ok(self.state())
     }
-    fn infer(&mut self, model: &Path, prompt: &str) -> Result<String, String> {
+    fn infer_stream(
+        &mut self,
+        model: &Path,
+        prompt: &str,
+        update: &mut dyn FnMut(&str) -> Result<(), String>,
+    ) -> Result<String, String> {
         if self
             .inference
             .as_ref()
@@ -767,12 +832,13 @@ impl App {
             }
         }
         let port = self.inference.as_ref().unwrap().port;
-        let body = json!({"prompt":prompt,"n_predict":800,"temperature":0.3,"cache_prompt":true,"stop":["\nUser:"]}).to_string();
+        let body = json!({"prompt":prompt,"n_predict":800,"temperature":0.3,"cache_prompt":true,"stream":true,"stop":["\nUser:"]}).to_string();
         let mut child = Command::new(if cfg!(windows) { "curl.exe" } else { "curl" })
             .args([
                 "--fail",
                 "--silent",
                 "--show-error",
+                "--no-buffer",
                 "--max-time",
                 "600",
                 "--noproxy",
@@ -794,9 +860,16 @@ impl App {
             .unwrap()
             .write_all(body.as_bytes())
             .map_err(|e| format!("llama-server: {e}"))?;
+        let mut answer = String::new();
+        let stdout = child.stdout.take().unwrap();
+        let stream_result = read_completion_stream(BufReader::new(stdout), &mut answer, update);
+        if stream_result.is_err() {
+            let _ = child.kill();
+        }
         let output = child
             .wait_with_output()
             .map_err(|e| format!("llama-server: {e}"))?;
+        stream_result?;
         if !output.status.success() {
             self.inference = None;
             return Err(format!(
@@ -804,16 +877,10 @@ impl App {
                 String::from_utf8_lossy(&output.stderr).trim()
             ));
         }
-        let answer: Value = serde_json::from_slice(&output.stdout)
-            .map_err(|e| format!("llama-server: invalid response: {e}"))?;
-        let content = answer["content"]
-            .as_str()
-            .ok_or("llama-server: missing content")?
-            .trim();
-        if content.is_empty() {
+        if answer.trim().is_empty() {
             return Err(localized_empty_response(self.language()).into());
         }
-        Ok(content.to_owned())
+        Ok(answer.trim().to_owned())
     }
     fn upload(&mut self, name: &str, bytes: &[u8]) -> Result<Value, String> {
         let base = Path::new(name)
@@ -1193,6 +1260,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .find(|h| h.field.equiv("Origin"))
             .map(|h| h.value.as_str() == origin)
             .unwrap_or(true);
+        if method == Method::Post && url == "/api/stream" && allowed_origin {
+            let mut body = Vec::new();
+            let parsed = request
+                .as_reader()
+                .take((MAX_FILE + 1) as u64)
+                .read_to_end(&mut body)
+                .map_err(|e| e.to_string())
+                .and_then(|_| {
+                    if body.len() > MAX_FILE {
+                        Err("Richiesta troppo grande".into())
+                    } else {
+                        serde_json::from_slice::<Value>(&body).map_err(|e| e.to_string())
+                    }
+                });
+            let (sender, receiver) = mpsc::channel::<Vec<u8>>();
+            let app = app.clone();
+            thread::spawn(move || {
+                let result = parsed.and_then(|data| {
+                    app.lock().unwrap().send_with_updates(data, &mut |delta| {
+                        let event = json!({"type":"delta","text":delta}).to_string() + "\n";
+                        sender
+                            .send(event.into_bytes())
+                            .map_err(|_| "Browser disconnected".to_owned())
+                    })
+                });
+                let event = match result {
+                    Ok(state) => json!({"type":"done","state":state}),
+                    Err(error) => json!({"type":"error","error":error}),
+                };
+                let _ = sender.send((event.to_string() + "\n").into_bytes());
+            });
+            let _ = write_stream_response(request.into_writer(), receiver);
+            continue;
+        }
         let (code, mime, body) = if method == Method::Get && url == "/" {
             (200, "text/html; charset=utf-8", INDEX.as_bytes().to_vec())
         } else if method == Method::Get && url == "/i18n.js" {
@@ -1271,6 +1372,52 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn stream_response_flushes_each_event() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+        struct Writer(Rc<RefCell<Vec<Vec<u8>>>>, Vec<u8>);
+        impl Write for Writer {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.1.extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                self.0.borrow_mut().push(self.1.clone());
+                Ok(())
+            }
+        }
+        let snapshots = Rc::new(RefCell::new(Vec::new()));
+        let (sender, receiver) = mpsc::channel();
+        sender.send(b"first\n".to_vec()).unwrap();
+        sender.send(b"second\n".to_vec()).unwrap();
+        drop(sender);
+        write_stream_response(Writer(snapshots.clone(), Vec::new()), receiver).unwrap();
+        let snapshots = snapshots.borrow();
+        assert_eq!(snapshots.len(), 4);
+        assert!(snapshots[1].ends_with(b"6\r\nfirst\n\r\n"));
+        assert!(snapshots[2].ends_with(b"7\r\nsecond\n\r\n"));
+        assert!(snapshots[3].ends_with(b"0\r\n\r\n"));
+    }
+    #[test]
+    fn completion_stream_emits_fragments_and_requires_finish() {
+        let events = b"data: {\"content\":\"Cia\",\"stop\":false}\n\ndata: {\"content\":\"o!\",\"stop\":false}\n\ndata: {\"content\":\"\",\"stop\":true}\n\n";
+        let mut answer = String::new();
+        let mut fragments = Vec::new();
+        read_completion_stream(&events[..], &mut answer, &mut |part| {
+            fragments.push(part.to_owned());
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(answer, "Ciao!");
+        assert_eq!(fragments, ["Cia", "o!"]);
+        assert!(read_completion_stream(
+            b"data: {\"content\":\"Cia\",\"stop\":false}\n\n".as_slice(),
+            &mut String::new(),
+            &mut |_| Ok(())
+        )
+        .is_err());
+    }
     #[test]
     fn hub_models_require_safe_paths_and_pinned_lfs_hash() {
         let entry = json!({"size": 2_147_483_648_u64, "lfs": {"sha256": "a".repeat(64)}});

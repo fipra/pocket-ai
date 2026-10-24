@@ -60,7 +60,7 @@ jobs:
           & scripts/package-windows.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Windows package failed' }
           $folder = 'release/USB-AI-Rust-Windows-x64'
-          foreach ($required in @('Avvia USB AI Rust.cmd','bin/usb-ai-rust.exe','bin/llama-cli.exe','bin/llama-server.exe','bin/pdftotext.exe','models/catalog.json','PocketAI-data/workspace.json')) {
+          foreach ($required in @('Avvia USB AI Rust.cmd','bin/usb-ai-rust.exe','bin/llama-cli.exe','bin/llama-server.exe','bin/pdftotext.exe','models/catalog.json','PocketAI-data/workspace.json','LICENSE','LICENSING_HISTORY.md')) {
             if (!(Test-Path (Join-Path $folder $required))) { throw "Package is missing $required" }
           }
           $workspace = Get-Content (Join-Path $folder 'PocketAI-data/workspace.json') -Raw | ConvertFrom-Json
@@ -79,19 +79,18 @@ jobs:
           path: USB-AI-Rust-Windows-x64.zip
           if-no-files-found: error
       - name: Publish portable download
-        # Preserve the historical MIT release asset. New licensed releases need a new tag.
-        if: ${{ false }}
+        if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = 'rust-windows-portable'
+          $tag = 'rust-windows-streaming-2026-10-24'
           gh release view $tag *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --title 'USB AI Rust for Windows x64' --notes 'Portable Windows build. Extract the ZIP and double-click Avvia USB AI Rust.cmd. Choose and download a model on first use. No Rust or PowerShell setup is needed.' --latest
+            gh release create $tag --target '${{ github.sha }}' --title 'USB AI Rust for Windows x64 — streaming' --notes 'Windows x64 build with live response streaming and a persistent loaded model. Extract the ZIP and launch Avvia USB AI Rust.cmd. The bundled LICENSE applies to this release.'
             if ($LASTEXITCODE -ne 0) { throw 'Could not create release' }
           }
           gh release upload $tag 'USB-AI-Rust-Windows-x64.zip' --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Could not upload Windows ZIP' }
-          gh release edit $tag --prerelease=false --latest
+          gh release edit $tag --prerelease=false
           if ($LASTEXITCODE -ne 0) { throw 'Could not make Windows release visible as latest' }
