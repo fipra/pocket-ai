@@ -98,7 +98,7 @@ async function newChat() { const chat = { id: crypto.randomUUID(), title: tr('ne
 async function send() {
   const text = $('prompt').value.trim();
   if (!text || busy) return;
-  if (!selectedId || needsSafariFallback(models.find(model => model.id === selectedId))) {
+  if (!selectedId) {
     const starter = usesSafariCpu() ? models.find(model => model.id === 'qwen-0.5b') : models.find(isStarterModel);
     if (starter) {
       await chooseModel(starter.id);
@@ -159,7 +159,7 @@ async function send() {
     setBusy(false); render();
   }
 }
-async function init() { try { const settings = await db.get('settings','main'); language = settings?.language || preferredLanguage(); selectedId = settings?.selectedId; activeId = settings?.activeId; useDocs = !!settings?.useDocs; [chats, documents, models] = await Promise.all([db.all('chats'), db.all('documents'), savedModels()]); if (isAuxiliaryGguf(models.find(model => model.id === selectedId)?.filename || models.find(model => model.id === selectedId)?.url || '')) { selectedId = undefined; await saveSettings(); } if (!chats.some(chat => chat.id === activeId)) activeId = chats[0]?.id; if (!models.some(model => model.id === selectedId)) selectedId = models.find(isStarterModel)?.id; render(); if (needsSafariFallback(models.find(model => model.id === selectedId))) setStatus(tr('safariSwitchingModel')); else if (isStarterModel(models.find(model => model.id === selectedId))) await run(() => chooseModel(selectedId)); } catch (error) { setStatus(`${tr('error')}: ${error.message}`, true); } }
+async function init() { try { const settings = await db.get('settings','main'); language = settings?.language || preferredLanguage(); selectedId = settings?.selectedId; activeId = settings?.activeId; useDocs = !!settings?.useDocs; [chats, documents, models] = await Promise.all([db.all('chats'), db.all('documents'), savedModels()]); if (isAuxiliaryGguf(models.find(model => model.id === selectedId)?.filename || models.find(model => model.id === selectedId)?.url || '')) { selectedId = undefined; await saveSettings(); } if (!chats.some(chat => chat.id === activeId)) activeId = chats[0]?.id; if (!models.some(model => model.id === selectedId)) selectedId = usesSafariCpu() ? undefined : models.find(isStarterModel)?.id; render(); if (needsSafariFallback(models.find(model => model.id === selectedId))) setStatus(tr('safariLargeModelWarning')); else if (isStarterModel(models.find(model => model.id === selectedId))) await run(() => chooseModel(selectedId)); } catch (error) { setStatus(`${tr('error')}: ${error.message}`, true); } }
 $('prompt-form').onsubmit = event => { event.preventDefault(); run(send); };
 $('prompt').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('prompt-form').requestSubmit(); } };
 $('stop').onclick = () => controller?.abort();

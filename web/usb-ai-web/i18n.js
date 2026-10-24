@@ -62,4 +62,12 @@ const safariStrings = {
   es: { safariStarterHint:'Escribe el primer mensaje. USB-AI descargará Qwen 0.5B (491 MB), más ligero para Safari sin WebGPU.', safariGenerationTimeout:'Safari no generó texto en 90 segundos. Prueba Qwen 0.5B en Modelos o un navegador con WebGPU para modelos grandes.', safariSwitchingModel:'Preparando Qwen 0.5B para Safari…' }
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], safariStrings[language]);
+const safariWarning = {
+  en: 'This model may exceed Safari’s memory. USB-AI will try the model you selected when you send a message.',
+  it: 'Questo modello può superare la memoria di Safari. USB-AI proverà quello che hai scelto quando invii un messaggio.',
+  fr: 'Ce modèle peut dépasser la mémoire de Safari. USB-AI essaiera le modèle choisi lors de l’envoi du message.',
+  de: 'Dieses Modell kann Safaris Speicher überschreiten. USB-AI versucht beim Senden das gewählte Modell.',
+  es: 'Este modelo puede superar la memoria de Safari. USB-AI probará el modelo elegido al enviar un mensaje.'
+};
+for (const language of Object.keys(translations)) translations[language].safariLargeModelWarning = safariWarning[language];
 export function preferredLanguage(value = navigator.language) { return translations[value?.slice(0,2).toLowerCase()] ? value.slice(0,2).toLowerCase() : 'en'; }
