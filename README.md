@@ -10,15 +10,19 @@ The existing code and releases published through commit
 [`4cf59ef`](https://github.com/fipra/usb-ai/commit/4cf59ef7709235092ef3ceba74aab680a3001d4e)
 remain available under the [MIT License](LICENSE-MIT-LEGACY), including its
 commercial-use rights. The download links above point to previously published
-release assets; this licensing change does not alter them.
+release assets; this licensing change does not alter them. See the
+[licensing history](LICENSING_HISTORY.md) for the source cutoff and exact asset
+digests.
 
-Original USB AI contributions first published after that commit are covered by
-the [USB AI Personal Use License v1.0](LICENSE), unless expressly licensed
-otherwise. Personal, educational, and non-commercial research use of that new
-material is free. Commercial use of it requires a separate written, paid
-agreement; see [commercial licensing](COMMERCIAL_LICENSE.md). The new license
-does not remove MIT rights in earlier material. Bundled tools, Rust
-dependencies, and downloaded models have their own licenses.
+For future distributions, all USB AI code that Fabrizio Casula owns is offered
+under the [USB AI Personal Use License v1.0](LICENSE), including owned code
+that appeared in the earlier MIT versions. Personal, educational, and
+non-commercial research use is free. Commercial use, resale, commercial
+redistribution, and integration into commercial products require a separate
+written, paid agreement; see [commercial licensing](COMMERCIAL_LICENSE.md).
+Previously MIT-licensed copies remain usable under MIT, including for
+commercial purposes. Bundled tools, Rust dependencies, and downloaded models
+have their own licenses.
 
 ## Features
 

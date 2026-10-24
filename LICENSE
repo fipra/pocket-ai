@@ -5,15 +5,21 @@ Copyright (c) 2026 Fabrizio Casula (FipraAI — USB AI Project)
 
 Scope and effective version
 
-This License applies to original USB AI code and other original project material
-first published after commit 4cf59ef7709235092ef3ceba74aab680a3001d4e (the
-MIT baseline), unless a file expressly states another license. In a future
-version that combines this material with earlier code, this License governs
-only the new material to which its copyright holder can grant these rights.
-Code and other material published at or before the MIT baseline remain
-available under the MIT License preserved in LICENSE-MIT-LEGACY. Nothing in
-this License withdraws, narrows, or conditions those existing MIT rights.
-Third-party material remains subject to its own license.
+For future distributions that include this License, it applies to the entire
+USB AI codebase and other original project material to the extent Fabrizio
+Casula owns the copyright or otherwise has the right to grant these terms.
+This includes owned material that was previously published under MIT, and is
+not limited to newly developed code. It does not apply to any third-party
+material or to material for which the copyright holder cannot grant these
+terms. A file expressly carrying another license remains under that license.
+
+Every copy, version, and release published before this change remains
+available under its original terms. In particular, the code published through
+commit 4cf59ef7709235092ef3ceba74aab680a3001d4e and historical releases
+were made available under MIT. Their recipients retain all MIT rights,
+including commercial use, redistribution, and sublicensing. This License does
+not revoke, narrow, or condition those rights. The historical MIT text is
+preserved in LICENSE-MIT-LEGACY.
 
 1. Grant of License
 
@@ -36,8 +42,9 @@ sell, license for commercial use, or commercially distribute the covered
 material or derivatives containing it, or incorporate it into a commercial
 product or paid service. Internal business use, use for a client, and use to
 provide a paid service are commercial use under this License, even when the
-software itself is not sold. These restrictions apply only to material covered
-by this License; they do not restrict the earlier MIT-licensed material.
+software itself is not sold. These restrictions apply only to distributions
+under this License; they do not restrict previously MIT-licensed copies or
+anyone's existing MIT rights.
 
 4. Commercial Licensing
 
@@ -49,8 +56,8 @@ not grant commercial rights.
 5. Copyright and Attribution
 
 Retain this License and all existing copyright and attribution notices in all
-copies and permitted modifications of the covered material. Preserve the MIT
-license and notices for earlier MIT-licensed material included in a copy.
+copies and permitted modifications of the covered material. Preserve any
+third-party license notices and the historical MIT notice where applicable.
 
 6. Third-Party Components
 
@@ -69,14 +76,17 @@ damages, or other liability arising from use of the covered material.
 8. Previously Released Versions
 
 This License does not revoke or restrict rights granted under the MIT License
-for previously published versions or material. Those versions and material
-remain available under their original MIT terms.
+for previously published copies, versions, or material. Anyone who received
+an MIT-licensed copy may continue to use, modify, redistribute, sublicense,
+and sell that copy under the MIT terms, including for commercial purposes.
+This License governs only the rights granted for future distributions to
+which it is attached; it cannot erase independent rights already granted.
 
 9. Termination
 
 The rights granted by this License terminate upon a material breach of its
 terms, subject to applicable law. Termination does not affect rights that
-others already received under the MIT License for earlier material.
+others already received under the MIT License for earlier copies or material.
 
 10. Contact
 
