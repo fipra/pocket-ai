@@ -4,6 +4,7 @@ import { createSHA256 } from 'hash-wasm';
 import { CATALOG } from './catalog.js';
 import * as db from './storage.js';
 import { isSmartphone } from './phone-gate.js';
+import { canSaveToFolder, saveVerifiedFile } from './folder-models.js';
 
 const paths = { default: `${import.meta.env.BASE_URL}wasm/wllama.wasm` };
 const manager = new ModelManager();
@@ -35,6 +36,11 @@ async function hashBlob(blob, onProgress = () => {}) {
 
 export async function downloadVerified(item, onProgress) {
   if (!item || !/^https:\/\/huggingface\.co\//.test(item.url) || !/^[a-f0-9]{64}$/.test(item.sha256) || !Number.isSafeInteger(item.size)) throw Error('Invalid model metadata');
+  if (canSaveToFolder()) {
+    const file = await saveVerifiedFile(item, onProgress);
+    await db.put('models', { id: item.id, name: item.name, source: 'directory', fileHandle: file.handle, filename: file.filename, url: item.url, size: file.size });
+    return;
+  }
   await manager.downloadModel({ url: item.url }, { progressCallback: onProgress });
   const model = (await manager.getModels()).find(entry => entry.url === item.url || entry.source?.url === item.url);
   if (!model) throw Error('Downloaded model missing from browser cache');
@@ -50,6 +56,17 @@ export async function downloadCurated(id, onProgress) {
   const item = CATALOG.find(model => model.id === id);
   if (!item) throw Error('Unknown model');
   return downloadVerified(item, onProgress);
+}
+
+export async function moveCachedToFolder(model, onProgress) {
+  const sha256 = CATALOG.find(item => item.id === model.id)?.sha256 || /^hf:([a-f0-9]{64})$/.exec(model.id)?.[1];
+  if (model.source !== 'download' || !sha256) throw Error('Model cannot be moved automatically');
+  // Start the directory picker before awaiting browser cache operations so it
+  // retains the user gesture required by showDirectoryPicker().
+  const saved = await saveVerifiedFile({ ...model, sha256 }, onProgress);
+  await db.put('models', { ...model, source: 'directory', fileHandle: saved.handle, filename: saved.filename });
+  const cached = (await manager.getModels()).find(entry => entry.url === model.url || entry.source?.url === model.url);
+  if (cached) await cached.remove();
 }
 
 export async function addLocalModel(files) {
@@ -81,7 +98,13 @@ export async function loadModel(id) {
   if (isSmartphone()) throw Error('SMARTPHONE_DISABLED');
   if (loadedId === id && engine) return;
   const record = await db.get('models', id);
-  const files = record?.files || sessionFiles.get(id);
+  let files = record?.files || sessionFiles.get(id);
+  if (record?.source === 'directory') {
+    const handle = record.fileHandle;
+    if (await handle.queryPermission?.({ mode: 'read' }) !== 'granted' &&
+        await handle.requestPermission?.({ mode: 'read' }) !== 'granted') throw Error('MODEL_FILE_PERMISSION');
+    files = [await handle.getFile()];
+  }
   if (!record && !files) throw Error('Model unavailable');
   await unload();
   const next = instance();
