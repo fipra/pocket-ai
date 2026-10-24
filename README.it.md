@@ -60,11 +60,11 @@ Questa repo non contiene pesi GGUF nel controllo versione. Una copia locale del 
 
 ## Pacchetto per chiavetta USB
 
-**Mac:** scarica dalla [nuova release macOS](https://github.com/fipra/usb-ai/releases/tag/rust-mac-streaming-2026-10-24) lo ZIP **arm64** per Apple Silicon oppure **x86_64** per Intel. Estrai l'intera cartella sulla chiavetta e fai doppio clic su `Avvia USB AI Rust.command`. La cartella include eseguibile, licenza e strumenti necessari, ma non modelli o dati personali. Al primo avvio scegli e scarica un modello. Per creare il pacchetto dal sorgente su un Mac della stessa architettura, esegui `python3 scripts/package-mac.py`.
+**Mac:** scarica dalla [nuova release macOS](https://github.com/fipra/usb-ai/releases/tag/rust-mac-stop-2026-10-24) lo ZIP **arm64** per Apple Silicon oppure **x86_64** per Intel. Estrai l'intera cartella sulla chiavetta e fai doppio clic su `Avvia USB AI Rust.command`. La cartella include eseguibile, licenza e strumenti necessari, ma non modelli o dati personali. Al primo avvio scegli e scarica un modello. Per creare il pacchetto dal sorgente su un Mac della stessa architettura, esegui `python3 scripts/package-mac.py`.
 
 **Primo avvio su macOS:** il launcher verifica la firma locale dei binari e delle librerie inclusi e, se presenti, rimuove i loro attributi di quarantena prima di aprire l'app. Questo evita il blocco di una `.dylib` al primo prompt. L'operazione riguarda solo `bin/` e `lib/` della cartella estratta. La build non ha firma Developer ID né notarizzazione Apple, quindi macOS potrebbe chiedere di autorizzare il launcher stesso. Non modificare i binari del pacchetto dopo l'estrazione.
 
-**Windows x64:** scarica lo ZIP **USB-AI-Rust-Windows-x64.zip** dalla [nuova release Windows portatile](https://github.com/fipra/usb-ai/releases/tag/rust-windows-streaming-2026-10-24), estrai **tutta la cartella** e fai doppio clic su `Avvia USB AI Rust.cmd`. Non servono Rust, Cargo, PowerShell o installazioni aggiuntive sul PC di destinazione. Al primo avvio scegli un modello e scaricalo dall'interfaccia; poi puoi usare la chiavetta offline. I dati e il modello scaricato restano nella cartella portatile. La build è per Windows x64 ed è da collaudare su un PC Windows reale. Il file `Prepara.USB.AI.0.1.0.exe` della vecchia release è Electron e non appartiene alla versione Rust.
+**Windows x64:** scarica lo ZIP **USB-AI-Rust-Windows-x64.zip** dalla [nuova release Windows portatile](https://github.com/fipra/usb-ai/releases/tag/rust-windows-stop-2026-10-24), estrai **tutta la cartella** e fai doppio clic su `Avvia USB AI Rust.cmd`. Non servono Rust, Cargo, PowerShell o installazioni aggiuntive sul PC di destinazione. Al primo avvio scegli un modello e scaricalo dall'interfaccia; poi puoi usare la chiavetta offline. I dati e il modello scaricato restano nella cartella portatile. La build è per Windows x64 ed è da collaudare su un PC Windows reale. Il file `Prepara.USB.AI.0.1.0.exe` della vecchia release è Electron e non appartiene alla versione Rust.
 
 Per ricreare il pacchetto da sorgente su Windows, lo script `scripts/package-windows.ps1` richiede Rust, `llama-server.exe`, `llama-cli.exe` e `pdftotext.exe`; la release sopra è generata automaticamente da GitHub Actions.
 
@@ -73,7 +73,7 @@ Per ricreare il pacchetto da sorgente su Windows, lo script `scripts/package-win
 - `POCKET_AI_HOME` sceglie una cartella dati alternativa.
 - `USB_AI_DIR` sceglie la cartella base che contiene `models/` e, per impostazione predefinita, `PocketAI-data/`.
 - `LLAMA_SERVER` e `PDFTOTEXT` indicano eseguibili esterni alternativi.
-- Alla prima risposta l'app avvia `llama-server`; le risposte successive riutilizzano il modello caricato fino al cambio GGUF o alla chiusura di USB AI. La risposta appare mentre viene generata. Il pulsante per interrompere la generazione non è ancora disponibile.
+- Alla prima risposta l'app avvia `llama-server`; le risposte successive riutilizzano il modello caricato fino al cambio GGUF o alla chiusura di USB AI. La risposta appare mentre viene generata. Il pulsante Stop interrompe la risposta corrente e conserva il testo già prodotto, così puoi inviare un altro prompt.
 - I PDF scansionati richiedono OCR esterno; la ricerca nei documenti è lessicale, non semantica.
 
 ## Sviluppo e verifica

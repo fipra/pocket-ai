@@ -84,13 +84,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = 'rust-windows-streaming-2026-10-24'
+          $tag = 'rust-windows-stop-2026-10-24'
           gh release view $tag *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --target '${{ github.sha }}' --title 'USB AI Rust for Windows x64 — streaming' --notes 'Windows x64 build with live response streaming and a persistent loaded model. Extract the ZIP and launch Avvia USB AI Rust.cmd. The bundled LICENSE applies to this release.'
+            gh release create $tag --target '${{ github.sha }}' --title 'USB AI Rust for Windows x64 — streaming' --notes 'Windows x64 build with live response streaming, a Stop button, and a persistent loaded model. Extract the ZIP and launch Avvia USB AI Rust.cmd. The bundled LICENSE applies to this release.'
             if ($LASTEXITCODE -ne 0) { throw 'Could not create release' }
           }
           gh release upload $tag 'USB-AI-Rust-Windows-x64.zip' --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Could not upload Windows ZIP' }
           gh release edit $tag --prerelease=false
-          if ($LASTEXITCODE -ne 0) { throw 'Could not make Windows release visible as latest' }
+          if ($LASTEXITCODE -ne 0) { throw 'Could not finalize Windows release' }

@@ -99,9 +99,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          tag='rust-mac-streaming-2026-10-24'
+          tag='rust-mac-stop-2026-10-24'
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --target '${{ github.sha }}' --title 'USB AI Rust for macOS — streaming' --notes 'Mac builds with live response streaming and a persistent loaded model. Download the ZIP matching your Mac, extract the complete folder and launch Avvia USB AI Rust.command. The bundled LICENSE applies to this release.'
+            gh release create "$tag" --target '${{ github.sha }}' --title 'USB AI Rust for macOS — streaming' --notes 'Mac builds with live response streaming, a Stop button, and a persistent loaded model. Download the ZIP matching your Mac, extract the complete folder and launch Avvia USB AI Rust.command. The bundled LICENSE applies to this release.'
           fi
           gh release upload "$tag" USB-AI-Rust-mac-*.zip --clobber
           gh release edit "$tag" --prerelease=false

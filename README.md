@@ -2,7 +2,7 @@
 
 A private, portable AI assistant that runs on your computer. The Rust app opens in your browser and uses `llama-server` to keep GGUF models loaded locally. It needs no account or cloud API. Keep the entire folder on a USB drive to carry your models and data with you.
 
-[**Download for Windows x64**](https://github.com/fipra/usb-ai/releases/tag/rust-windows-streaming-2026-10-24) · [**Download for macOS**](https://github.com/fipra/usb-ai/releases/tag/rust-mac-streaming-2026-10-24) · [Leggi in italiano](README.it.md)
+[**Download for Windows x64**](https://github.com/fipra/usb-ai/releases/tag/rust-windows-stop-2026-10-24) · [**Download for macOS**](https://github.com/fipra/usb-ai/releases/tag/rust-mac-stop-2026-10-24) · [Leggi in italiano](README.it.md)
 
 ## Licensing
 
@@ -40,7 +40,7 @@ The app normally opens at `http://127.0.0.1:48157`. If that port is busy, it pic
 
 ### Windows x64
 
-1. Download [**USB-AI-Rust-Windows-x64.zip**](https://github.com/fipra/usb-ai/releases/download/rust-windows-streaming-2026-10-24/USB-AI-Rust-Windows-x64.zip).
+1. Download [**USB-AI-Rust-Windows-x64.zip**](https://github.com/fipra/usb-ai/releases/download/rust-windows-stop-2026-10-24/USB-AI-Rust-Windows-x64.zip).
 2. Extract the complete folder to your USB drive or another location.
 3. Double-click `Avvia USB AI Rust.cmd`. Your browser opens automatically.
 4. Choose a model in the app and download it once. Chat and document search then work offline.
@@ -49,7 +49,7 @@ The destination PC does **not** need Rust, Cargo, or a PowerShell setup. Keep th
 
 ### macOS
 
-Download the ZIP that matches your Mac from the [macOS release](https://github.com/fipra/usb-ai/releases/tag/rust-mac-streaming-2026-10-24): **arm64** for Apple Silicon or **x86_64** for Intel. Extract the complete folder to your USB drive and double-click `Avvia USB AI Rust.command`. Choose and download a model in the app on first use. The ZIP includes the app, its license, `llama-server`, `llama-cli`, `pdftotext`, and their required libraries; it does not include model weights or personal data.
+Download the ZIP that matches your Mac from the [macOS release](https://github.com/fipra/usb-ai/releases/tag/rust-mac-stop-2026-10-24): **arm64** for Apple Silicon or **x86_64** for Intel. Extract the complete folder to your USB drive and double-click `Avvia USB AI Rust.command`. Choose and download a model in the app on first use. The ZIP includes the app, its license, `llama-server`, `llama-cli`, `pdftotext`, and their required libraries; it does not include model weights or personal data.
 
 On first launch, the launcher verifies the bundled executables and libraries' local signatures and clears their quarantine attributes if present, before starting the app. This prevents a bundled `.dylib` from being blocked on the first prompt. The package is not Developer ID signed or notarized, so macOS may still ask you to allow the launcher itself. Developers can create the folder locally with `python3 scripts/package-mac.py` on a Mac of the same architecture.
 
@@ -80,7 +80,7 @@ On Windows, use PowerShell to run the same Cargo command after installing Rust, 
 
 - `POCKET_AI_HOME` selects another data directory. `USB_AI_DIR` selects the base directory containing `models/` and, by default, `PocketAI-data/`.
 - `LLAMA_SERVER` and `PDFTOTEXT` select alternate tool executables.
-- The first answer starts `llama-server`; subsequent answers reuse the loaded model until another GGUF is selected or USB AI closes. Answers appear as they are generated. A stop button is not available yet.
+- The first answer starts `llama-server`; subsequent answers reuse the loaded model until another GGUF is selected or USB AI closes. Answers appear as they are generated. Stop ends the current answer and keeps any text already generated, so you can send another prompt.
 - Document search is keyword based. Scanned PDFs require OCR before import.
 
 Before contributing, run:

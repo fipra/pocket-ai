@@ -5,7 +5,10 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::{mpsc, Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc, Mutex,
+    },
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -372,6 +375,31 @@ struct InferenceServer {
     child: Child,
 }
 
+struct ActiveGeneration {
+    chat_id: String,
+    request_id: String,
+    cancelled: AtomicBool,
+    curl: Mutex<Option<Child>>,
+}
+
+impl ActiveGeneration {
+    fn new(chat_id: String, request_id: String) -> Self {
+        Self {
+            chat_id,
+            request_id,
+            cancelled: AtomicBool::new(false),
+            curl: Mutex::new(None),
+        }
+    }
+
+    fn cancel(&self) {
+        self.cancelled.store(true, Ordering::SeqCst);
+        if let Some(child) = self.curl.lock().unwrap().as_mut() {
+            let _ = child.kill();
+        }
+    }
+}
+
 fn write_stream_response(
     mut writer: impl Write,
     receiver: mpsc::Receiver<Vec<u8>>,
@@ -676,12 +704,17 @@ impl App {
         }
     }
     fn send(&mut self, data: Value) -> Result<Value, String> {
-        self.send_with_updates(data, &mut |_| Ok(()))
+        let generation = ActiveGeneration::new(
+            data["chatId"].as_str().unwrap_or("").to_owned(),
+            String::new(),
+        );
+        self.send_with_updates(data, &mut |_| Ok(()), &generation)
     }
     fn send_with_updates(
         &mut self,
         data: Value,
         update: &mut dyn FnMut(&str) -> Result<(), String>,
+        generation: &ActiveGeneration,
     ) -> Result<Value, String> {
         let chat_id = data["chatId"].as_str().ok_or("Chat mancante")?;
         let text = data["text"].as_str().ok_or("Messaggio mancante")?.trim();
@@ -737,7 +770,7 @@ impl App {
         let answer = if use_docs && sources.is_empty() {
             localized_no_passages(self.language()).to_owned()
         } else {
-            self.infer_stream(&path, &prompt, update)?
+            self.infer_stream(&path, &prompt, update, generation)?
         };
         let chat = &mut self.db.chats[idx];
         if chat.messages.is_empty() {
@@ -748,11 +781,13 @@ impl App {
             text: text.into(),
             sources: vec![],
         });
-        chat.messages.push(Message {
-            role: "assistant".into(),
-            text: answer,
-            sources,
-        });
+        if !answer.is_empty() {
+            chat.messages.push(Message {
+                role: "assistant".into(),
+                text: answer,
+                sources,
+            });
+        }
         self.save()?;
         Ok(self.state())
     }
@@ -761,7 +796,11 @@ impl App {
         model: &Path,
         prompt: &str,
         update: &mut dyn FnMut(&str) -> Result<(), String>,
+        generation: &ActiveGeneration,
     ) -> Result<String, String> {
+        if generation.cancelled.load(Ordering::SeqCst) {
+            return Ok(String::new());
+        }
         if self
             .inference
             .as_ref()
@@ -797,6 +836,9 @@ impl App {
             });
             let deadline = Instant::now() + Duration::from_secs(180);
             loop {
+                if generation.cancelled.load(Ordering::SeqCst) {
+                    return Ok(String::new());
+                }
                 let server = self.inference.as_mut().unwrap();
                 if server
                     .child
@@ -832,8 +874,11 @@ impl App {
             }
         }
         let port = self.inference.as_ref().unwrap().port;
+        if generation.cancelled.load(Ordering::SeqCst) {
+            return Ok(String::new());
+        }
         let body = json!({"prompt":prompt,"n_predict":800,"temperature":0.3,"cache_prompt":true,"stream":true,"stop":["\nUser:"]}).to_string();
-        let mut child = Command::new(if cfg!(windows) { "curl.exe" } else { "curl" })
+        let child = Command::new(if cfg!(windows) { "curl.exe" } else { "curl" })
             .args([
                 "--fail",
                 "--silent",
@@ -854,21 +899,38 @@ impl App {
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| format!("llama-server: {e}"))?;
-        child
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(body.as_bytes())
-            .map_err(|e| format!("llama-server: {e}"))?;
+        let stdout = {
+            let mut curl = generation.curl.lock().unwrap();
+            *curl = Some(child);
+            if generation.cancelled.load(Ordering::SeqCst) {
+                let _ = curl.as_mut().unwrap().kill();
+            }
+            let child = curl.as_mut().unwrap();
+            let write_result = child.stdin.take().unwrap().write_all(body.as_bytes());
+            if let Err(error) = write_result {
+                let mut child = curl.take().unwrap();
+                drop(curl);
+                let _ = child.kill();
+                let _ = child.wait();
+                if generation.cancelled.load(Ordering::SeqCst) {
+                    return Ok(String::new());
+                }
+                return Err(format!("llama-server: {error}"));
+            }
+            child.stdout.take().unwrap()
+        };
         let mut answer = String::new();
-        let stdout = child.stdout.take().unwrap();
         let stream_result = read_completion_stream(BufReader::new(stdout), &mut answer, update);
-        if stream_result.is_err() {
+        let mut child = generation.curl.lock().unwrap().take().unwrap();
+        if stream_result.is_err() || generation.cancelled.load(Ordering::SeqCst) {
             let _ = child.kill();
         }
         let output = child
             .wait_with_output()
             .map_err(|e| format!("llama-server: {e}"))?;
+        if generation.cancelled.load(Ordering::SeqCst) {
+            return Ok(answer.trim().to_owned());
+        }
         stream_result?;
         if !output.status.success() {
             self.inference = None;
@@ -1247,6 +1309,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|name| installed.contains(name))
         .or_else(|| installed.first().cloned());
     let app = Arc::new(Mutex::new(app_state));
+    let active_generation: Arc<Mutex<Option<Arc<ActiveGeneration>>>> = Arc::new(Mutex::new(None));
     let (server, port) = bind_server()?;
     let origin = format!("http://127.0.0.1:{port}");
     println!("USB AI Rust: {origin}");
@@ -1260,6 +1323,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .find(|h| h.field.equiv("Origin"))
             .map(|h| h.value.as_str() == origin)
             .unwrap_or(true);
+        if method == Method::Post && url == "/api/stop" && allowed_origin {
+            let mut body = Vec::new();
+            let stopped = request
+                .as_reader()
+                .take(1025)
+                .read_to_end(&mut body)
+                .is_ok()
+                && body.len() <= 1024
+                && serde_json::from_slice::<Value>(&body)
+                    .ok()
+                    .and_then(|data| {
+                        Some((
+                            data["chatId"].as_str()?.to_owned(),
+                            data["requestId"].as_str()?.to_owned(),
+                        ))
+                    })
+                    .and_then(|(chat_id, request_id)| {
+                        active_generation
+                            .lock()
+                            .unwrap()
+                            .as_ref()
+                            .filter(|generation| {
+                                generation.chat_id == chat_id && generation.request_id == request_id
+                            })
+                            .cloned()
+                    })
+                    .is_some_and(|generation| {
+                        generation.cancel();
+                        true
+                    });
+            let response = Response::from_string(json!({"stopped":stopped}).to_string())
+                .with_header(Header::from_bytes("Content-Type", "application/json").unwrap())
+                .with_header(Header::from_bytes("Cache-Control", "no-store").unwrap());
+            let _ = request.respond(response);
+            continue;
+        }
         if method == Method::Post && url == "/api/stream" && allowed_origin {
             let mut body = Vec::new();
             let parsed = request
@@ -1276,22 +1375,66 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 });
             let (sender, receiver) = mpsc::channel::<Vec<u8>>();
             let app = app.clone();
+            let active = active_generation.clone();
+            let generation = Arc::new(ActiveGeneration::new(
+                parsed
+                    .as_ref()
+                    .ok()
+                    .and_then(|data| data["chatId"].as_str())
+                    .unwrap_or("")
+                    .to_owned(),
+                parsed
+                    .as_ref()
+                    .ok()
+                    .and_then(|data| data["requestId"].as_str())
+                    .unwrap_or("")
+                    .to_owned(),
+            ));
+            let registered = if parsed.is_ok() {
+                let mut current = active.lock().unwrap();
+                if current.is_none() {
+                    *current = Some(generation.clone());
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
             thread::spawn(move || {
                 let result = parsed.and_then(|data| {
-                    app.lock().unwrap().send_with_updates(data, &mut |delta| {
-                        let event = json!({"type":"delta","text":delta}).to_string() + "\n";
-                        sender
-                            .send(event.into_bytes())
-                            .map_err(|_| "Browser disconnected".to_owned())
-                    })
+                    if !registered {
+                        return Err("A response is already running".into());
+                    }
+                    app.lock().unwrap().send_with_updates(
+                        data,
+                        &mut |delta| {
+                            let event = json!({"type":"delta","text":delta}).to_string() + "\n";
+                            sender
+                                .send(event.into_bytes())
+                                .map_err(|_| "Browser disconnected".to_owned())
+                        },
+                        &generation,
+                    )
                 });
+                if registered {
+                    let mut current = active.lock().unwrap();
+                    if current
+                        .as_ref()
+                        .is_some_and(|running| Arc::ptr_eq(running, &generation))
+                    {
+                        *current = None;
+                    }
+                }
                 let event = match result {
                     Ok(state) => json!({"type":"done","state":state}),
                     Err(error) => json!({"type":"error","error":error}),
                 };
                 let _ = sender.send((event.to_string() + "\n").into_bytes());
             });
-            let _ = write_stream_response(request.into_writer(), receiver);
+            thread::spawn(move || {
+                let _ = write_stream_response(request.into_writer(), receiver);
+            });
             continue;
         }
         let (code, mime, body) = if method == Method::Get && url == "/" {
@@ -1340,7 +1483,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 .ok_or_else(|| "Scegli un modello".to_owned())
                                 .and_then(|model_id| start_download(app.clone(), model_id))
                         } else {
-                            app.lock().unwrap().command(&action, v)
+                            app.try_lock()
+                                .map_err(|_| "Busy".to_owned())
+                                .and_then(|mut guard| guard.command(&action, v))
                         }
                     }
                     Err(e) => Err(e.to_string()),
@@ -1372,6 +1517,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn stop_kills_current_generation_without_killing_model_server() {
+        let generation = ActiveGeneration::new("chat".into(), "request".into());
+        let child = Command::new("sleep").arg("30").spawn().unwrap();
+        *generation.curl.lock().unwrap() = Some(child);
+        generation.cancel();
+        assert!(generation.cancelled.load(Ordering::SeqCst));
+        assert!(!generation
+            .curl
+            .lock()
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .wait()
+            .unwrap()
+            .success());
+    }
     #[test]
     fn stream_response_flushes_each_event() {
         use std::cell::RefCell;
