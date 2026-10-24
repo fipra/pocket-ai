@@ -152,7 +152,7 @@ fn valid_hub_path(path: &str) -> bool {
                     .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
         })
         && !path.contains("-of-")
-        && !path.rsplit('/').next().is_some_and(|name| {
+        && !path.split('/').any(|name| {
             let name = name.to_ascii_lowercase();
             [
                 "mmproj",
@@ -172,6 +172,10 @@ fn valid_hub_path(path: &str) -> bool {
                 "clip-vision",
                 "mtp",
                 "draft",
+                "imatrix",
+                "importance-matrix",
+                "importance_matrix",
+                "calibration",
             ]
             .iter()
             .any(|part| name.contains(part))
@@ -1838,6 +1842,20 @@ mod tests {
         assert!(hub_model(
             "Example/Model-GGUF",
             "DeepSeek-V4.1-Flash-Vision.gguf",
+            &entry,
+            "x"
+        )
+        .is_none());
+        assert!(hub_model(
+            "Example/Model-GGUF",
+            "imatrix/DeepSeek-V4.1-Flash-1017-imatrix.gguf",
+            &entry,
+            "x"
+        )
+        .is_none());
+        assert!(hub_model(
+            "Example/Model-GGUF",
+            "imatrix-dsv41-262144.gguf",
             &entry,
             "x"
         )

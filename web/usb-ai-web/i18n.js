@@ -38,4 +38,12 @@ const simpleSearchStrings = {
   es: { searchModels:'Buscar un modelo', searchHint:'Escribe el nombre de un modelo. USB-AI muestra una versión completa y descargable por cada modelo compatible.', searchPlaceholder:'Nombre del modelo…', noResults:'No hay modelos compatibles en esta página.' }
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], simpleSearchStrings[language]);
+const auxiliaryStrings = {
+  en: { auxiliaryFile:'This is a support file, not a chat model. Remove it and choose another model.', invalidModel:'Unavailable' },
+  it: { auxiliaryFile:'Questo è un file di supporto, non un modello per la chat. Rimuovilo e scegli un altro modello.', invalidModel:'Non utilizzabile' },
+  fr: { auxiliaryFile:'Ceci est un fichier auxiliaire, pas un modèle de chat. Supprimez-le et choisissez un autre modèle.', invalidModel:'Indisponible' },
+  de: { auxiliaryFile:'Dies ist eine Hilfsdatei, kein Chatmodell. Entferne sie und wähle ein anderes Modell.', invalidModel:'Nicht nutzbar' },
+  es: { auxiliaryFile:'Este es un archivo auxiliar, no un modelo de chat. Elimínalo y elige otro modelo.', invalidModel:'No disponible' }
+};
+for (const language of Object.keys(translations)) Object.assign(translations[language], auxiliaryStrings[language]);
 export function preferredLanguage(value = navigator.language) { return translations[value?.slice(0,2).toLowerCase()] ? value.slice(0,2).toLowerCase() : 'en'; }

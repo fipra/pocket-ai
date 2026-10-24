@@ -4,7 +4,11 @@ const HASH = /^[a-f0-9]{64}$/;
 const WEB_FILE_LIMIT = 2_000_000_000;
 const MIN_MODEL_SIZE = 32_000_000;
 const SEARCH_PAGE_SIZE = 24;
-const AUXILIARY = /(?:mmproj|adapter|lora|vocab|tokenizer|embedding|embedder|vision|audio|image[-_.]?encoder|projector|preprocessor|siglip|mtp|draft)/i;
+const AUXILIARY = /(?:mmproj|adapter|lora|vocab|tokenizer|embedding|embedder|vision|audio|image[-_.]?encoder|projector|preprocessor|siglip|mtp|draft|imatrix|importance[-_.]?matrix|calibration)/i;
+
+export function isAuxiliaryGguf(filename) {
+  return String(filename).split(/[/?#]/).some(part => AUXILIARY.test(part));
+}
 
 export function estimateMemory(size) {
   const gib = size / 1_073_741_824;
@@ -28,7 +32,7 @@ export function modelFromEntry(repo, entry, license = 'see source', allowShard =
   if (!REPO.test(repo) || typeof entry?.path !== 'string') return null;
   const parts = entry.path.split('/');
   const name = parts.at(-1);
-  if (!parts.every(part => PART.test(part) && part !== '.' && part !== '..') || !/\.gguf$/i.test(name) || AUXILIARY.test(name) || (!allowShard && /-of-\d+\.gguf$/i.test(name))) return null;
+  if (!parts.every(part => PART.test(part) && part !== '.' && part !== '..') || !/\.gguf$/i.test(name) || isAuxiliaryGguf(entry.path) || (!allowShard && /-of-\d+\.gguf$/i.test(name))) return null;
   const size = entry.size;
   const sha256 = String(entry.lfs?.sha256 || entry.lfs?.oid || '').toLowerCase();
   if (!Number.isSafeInteger(size) || size < MIN_MODEL_SIZE || !HASH.test(sha256)) return null;

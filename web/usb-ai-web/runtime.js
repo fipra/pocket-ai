@@ -5,6 +5,7 @@ import { CATALOG } from './catalog.js';
 import * as db from './storage.js';
 import { isSmartphone } from './phone-gate.js';
 import { canSaveToFolder, saveVerifiedFile } from './folder-models.js';
+import { isAuxiliaryGguf } from './hub.js';
 
 const paths = { default: `${import.meta.env.BASE_URL}wasm/wllama.wasm` };
 const manager = new ModelManager();
@@ -36,6 +37,7 @@ async function hashBlob(blob, onProgress = () => {}) {
 
 export async function downloadVerified(item, onProgress) {
   if (!item || !/^https:\/\/huggingface\.co\//.test(item.url) || !/^[a-f0-9]{64}$/.test(item.sha256) || !Number.isSafeInteger(item.size)) throw Error('Invalid model metadata');
+  if (isAuxiliaryGguf(item.url) || item.shards?.some(part => isAuxiliaryGguf(part.url))) throw Error('AUXILIARY_GGUF');
   const parts = item.shards || [item];
   if (canSaveToFolder()) {
     const files = []; let completed = 0;
@@ -85,6 +87,7 @@ export async function moveCachedToFolder(model, onProgress) {
 export async function addLocalModel(files) {
   const parts = [...files];
   if (!parts.length || parts.some(file => !/\.gguf$/i.test(file.name))) throw Error('Select GGUF files');
+  if (parts.some(file => isAuxiliaryGguf(file.name))) throw Error('AUXILIARY_GGUF');
   const id = crypto.randomUUID();
   const name = parts.length === 1 ? parts[0].name : parts[0].name.replace(/-\d{5}-of-\d{5}/, '');
   // IndexedDB can store Blobs, but browser quotas vary. Keep selected File objects
@@ -111,6 +114,7 @@ export async function loadModel(id) {
   if (isSmartphone()) throw Error('SMARTPHONE_DISABLED');
   if (loadedId === id && engine) return;
   const record = await db.get('models', id);
+  if (record && isAuxiliaryGguf(record.filename || record.shards?.[0]?.url || record.url || record.name)) throw Error('AUXILIARY_GGUF');
   let files = record?.files || sessionFiles.get(id);
   if (record?.source === 'directory') {
     const handles = record.fileHandles || [record.fileHandle];

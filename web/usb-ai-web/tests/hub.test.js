@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { estimateMemory, modelFromEntry, modelsFromEntries, searchModels, searchTerm, splitSearchTerm } from '../hub.js';
+import { estimateMemory, isAuxiliaryGguf, modelFromEntry, modelsFromEntries, searchModels, searchTerm, splitSearchTerm } from '../hub.js';
 
 const hash = 'a'.repeat(64);
 test('only verified standalone GGUF files become results', () => {
@@ -18,6 +18,10 @@ test('only verified standalone GGUF files become results', () => {
   assert.equal(modelFromEntry('owner/repo', { path:'DeepSeek-V4.1-Flash-Vision.gguf', size:971_000_000, lfs:{sha256:hash} }), null);
   assert.equal(modelFromEntry('owner/repo', { path:'DeepSeek-V4.1-Flash-vision-BF16.gguf', size:971_000_000, lfs:{sha256:hash} }), null);
   assert.equal(modelFromEntry('owner/repo', { path:'vision_projector.gguf', size:500_000_000, lfs:{sha256:hash} }), null);
+  assert.equal(modelFromEntry('owner/repo', { path:'imatrix/DeepSeek-V4.1-Flash-1017-imatrix.gguf', size:785_000_000, lfs:{sha256:hash} }), null);
+  assert.equal(modelFromEntry('owner/repo', { path:'imatrix-dsv41-262144.gguf', size:789_000_000, lfs:{sha256:hash} }), null);
+  assert.equal(modelFromEntry('owner/repo', { path:'imatrix/model-Q4_K_M.gguf', size:789_000_000, lfs:{sha256:hash} }), null);
+  assert.equal(isAuxiliaryGguf('https://huggingface.co/owner/repo/resolve/main/imatrix/DeepSeek-V4.1-Flash-1017-imatrix.gguf'), true);
   const large = modelFromEntry('owner/repo', { path:'Qwen3.5-9B-Q4_K_M.gguf', size:5_627_044_256, lfs:{sha256:hash} });
   assert.equal(large.tooLargeForWeb, true);
 });
@@ -33,6 +37,22 @@ test('DeepSeek search reaches small distill models beyond the first eight reposi
   assert.equal(result.models[0].name, 'DeepSeek R1 Distill Qwen 1.5B');
   assert.match(result.models[0].url, /1\.5B-Q4_K_M\.gguf$/);
   assert.equal(result.nextSkip, 24);
+});
+test('DeepSeek imatrix files never become downloadable chat models', async () => {
+  const repos = [
+    {id:'mrfakename/DeepSeek-V4.1-Flash-1017-GGUF',tags:['license:mit']},
+    {id:'smalinin/DeepSeek-V4.1-Flash-GGUF',tags:['license:mit']},
+    {id:'unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF',tags:['license:apache-2.0']}
+  ];
+  const fetcher = async url => ({ok:true,json:async () => url.includes('/tree/')
+    ? url.includes('mrfakename')
+      ? [{path:'imatrix/DeepSeek-V4.1-Flash-1017-imatrix.gguf',size:785_000_000,lfs:{sha256:hash}}]
+      : url.includes('smalinin')
+        ? [{path:'imatrix-dsv41-262144.gguf',size:789_000_000,lfs:{sha256:hash}}]
+        : [{path:'DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf',size:1_117_000_000,lfs:{sha256:hash}}]
+    : repos});
+  const result = await searchModels('deepseek', 0, fetcher);
+  assert.deepEqual(result.models.map(model => model.name), ['DeepSeek R1 Distill Qwen 1.5B']);
 });
 test('a GGUF filename searches for its model repository', () => {
   assert.equal(searchTerm('Qwen_Qwen3.5-9B-Q4_K_M.gguf'), 'Qwen3.5-9B');
