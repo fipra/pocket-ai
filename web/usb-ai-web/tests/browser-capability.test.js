@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isSafari, usesSafariCpu, modelOptions } from '../browser-capability.js';
+import { isSafari, usesSafariCpu, modelOptions, needsSafariFallback } from '../browser-capability.js';
 
 const safari = 'Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15';
 const chrome = 'Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
@@ -15,4 +15,10 @@ test('Chrome and Safari with WebGPU retain the standard context', () => {
   assert.equal(isSafari(chrome), false);
   assert.equal(usesSafariCpu(safari, {}), false);
   assert.equal(modelOptions({ safariCpu: false, deviceMemory: 8 }).n_ctx, 8192);
+});
+
+test('Safari CPU avoids automatic 3B loading while retaining small models', () => {
+  assert.equal(needsSafariFallback({ size: 1_599_668_768 }, true), true);
+  assert.equal(needsSafariFallback({ size: 491_400_032 }, true), false);
+  assert.equal(needsSafariFallback({ size: 1_599_668_768 }, false), false);
 });

@@ -11,3 +11,7 @@ export function modelOptions({ safariCpu = usesSafariCpu(), deviceMemory = navig
   const contextSize = deviceMemory && deviceMemory <= 4 ? 4096 : 8192;
   return { n_ctx: contextSize, n_threads: 1, jinja: true, reasoning: false };
 }
+
+export function needsSafariFallback(model, safariCpu = usesSafariCpu()) {
+  return safariCpu && Number(model?.size) > 700_000_000;
+}
