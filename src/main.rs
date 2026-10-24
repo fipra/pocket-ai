@@ -645,7 +645,7 @@ impl App {
                     "0.3",
                     "--simple-io",
                     "--no-display-prompt",
-                    "--no-conversation",
+                    "-st",
                 ])
                 .output()
                 .map_err(|e| format!("llama-cli: {e}"))?;
@@ -739,7 +739,13 @@ fn clean_llama_output(stdout: &str, prompt: &str, language: &str) -> Result<Stri
         &normalized[index + prompt.len()..]
     } else if normalized.contains("Loading model...") || normalized.contains("available commands:")
     {
-        return Err(localized_empty_response(language).into());
+        // Some llama-cli releases reformat the echoed prompt. Its final
+        // Assistant: marker still separates the prompt from the answer.
+        if let Some(index) = normalized.rfind("\nAssistant:") {
+            &normalized[index + "\nAssistant:".len()..]
+        } else {
+            return Err(localized_empty_response(language).into());
+        }
     } else {
         &normalized
     };
@@ -1173,6 +1179,15 @@ mod tests {
             "Due figli. [1]"
         );
         assert!(clean_llama_output("Loading model...\nlogo\n", prompt, "it").is_err());
+        assert_eq!(
+            clean_llama_output(
+                "Loading model...\nlogo\n> User: ciao\nAssistant: Ciao!\n",
+                prompt,
+                "it"
+            )
+            .unwrap(),
+            "Ciao!"
+        );
     }
     #[test]
     fn language_defaults_to_english_and_persists_selection() {
