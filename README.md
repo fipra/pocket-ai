@@ -9,9 +9,8 @@ A private, portable AI assistant that runs on your computer. The Rust app opens 
 The existing code and releases published through commit
 [`4cf59ef`](https://github.com/fipra/usb-ai/commit/4cf59ef7709235092ef3ceba74aab680a3001d4e)
 remain available under the [MIT License](LICENSE-MIT-LEGACY), including its
-commercial-use rights. The historical release assets remain available under
-their original tags; the download links above point to new releases with the
-current license. See the
+commercial-use rights. The download links above point to the current portable
+releases. See the
 [licensing history](LICENSING_HISTORY.md) for the source cutoff and exact asset
 digests.
 
@@ -45,7 +44,7 @@ The app normally opens at `http://127.0.0.1:48157`. If that port is busy, it pic
 3. Double-click `Avvia USB AI Rust.cmd`. Your browser opens automatically.
 4. Choose a model in the app and download it once. Chat and document search then work offline.
 
-The destination PC does **not** need Rust, Cargo, or a PowerShell setup. Keep the whole folder together; downloaded models and data stay inside it. This build is for Windows x64. The automated Windows build checks the package and included tools, but use on a physical Windows PC and USB drive still needs testing. The old `Prepara.USB.AI.0.1.0.exe` release belongs to the former Electron app.
+The destination PC does **not** need Rust, Cargo, or a PowerShell setup. Keep the whole folder together; downloaded models and data stay inside it. This build is for Windows x64. The automated Windows build checks the package and included tools, but use on a physical Windows PC and USB drive still needs testing.
 
 ### macOS
 

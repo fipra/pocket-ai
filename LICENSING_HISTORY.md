@@ -21,6 +21,9 @@ These release assets were published under the MIT terms for USB AI's own code.
 Bundled tools and models retain their separate terms. The SHA-256 digests below
 identify the assets listed by GitHub on October 24, 2026; release tags are
 mutable and should not be used alone to identify an exact ZIP or executable.
+The `usb-ai-preview-1` release and its three installer assets were removed
+from GitHub on October 24, 2026 at the owner's request. Their hashes remain
+here as a record of the copies previously published under MIT terms.
 
 | Release tag | Asset | SHA-256 |
 | --- | --- | --- |
