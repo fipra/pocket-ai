@@ -1,4 +1,4 @@
-const CACHE = 'usb-ai-web-shell-v1';
+const CACHE = 'usb-ai-web-shell-v2';
 const SHELL = ['__BASE__', '__BASE__manifest.webmanifest', '__BASE__icon.svg', ...__PRECACHE__];
 self.addEventListener('install', event => { event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', event => { event.waitUntil(Promise.all([self.clients.claim(), caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))))])); });

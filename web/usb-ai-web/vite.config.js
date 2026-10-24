@@ -16,11 +16,19 @@ export default defineConfig({
         response.end(readFileSync(wasm));
       } catch (error) { next(error); }
     });
+    server.middlewares.use('/wasm/wllama-compat.wasm', (request, response, next) => {
+      try {
+        const wasm = resolve(import.meta.dirname, '..', 'node_modules', '@wllama', 'wllama-compat', 'wasm', 'wllama.wasm');
+        response.setHeader('Content-Type', 'application/wasm');
+        response.end(readFileSync(wasm));
+      } catch (error) { next(error); }
+    });
   }, closeBundle() {
     const base = resolve(import.meta.dirname, '..', 'node_modules', '@wllama', 'wllama', 'esm', 'wasm');
     const dest = resolve(import.meta.dirname, '..', 'dist', 'wasm');
     mkdirSync(dest, { recursive: true });
     copyFileSync(resolve(base, 'wllama.wasm'), resolve(dest, 'wllama.wasm'));
+    copyFileSync(resolve(import.meta.dirname, '..', 'node_modules', '@wllama', 'wllama-compat', 'wasm', 'wllama.wasm'), resolve(dest, 'wllama-compat.wasm'));
     const dist = resolve(import.meta.dirname, '..', 'dist');
     const assets = readdirSync(resolve(dist, 'assets')).map(name => `${basePath}assets/${name}`);
     const worker = resolve(dist, 'sw.js');

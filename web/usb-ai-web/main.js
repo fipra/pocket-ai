@@ -2,12 +2,14 @@ import './style.css';
 import * as db from './storage.js';
 import { translations, preferredLanguage } from './i18n.js';
 import { CATALOG } from './catalog.js';
+import { searchModels } from './hub.js';
 import { readDocument, chunks, retrieve } from './retrieval.js';
-import { savedModels, downloadCurated, addLocalModel, deleteModel, loadModel, loadedModelId, streamChat } from './runtime.js';
+import { savedModels, downloadCurated, downloadVerified, addLocalModel, deleteModel, loadModel, loadedModelId, streamChat } from './runtime.js';
 
 const $ = id => document.getElementById(id);
 let language = preferredLanguage();
 let chats = [], documents = [], models = [], activeId, selectedId, useDocs = false, busy = false, controller, installing;
+let hubResults = [], hubNext = null, hubSearching = false;
 const tr = key => translations[language]?.[key] || translations.en[key] || key;
 const node = (tag, text, className) => { const value = document.createElement(tag); if (text !== undefined) value.textContent = text; if (className) value.className = className; return value; };
 function setStatus(text = '', error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
@@ -19,9 +21,47 @@ function renderMessages() { const box = $('messages'); box.replaceChildren(); co
 function renderModels() { const catalog = $('catalog'); catalog.replaceChildren(); for (const item of CATALOG) { const saved = models.some(model => model.id === item.id); const card = node('div', undefined, 'model-card'); const info = node('div'); info.append(node('strong', item.name), node('small', `${(item.size/1e6).toFixed(0)} MB · ${item.license}`)); const link = node('a', tr('source')); link.href = item.source; link.target = '_blank'; link.rel = 'noopener noreferrer'; info.append(link); card.append(info); if (!saved) { const button = node('button', tr('download'), 'action'); button.disabled = busy || !navigator.onLine; button.onclick = () => run(async () => { setBusy(true); setStatus(tr('downloading')); await downloadCurated(item.id, ({loaded,total}) => { $('model-progress').textContent = `${tr('downloading')} ${Math.round(loaded/total*100)}%`; }); setStatus(tr('verifying')); models = await savedModels(); renderModels(); await chooseModel(item.id); $('model-progress').textContent = ''; }); card.append(button); } catalog.append(card); }
   const saved = $('saved-models'); saved.replaceChildren(); if (!models.length) saved.append(node('p', tr('chooseModel'), 'hint')); for (const model of models) { const card = node('div', undefined, 'model-card'); const info = node('div'); info.append(node('strong', model.name), node('small', `${(model.size/1e6).toFixed(0)} MB`)); card.append(info); const actions = node('div', undefined, 'card-actions'); const button = node('button', loadedModelId() === model.id ? tr('loaded') : tr('load'), 'action'); button.disabled = busy || loadedModelId() === model.id; button.onclick = () => run(() => chooseModel(model.id)); actions.append(button); const remove = node('button', tr('remove'), 'action subtle'); remove.disabled = busy; remove.onclick = () => run(async () => { if (!confirm(tr('deleteModelConfirm'))) return; await deleteModel(model.id); if (selectedId === model.id) selectedId = undefined; models = await savedModels(); await saveSettings(); render(); }); actions.append(remove); card.append(actions); saved.append(card); } }
 function renderDocs() { const box = $('doc-list'); box.replaceChildren(); if (!documents.length) box.append(node('p', tr('noDocs'), 'hint')); for (const doc of documents) { const card = node('div', undefined, 'doc-card'); card.append(node('span', `${doc.name} · ${doc.chunks.length}`)); const button = node('button', tr('remove'), 'action subtle'); button.onclick = () => run(async () => { await db.remove('documents', doc.id); documents = documents.filter(item => item.id !== doc.id); renderDocs(); }); card.append(button); box.append(card); } }
-function render() { translate(); renderChats(); renderMessages(); renderModels(); renderDocs(); $('model-trigger').textContent = `${models.find(model => model.id === selectedId)?.name || tr('chooseModel')} ⌄`; $('send').disabled = busy || !selectedId; $('stop').hidden = !controller; $('use-docs').classList.toggle('on', useDocs); $('use-docs').textContent = useDocs ? `▣ ${tr('useDocs')}` : `▤ ${tr('useDocs')}`; $('capability').textContent = `${navigator.gpu ? tr('capabilityGpu') : tr('capabilityWasm')} · ${navigator.onLine ? tr('private') : tr('offline')}`; }
+function renderSearch() {
+  const box = $('hub-results'); box.replaceChildren();
+  const mobile = /iP(hone|ad|od)|Android/.test(navigator.userAgent);
+  const visible = mobile ? [...hubResults].sort((a,b) => a.size - b.size) : hubResults;
+  for (const item of visible) {
+    const card = node('div', undefined, 'model-card');
+    const info = node('div'); info.append(node('strong', item.name), node('small', `${(item.size/1e6).toFixed(0)} MB · ${item.license}`));
+    if (mobile && item.size > 500_000_000) info.append(node('small', tr('tooLarge'), 'warning'));
+    const link = node('a', tr('source')); link.href = item.source; link.target = '_blank'; link.rel = 'noopener noreferrer'; info.append(link); card.append(info);
+    const installed = models.some(model => model.id === item.id);
+    const button = node('button', installed ? tr('load') : tr('download'), 'action');
+    button.disabled = busy || (!installed && !navigator.onLine);
+    button.onclick = () => run(async () => {
+      if (!installed) {
+        setBusy(true); setStatus(tr('downloading'));
+        await downloadVerified(item, ({loaded,total}) => { $('model-progress').textContent = `${tr('downloading')} ${Math.round(loaded/total*100)}%`; });
+        models = await savedModels();
+        $('model-progress').textContent = '';
+      }
+      await chooseModel(item.id);
+    });
+    card.append(button); box.append(card);
+  }
+  $('hub-more').hidden = hubNext == null || hubSearching;
+  $('hub-more').disabled = busy;
+}
+async function searchHub(skip = 0) {
+  if (hubSearching) return;
+  const query = $('hub-query').value.trim();
+  hubSearching = true; $('hub-status').textContent = tr('searching');
+  if (skip === 0) { hubResults = []; hubNext = null; renderSearch(); }
+  try {
+    const result = await searchModels(query, skip);
+    hubResults.push(...result.models); hubNext = result.nextSkip;
+    $('hub-status').textContent = hubResults.length ? '' : tr('noResults');
+  } catch (error) { $('hub-status').textContent = `${tr('error')}: ${error.message}`; }
+  finally { hubSearching = false; renderSearch(); }
+}
+function render() { translate(); renderChats(); renderMessages(); renderModels(); renderSearch(); renderDocs(); $('model-trigger').textContent = `${models.find(model => model.id === selectedId)?.name || tr('chooseModel')} ⌄`; $('send').disabled = busy || !selectedId; $('stop').hidden = !controller; $('use-docs').classList.toggle('on', useDocs); $('use-docs').textContent = useDocs ? `▣ ${tr('useDocs')}` : `▤ ${tr('useDocs')}`; $('capability').textContent = `${navigator.gpu ? tr('capabilityGpu') : tr('capabilityWasm')} · ${navigator.onLine ? tr('private') : tr('offline')}`; }
 function setBusy(value) { busy = value; render(); }
-async function run(callback) { try { await callback(); } catch (error) { console.error(error); setStatus(`${tr('error')}: ${error.message}`, true); } finally { if (busy && !controller) setBusy(false); } }
+async function run(callback) { try { await callback(); } catch (error) { console.error(error); const message = /QuotaExceeded|storage|no space/i.test(error.name + ' ' + error.message) ? tr('storageError') : error.message; setStatus(`${tr('error')}: ${message}`, true); $('model-progress').textContent = `${tr('error')}: ${message}`; } finally { if (busy && !controller) setBusy(false); } }
 async function chooseModel(id) { if (busy && controller) return; setBusy(true); setStatus(tr('loading')); try { await loadModel(id); selectedId = id; await saveSettings(); setStatus(tr('ready')); $('models-dialog').close(); } finally { setBusy(false); } }
 async function newChat() { const chat = { id: crypto.randomUUID(), title: tr('newChat').replace('＋ ',''), messages: [], updated: Date.now() }; chats.unshift(chat); activeId = chat.id; await db.put('chats', chat); await saveSettings(); render(); closeSidebar(); $('prompt').focus(); }
 async function send() { const text = $('prompt').value.trim(); if (!text || busy) return; if (!selectedId) { $('models-dialog').showModal(); setStatus(tr('noModel'), true); return; } let chat = chats.find(item => item.id === activeId); if (!chat) { await newChat(); chat = chats.find(item => item.id === activeId); } const sources = useDocs ? retrieve(text, documents) : []; const question = sources.length ? `${text}\n\nRelevant local document excerpts:\n${sources.map((source,i) => `[${i+1}] ${source.name}: ${source.text}`).join('\n\n')}\n\nUse these excerpts when relevant and cite their numbers.` : text; const context = chat.messages.map(message => ({ role: message.role, content: message.text })); context.push({ role:'user', content: question }); const answer = { role:'assistant', text:'', sources: sources.map(({name,text}) => ({name,text})) }; chat.messages.push({ role:'user', text }, answer); chat.title = chat.messages.find(message => message.role === 'user')?.text.slice(0,55) || chat.title; chat.updated = Date.now(); $('prompt').value = ''; controller = new AbortController(); setBusy(true); setStatus(tr('generating')); renderMessages(); try { if (loadedModelId() !== selectedId) await loadModel(selectedId); await streamChat(context.slice(-12), token => { answer.text += token; const body = $('messages').lastElementChild?.querySelector('.message-body'); if (body) { body.textContent = answer.text; $('thread').scrollTop = $('thread').scrollHeight; } }, controller.signal); setStatus(controller.signal.aborted ? tr('stopped') : tr('ready')); } catch (error) { if (!controller.signal.aborted) { answer.text ||= `${tr('error')}: ${error.message}`; setStatus(answer.text, true); } } finally { controller = undefined; chat.updated = Date.now(); await db.put('chats', chat); setBusy(false); render(); } }
@@ -37,6 +77,8 @@ document.querySelectorAll('[data-close]').forEach(button => button.onclick = () 
 $('language').onchange = () => { language = $('language').value; saveSettings(); render(); };
 $('use-docs').onclick = () => { useDocs = !useDocs; saveSettings(); render(); };
 $('model-file').onchange = event => run(async () => { const files = [...event.target.files]; event.target.value = ''; const result = await addLocalModel(files); models = await savedModels(); if (!result.persistent) models.push({ id:result.id, name:result.name, size:files.reduce((n,f) => n+f.size,0) }); renderModels(); setStatus(result.persistent ? tr('modelSaved') : tr('modelSession')); await chooseModel(result.id); });
+$('hub-search-form').onsubmit = event => { event.preventDefault(); searchHub(); };
+$('hub-more').onclick = () => searchHub(hubNext);
 $('doc-file').onchange = event => run(async () => { for (const file of event.target.files) { const text = await readDocument(file); const doc = { id:crypto.randomUUID(), name:file.name, chunks:chunks(text), updated:Date.now() }; await db.put('documents', doc); documents.push(doc); } event.target.value = ''; useDocs = true; await saveSettings(); render(); setStatus(tr('documentAdded')); });
 $('delete-chat').onclick = () => run(async () => { if (!activeId || !confirm(tr('deleteConfirm'))) return; await db.remove('chats', activeId); chats = chats.filter(chat => chat.id !== activeId); activeId = chats[0]?.id; await saveSettings(); render(); });
 $('export-chat').onclick = () => { const chat = chats.find(item => item.id === activeId); if (!chat) return; const content = chat.messages.map(item => `## ${item.role === 'user' ? tr('you') : tr('assistant')}\n\n${item.text}`).join('\n\n'); const url = URL.createObjectURL(new Blob([content], {type:'text/markdown'})); const link = node('a'); link.href = url; link.download = 'usb-ai-chat.md'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); };
