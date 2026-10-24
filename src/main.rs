@@ -482,6 +482,27 @@ impl App {
         }
         out
     }
+    fn ignored_model_files(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        for dir in [&self.models, &self.root.join("models")] {
+            if let Ok(entries) = fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_file() {
+                        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                            if name.to_ascii_lowercase().ends_with(".gguf")
+                                && name.to_ascii_lowercase().contains("mmproj")
+                                && !out.contains(&name.to_owned())
+                            {
+                                out.push(name.to_owned());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        out
+    }
     fn model_path(&self, name: &str) -> Result<PathBuf, String> {
         if name.contains('/')
             || name.contains('\\')
@@ -529,7 +550,7 @@ impl App {
             (None, 0, 0)
         };
         json!({"chats":self.db.chats,"documents":self.db.documents.iter().map(|d|json!({"id":d.id,"name":d.name,"count":d.chunks.len()})).collect::<Vec<_>>(),
-            "models":installed,"model":self.selected,"root":self.root,"language":self.language(),"catalog":catalog,"hardware":self.hardware,
+            "models":installed,"ignoredModelFiles":self.ignored_model_files(),"modelsDir":self.models,"model":self.selected,"root":self.root,"language":self.language(),"catalog":catalog,"hardware":self.hardware,
             "download":{"active":self.downloading.is_some(),"error":self.download_error,"bytes":downloaded,"total":total,"name":download_name}})
     }
     fn command(&mut self, action: &str, data: Value) -> Result<Value, String> {
@@ -1168,6 +1189,39 @@ mod tests {
             "x"
         )
         .is_none());
+    }
+    #[test]
+    fn manually_copied_model_is_listed_but_mmproj_is_explained() {
+        let root = env::temp_dir().join(format!("usb-ai-model-scan-{}", id()));
+        let models = root.join("models");
+        fs::create_dir_all(&models).unwrap();
+        fs::write(models.join("Bonsai-Q2_0.gguf"), b"GGUF").unwrap();
+        fs::write(models.join("Bonsai-mmproj-Q8_0.gguf"), b"GGUF").unwrap();
+        let app = App {
+            root: root.clone(),
+            models: models.clone(),
+            db: Workspace::default(),
+            selected: None,
+            catalog: model_catalog(),
+            hardware: detect_hardware(),
+            downloading: None,
+            download_error: None,
+        };
+        let state = app.state();
+        assert!(state["models"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("Bonsai-Q2_0.gguf")));
+        assert!(!state["models"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("Bonsai-mmproj-Q8_0.gguf")));
+        assert!(state["ignoredModelFiles"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("Bonsai-mmproj-Q8_0.gguf")));
+        assert_eq!(state["modelsDir"], json!(models));
+        fs::remove_dir_all(root).unwrap();
     }
     #[test]
     fn llama_output_keeps_only_answer() {
