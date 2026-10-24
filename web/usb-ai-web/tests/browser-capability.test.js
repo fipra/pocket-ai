@@ -1,9 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isSafari, usesSafariCpu, modelOptions, needsSafariFallback } from '../browser-capability.js';
+import { isSafari, isFirefox, largeModelWarningBrowser, usesSafariCpu, modelOptions, needsSafariFallback } from '../browser-capability.js';
 
 const safari = 'Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15';
 const chrome = 'Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
+const firefox = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:144.0) Gecko/20100101 Firefox/144.0';
+
+test('large model notice appears only in Safari and Firefox', () => {
+  assert.equal(largeModelWarningBrowser(safari), 'safari');
+  assert.equal(isFirefox(firefox), true);
+  assert.equal(largeModelWarningBrowser(firefox), 'firefox');
+  assert.equal(largeModelWarningBrowser(chrome), null);
+});
 
 test('Safari without WebGPU uses a smaller CPU context', () => {
   assert.equal(isSafari(safari), true);

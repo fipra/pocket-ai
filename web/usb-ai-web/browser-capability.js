@@ -2,6 +2,16 @@ export function isSafari(userAgent = navigator.userAgent) {
   return /Version\/[\d.]+.*Safari\//.test(userAgent) && !/(?:Chrome|Chromium|CriOS|Edg|OPR)\//.test(userAgent);
 }
 
+export function isFirefox(userAgent = navigator.userAgent) {
+  return /(?:Firefox|FxiOS)\/[\d.]+/.test(userAgent);
+}
+
+export function largeModelWarningBrowser(userAgent = navigator.userAgent) {
+  if (isSafari(userAgent)) return 'safari';
+  if (isFirefox(userAgent)) return 'firefox';
+  return null;
+}
+
 export function usesSafariCpu(userAgent = navigator.userAgent, gpu = navigator.gpu) {
   return isSafari(userAgent) && !gpu;
 }

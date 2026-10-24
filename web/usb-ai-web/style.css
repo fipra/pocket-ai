@@ -2,6 +2,7 @@
 .progress.loading{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:9px;min-height:42px;margin:-10px -10px 10px;padding:10px;background:#e9f5ee;border-radius:9px;color:#246545;font-weight:600}
 .progress.loading::before{content:"";width:15px;height:15px;flex:none;border:2px solid #d6ded7;border-top-color:#315c43;border-radius:50%;animation:model-spin .8s linear infinite}
 .status.loading{display:flex;align-items:center;gap:9px}
+.browser-model-warning{margin:0 0 10px;padding:10px 12px;border:1px solid #e9c99d;border-radius:10px;background:#fff8ed;color:#784b18;font-size:12px;line-height:1.45}
 .status.loading::before{content:"";width:15px;height:15px;flex:none;border:2px solid #d6ded7;border-top-color:#315c43;border-radius:50%;animation:model-spin .8s linear infinite}
 @keyframes model-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.progress.loading::before{animation-duration:2s}}

@@ -8,7 +8,7 @@ import { readDocument, chunks, retrieve } from './retrieval.js';
 import { ragContexts, completeWithRetry } from './rag.js';
 import { savedModels, downloadCurated, downloadVerified, moveCachedToFolder, addLocalModel, deleteModel, loadModel, loadedModelId, streamChat } from './runtime.js';
 import { canSaveToFolder, showModelFolder } from './folder-models.js';
-import { usesSafariCpu, needsSafariFallback } from './browser-capability.js';
+import { usesSafariCpu, needsSafariFallback, largeModelWarningBrowser } from './browser-capability.js';
 
 const $ = id => document.getElementById(id);
 let language = preferredLanguage();
@@ -18,6 +18,14 @@ const STARTER_ID = 'llama-3.2-3b-iq3m';
 const STARTER_FILE = 'Llama-3.2-3B-Instruct-IQ3_M.gguf';
 const isStarterModel = model => model?.id === STARTER_ID || [model?.filename, model?.name, model?.url].some(value => typeof value === 'string' && value.endsWith(STARTER_FILE));
 const tr = key => translations[language]?.[key] || translations.en[key] || key;
+function renderBrowserModelWarning() {
+  const browser = largeModelWarningBrowser();
+  for (const id of ['browser-model-warning', 'models-browser-warning']) {
+    const warning = $(id);
+    warning.hidden = !browser;
+    if (browser) warning.textContent = tr(`${browser}LargeModelsUnsupported`);
+  }
+}
 const node = (tag, text, className) => { const value = document.createElement(tag); if (text !== undefined) value.textContent = text; if (className) value.className = className; return value; };
 function setStatus(text = '', error = false, loading = false) { $('status').textContent = text; $('status').classList.toggle('error', error); $('status').classList.toggle('loading', loading); }
 function translate() { document.documentElement.lang = language; document.querySelectorAll('[data-i18n]').forEach(element => { element.textContent = tr(element.dataset.i18n); }); document.querySelectorAll('[data-placeholder]').forEach(element => { element.placeholder = tr(element.dataset.placeholder); }); $('language').value = language; $('stop').ariaLabel = tr('stop'); $('send').ariaLabel = tr('send'); }
@@ -65,7 +73,7 @@ async function searchHub(skip = 0) {
   } catch (error) { $('hub-status').textContent = `${tr('error')}: ${error.message}`; }
   finally { hubSearching = false; renderSearch(); }
 }
-function render() { translate(); renderChats(); renderMessages(); renderModels(); renderSearch(); renderDocs(); $('model-trigger').textContent = `${models.find(model => model.id === selectedId)?.name || tr('chooseModel')} ⌄`; $('send').disabled = busy; $('stop').hidden = !controller; $('use-docs').classList.toggle('on', useDocs); $('use-docs').textContent = useDocs ? `▣ ${tr('useDocs')}` : `▤ ${tr('useDocs')}`; $('capability').textContent = `${navigator.gpu ? tr('capabilityGpu') : tr('capabilityWasm')} · ${navigator.onLine ? tr('private') : tr('offline')}`; $('folder-hint').textContent = tr(canSaveToFolder() ? 'folderHint' : 'folderFallbackHint'); }
+function render() { translate(); renderBrowserModelWarning(); renderChats(); renderMessages(); renderModels(); renderSearch(); renderDocs(); $('model-trigger').textContent = `${models.find(model => model.id === selectedId)?.name || tr('chooseModel')} ⌄`; $('send').disabled = busy; $('stop').hidden = !controller; $('use-docs').classList.toggle('on', useDocs); $('use-docs').textContent = useDocs ? `▣ ${tr('useDocs')}` : `▤ ${tr('useDocs')}`; $('capability').textContent = `${navigator.gpu ? tr('capabilityGpu') : tr('capabilityWasm')} · ${navigator.onLine ? tr('private') : tr('offline')}`; $('folder-hint').textContent = tr(canSaveToFolder() ? 'folderHint' : 'folderFallbackHint'); }
 function setBusy(value) { busy = value; render(); }
 async function run(callback) { try { await callback(); } catch (error) { if (error.name === 'AbortError') { $('model-progress').classList.remove('loading'); $('model-progress').textContent = ''; setStatus(); return; } console.error(error); const message = error.message === 'SMARTPHONE_DISABLED' ? tr('phoneUnavailable') : error.message === 'MODEL_FILE_PERMISSION' ? tr('folderPermission') : error.message === 'AUXILIARY_GGUF' ? tr('auxiliaryFile') : error.message === 'LOAD_TIMEOUT' ? tr('loadTimeout') : error.message === 'DOCUMENT_NO_TEXT' ? tr('documentNoText') : /QuotaExceeded|storage|no space/i.test(error.name + ' ' + error.message) ? tr('storageError') : error.message; setStatus(`${tr('error')}: ${message}`, true); $('model-progress').classList.remove('loading'); $('model-progress').textContent = `${tr('error')}: ${message}`; } finally { if (busy && !controller) setBusy(false); } }
 async function chooseModel(id) {
