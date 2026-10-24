@@ -52,6 +52,7 @@ jobs:
           test -f "$folder/Avvia USB AI Rust.command"
           test -x "$folder/bin/usb-ai-rust"
           test -x "$folder/bin/llama-cli"
+          test -x "$folder/bin/llama-server"
           test -x "$folder/bin/pdftotext"
           test -f "$folder/models/catalog.json"
           python3 - "$folder/PocketAI-data/workspace.json" <<'PY'
@@ -61,6 +62,7 @@ jobs:
           assert not workspace.get('documents')
           PY
           "$folder/bin/llama-cli" --help >/dev/null 2>&1
+          "$folder/bin/llama-server" --help >/dev/null 2>&1
           python3 - "$folder" <<'PY'
           from pathlib import Path
           import subprocess, sys

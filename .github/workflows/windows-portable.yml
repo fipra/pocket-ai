@@ -46,9 +46,11 @@ jobs:
           Expand-Archive $llamaZip (Join-Path $tools 'llama')
           Expand-Archive $popplerZip (Join-Path $tools 'poppler')
           $llama = Get-ChildItem (Join-Path $tools 'llama') -Filter 'llama-cli.exe' -Recurse -File | Select-Object -First 1
+          $llamaServer = Get-ChildItem (Join-Path $tools 'llama') -Filter 'llama-server.exe' -Recurse -File | Select-Object -First 1
           $pdf = Get-ChildItem (Join-Path $tools 'poppler') -Filter 'pdftotext.exe' -Recurse -File | Select-Object -First 1
-          if (!$llama -or !$pdf) { throw 'Required runtime executable missing from downloaded archives' }
+          if (!$llama -or !$llamaServer -or !$pdf) { throw 'Required runtime executable missing from downloaded archives' }
           Add-Content $env:GITHUB_PATH $llama.DirectoryName
+          Add-Content $env:GITHUB_PATH $llamaServer.DirectoryName
           Add-Content $env:GITHUB_PATH $pdf.DirectoryName
       - name: Test and package
         shell: pwsh
@@ -58,13 +60,15 @@ jobs:
           & scripts/package-windows.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Windows package failed' }
           $folder = 'release/USB-AI-Rust-Windows-x64'
-          foreach ($required in @('Avvia USB AI Rust.cmd','bin/usb-ai-rust.exe','bin/llama-cli.exe','bin/pdftotext.exe','models/catalog.json','PocketAI-data/workspace.json')) {
+          foreach ($required in @('Avvia USB AI Rust.cmd','bin/usb-ai-rust.exe','bin/llama-cli.exe','bin/llama-server.exe','bin/pdftotext.exe','models/catalog.json','PocketAI-data/workspace.json')) {
             if (!(Test-Path (Join-Path $folder $required))) { throw "Package is missing $required" }
           }
           $workspace = Get-Content (Join-Path $folder 'PocketAI-data/workspace.json') -Raw | ConvertFrom-Json
           if (@($workspace.chats).Count -ne 0) { throw 'Package contains conversations' }
           & (Join-Path $folder 'bin/llama-cli.exe') --help *> $null
           if ($LASTEXITCODE -ne 0) { throw 'Packaged llama-cli cannot start' }
+          & (Join-Path $folder 'bin/llama-server.exe') --help *> $null
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged llama-server cannot start' }
           & (Join-Path $folder 'bin/pdftotext.exe') -v 2>$null
           if ($LASTEXITCODE -ne 0) { throw 'Packaged pdftotext cannot start' }
           Compress-Archive -Path $folder -DestinationPath 'USB-AI-Rust-Windows-x64.zip' -Force
