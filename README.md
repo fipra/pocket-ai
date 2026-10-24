@@ -4,6 +4,22 @@ A private, portable AI assistant that runs on your computer. The Rust app opens 
 
 [**Download for Windows x64**](https://github.com/fipra/usb-ai/releases/tag/rust-windows-portable) · [**Download for macOS**](https://github.com/fipra/usb-ai/releases/tag/rust-mac-portable) · [Leggi in italiano](README.it.md)
 
+## Licensing
+
+The existing code and releases published through commit
+[`4cf59ef`](https://github.com/fipra/usb-ai/commit/4cf59ef7709235092ef3ceba74aab680a3001d4e)
+remain available under the [MIT License](LICENSE-MIT-LEGACY), including its
+commercial-use rights. The download links above point to previously published
+release assets; this licensing change does not alter them.
+
+Original USB AI contributions first published after that commit are covered by
+the [USB AI Personal Use License v1.0](LICENSE), unless expressly licensed
+otherwise. Personal, educational, and non-commercial research use of that new
+material is free. Commercial use of it requires a separate written, paid
+agreement; see [commercial licensing](COMMERCIAL_LICENSE.md). The new license
+does not remove MIT rights in earlier material. Bundled tools, Rust
+dependencies, and downloaded models have their own licenses.
+
 ## Features
 
 - Chat with a local GGUF model.
@@ -70,4 +86,4 @@ cargo test --offline
 cargo build --release --locked
 ```
 
-See [VERIFICHE.md](VERIFICHE.md) for verification status. The application code is under the [MIT license](LICENSE); bundled tools and models have their own licenses.
+See [VERIFICHE.md](VERIFICHE.md) for verification status and the licensing section above before using or distributing a future version.
