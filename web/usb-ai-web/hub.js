@@ -4,7 +4,7 @@ const HASH = /^[a-f0-9]{64}$/;
 const WEB_FILE_LIMIT = 2_000_000_000;
 const MIN_MODEL_SIZE = 32_000_000;
 const SEARCH_PAGE_SIZE = 24;
-const AUXILIARY = /(?:mmproj|adapter|lora|vocab|tokenizer|embedding|embedder|vision[-_.]?encoder|image[-_.]?encoder|audio[-_.]?encoder|projector|preprocessor|siglip|clip[-_.]?vision|mtp|draft)/i;
+const AUXILIARY = /(?:mmproj|adapter|lora|vocab|tokenizer|embedding|embedder|vision|audio|image[-_.]?encoder|projector|preprocessor|siglip|mtp|draft)/i;
 
 export function estimateMemory(size) {
   const gib = size / 1_073_741_824;

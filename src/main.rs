@@ -162,9 +162,8 @@ fn valid_hub_path(path: &str) -> bool {
                 "tokenizer",
                 "embedding",
                 "embedder",
-                "vision-encoder",
-                "vision_encoder",
-                "vision.encoder",
+                "vision",
+                "audio",
                 "image-encoder",
                 "audio-encoder",
                 "projector",
@@ -1788,6 +1787,13 @@ mod tests {
         assert!(hub_model(
             "Example/Model-GGUF",
             "DeepSeek-V4-Flash-Vision-Encoder.gguf",
+            &entry,
+            "x"
+        )
+        .is_none());
+        assert!(hub_model(
+            "Example/Model-GGUF",
+            "DeepSeek-V4.1-Flash-Vision.gguf",
             &entry,
             "x"
         )

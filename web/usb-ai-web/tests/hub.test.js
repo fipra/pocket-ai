@@ -15,6 +15,8 @@ test('only verified standalone GGUF files become results', () => {
   assert.equal(modelFromEntry('owner/repo', { path:'mtp-q4.gguf', size:100_000_000, lfs:{sha256:hash} }), null);
   assert.equal(modelFromEntry('owner/repo', { path:'draft-q4.gguf', size:100_000_000, lfs:{sha256:hash} }), null);
   assert.equal(modelFromEntry('owner/repo', { path:'DeepSeek-V4-Flash-Vision-Encoder.gguf', size:500_000_000, lfs:{sha256:hash} }), null);
+  assert.equal(modelFromEntry('owner/repo', { path:'DeepSeek-V4.1-Flash-Vision.gguf', size:971_000_000, lfs:{sha256:hash} }), null);
+  assert.equal(modelFromEntry('owner/repo', { path:'DeepSeek-V4.1-Flash-vision-BF16.gguf', size:971_000_000, lfs:{sha256:hash} }), null);
   assert.equal(modelFromEntry('owner/repo', { path:'vision_projector.gguf', size:500_000_000, lfs:{sha256:hash} }), null);
   const large = modelFromEntry('owner/repo', { path:'Qwen3.5-9B-Q4_K_M.gguf', size:5_627_044_256, lfs:{sha256:hash} });
   assert.equal(large.tooLargeForWeb, true);
