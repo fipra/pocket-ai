@@ -2,6 +2,12 @@ const REPO = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 const PART = /^[A-Za-z0-9._-]+$/;
 const HASH = /^[a-f0-9]{64}$/;
 const WEB_FILE_LIMIT = 2_000_000_000;
+const MIN_MODEL_SIZE = 32_000_000;
+
+export function estimateMemory(size) {
+  const gib = size / 1_073_741_824;
+  return { minimum: Math.ceil(gib + 2), recommended: Math.ceil(gib * 1.3 + 4) };
+}
 
 export function searchTerm(query) {
   const raw = query.trim();
@@ -16,10 +22,10 @@ export function modelFromEntry(repo, entry, license = 'see source') {
   if (!REPO.test(repo) || typeof entry?.path !== 'string') return null;
   const parts = entry.path.split('/');
   const name = parts.at(-1);
-  if (!parts.every(part => PART.test(part) && part !== '.' && part !== '..') || !/\.gguf$/i.test(name) || /mmproj/i.test(name) || /-of-\d+\.gguf$/i.test(name)) return null;
+  if (!parts.every(part => PART.test(part) && part !== '.' && part !== '..') || !/\.gguf$/i.test(name) || /(?:mmproj|adapter|lora|vocab|tokenizer|embedding)/i.test(name) || /-of-\d+\.gguf$/i.test(name)) return null;
   const size = entry.size;
   const sha256 = String(entry.lfs?.sha256 || entry.lfs?.oid || '').toLowerCase();
-  if (!Number.isSafeInteger(size) || size < 1_048_576 || !HASH.test(sha256)) return null;
+  if (!Number.isSafeInteger(size) || size < MIN_MODEL_SIZE || !HASH.test(sha256)) return null;
   const url = `https://huggingface.co/${repo}/resolve/main/${parts.map(encodeURIComponent).join('/')}`;
   return { id: `hf:${sha256}`, name: `${repo} / ${name}`, size, sha256, url, tooLargeForWeb: size > WEB_FILE_LIMIT,
     source: `https://huggingface.co/${repo}/blob/main/${parts.map(encodeURIComponent).join('/')}`, license };
@@ -48,9 +54,11 @@ export async function searchModels(query, skip = 0, fetcher = fetch) {
       const score = item => item.name.toLowerCase().endsWith(` / ${requestedName}`) ? 2 : item.name.toLowerCase().endsWith(` / ${alternateName}`) ? 1 : 0;
       return score(b) - score(a);
     });
-    models.push(...files.slice(0, 12));
+    models.push(...files);
   }
   const exact = filenameSearch ? models.filter(item => item.name.toLowerCase().endsWith(` / ${requestedName}`)) : [];
   const alternate = filenameSearch ? models.filter(item => item.name.toLowerCase().endsWith(` / ${alternateName}`)) : [];
-  return { models: exact.length ? exact : alternate.length ? alternate : models, nextSkip: repos.length === 8 ? skip + 8 : null };
+  const selected = exact.length ? exact : alternate.length ? alternate : models;
+  selected.sort((a, b) => Number(a.tooLargeForWeb) - Number(b.tooLargeForWeb) || a.size - b.size);
+  return { models: selected, nextSkip: repos.length === 8 ? skip + 8 : null };
 }

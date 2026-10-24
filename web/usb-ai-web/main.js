@@ -2,7 +2,7 @@ import './style.css';
 import * as db from './storage.js';
 import { translations, preferredLanguage } from './i18n.js';
 import { CATALOG } from './catalog.js';
-import { searchModels } from './hub.js';
+import { searchModels, estimateMemory } from './hub.js';
 import { readDocument, chunks, retrieve } from './retrieval.js';
 import { savedModels, downloadCurated, downloadVerified, moveCachedToFolder, addLocalModel, deleteModel, loadModel, loadedModelId, streamChat } from './runtime.js';
 import { canSaveToFolder, showModelFolder } from './folder-models.js';
@@ -29,6 +29,8 @@ function renderSearch() {
   for (const item of visible) {
     const card = node('div', undefined, 'model-card');
     const info = node('div'); info.append(node('strong', item.name), node('small', `${(item.size/1e6).toFixed(0)} MB · ${item.license}`));
+    const memory = estimateMemory(item.size);
+    info.append(node('small', tr('memoryEstimate').replace('{minimum}', memory.minimum).replace('{recommended}', memory.recommended)));
     if (item.tooLargeForWeb) info.append(node('small', tr('webFileLimit'), 'warning'));
     if (mobile && item.size > 500_000_000) info.append(node('small', tr('tooLarge'), 'warning'));
     const link = node('a', tr('source')); link.href = item.source; link.target = '_blank'; link.rel = 'noopener noreferrer'; info.append(link); card.append(info);

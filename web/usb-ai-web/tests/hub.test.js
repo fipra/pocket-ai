@@ -1,15 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { modelFromEntry, searchModels, searchTerm } from '../hub.js';
+import { estimateMemory, modelFromEntry, searchModels, searchTerm } from '../hub.js';
 
 const hash = 'a'.repeat(64);
 test('only verified standalone GGUF files become results', () => {
-  const valid = modelFromEntry('owner/repo', { path:'models/tiny-q4.gguf', size:30_000_000, lfs:{sha256:hash} }, 'apache-2.0');
+  const valid = modelFromEntry('owner/repo', { path:'models/tiny-q4.gguf', size:100_000_000, lfs:{sha256:hash} }, 'apache-2.0');
   assert.equal(valid.sha256, hash);
   assert.equal(valid.url, 'https://huggingface.co/owner/repo/resolve/main/models/tiny-q4.gguf');
   assert.equal(modelFromEntry('owner/repo', { path:'../tiny.gguf', size:30_000_000, lfs:{sha256:hash} }), null);
   assert.equal(modelFromEntry('owner/repo', { path:'mmproj.gguf', size:30_000_000, lfs:{sha256:hash} }), null);
   assert.equal(modelFromEntry('owner/repo', { path:'tiny.gguf', size:30_000_000 }), null);
+  assert.equal(modelFromEntry('owner/repo', { path:'tiny.gguf', size:5_000_000, lfs:{sha256:hash} }), null);
+  assert.equal(modelFromEntry('owner/repo', { path:'adapter.gguf', size:100_000_000, lfs:{sha256:hash} }), null);
   const large = modelFromEntry('owner/repo', { path:'Qwen3.5-9B-Q4_K_M.gguf', size:5_627_044_256, lfs:{sha256:hash} });
   assert.equal(large.tooLargeForWeb, true);
 });
@@ -18,12 +20,22 @@ test('a GGUF filename searches for its model repository', () => {
 });
 test('search lists verified files from public repositories', async () => {
   const fetcher = async url => ({ ok:true, json:async () => url.includes('/tree/')
-    ? [{path:'tiny.gguf',size:30_000_000,lfs:{sha256:hash}}]
+    ? [{path:'tiny.gguf',size:100_000_000,lfs:{sha256:hash}}]
     : [{id:'owner/repo',tags:['license:apache-2.0']}] });
   const result = await searchModels('tiny', 0, fetcher);
   assert.equal(result.models.length, 1);
   assert.equal(result.models[0].license, 'apache-2.0');
   assert.equal(result.nextSkip, null);
+});
+test('search includes all usable quantizations and prioritizes Web-compatible files', async () => {
+  const entries = Array.from({length:15}, (_,i) => ({path:`model-Q${i}.gguf`,size:i === 14 ? 100_000_000 : 3_000_000_000+i,lfs:{sha256:(i+1).toString(16).padStart(64,'0')}}));
+  const fetcher = async url => ({ok:true,json:async () => url.includes('/tree/') ? entries : [{id:'owner/repo',tags:[]}]});
+  const result = await searchModels('model', 0, fetcher);
+  assert.equal(result.models.length, 15);
+  assert.equal(result.models[0].tooLargeForWeb, false);
+});
+test('memory estimate includes browser and inference overhead', () => {
+  assert.deepEqual(estimateMemory(1_073_741_824), {minimum:3,recommended:6});
 });
 test('full Qwen GGUF filename finds large files but marks them unavailable in Web', async () => {
   const urls = [];
