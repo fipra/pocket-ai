@@ -26,4 +26,8 @@ if (location.protocol === 'file:') {
   });
 }
 </script>
-<script type="module" src="./main.js"></script></body></html>
+<script type="module">
+import { isSmartphone, showPhoneGate } from './phone-gate.js';
+if (isSmartphone()) showPhoneGate();
+else import('./main.js');
+</script></body></html>

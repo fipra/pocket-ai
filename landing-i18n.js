@@ -11,7 +11,7 @@
     ["Scarica USB AI", "Download USB AI", "Télécharger USB AI", "USB AI herunterladen", "Descargar USB AI"],
     ["Apri USB-AI Web", "Open USB-AI Web", "Ouvrir USB-AI Web", "USB-AI Web öffnen", "Abrir USB-AI Web"],
     ["Scopri come funziona", "See how it works", "Découvrez comment ça marche", "So funktioniert es", "Descubre cómo funciona"],
-    ["Gratis · Nessun account · Computer e smartphone", "Free · No account · Computers and phones", "Gratuit · Sans compte · Ordinateurs et téléphones", "Kostenlos · Kein Konto · Computer und Smartphones", "Gratis · Sin cuenta · Ordenadores y móviles"],
+    ["Gratis · Nessun account · Mac e Windows", "Free · No account · Mac and Windows", "Gratuit · Sans compte · Mac et Windows", "Kostenlos · Kein Konto · Mac und Windows", "Gratis · Sin cuenta · Mac y Windows"],
     ["USB AI · sul tuo computer", "USB AI · on your computer", "USB AI · sur votre ordinateur", "USB AI · auf deinem Computer", "USB AI · en tu ordenador"],
     ["Nuova chat", "New chat", "Nouvelle discussion", "Neuer Chat", "Nuevo chat"],
     ["Posso usarlo anche senza Internet?", "Can I use it without Internet?", "Puis-je l'utiliser sans Internet ?", "Kann ich es ohne Internet nutzen?", "¿Puedo usarlo sin Internet?"],

@@ -3,6 +3,7 @@ import compatWorker from '@wllama/wllama-compat/wasm/wllama.js?raw';
 import { createSHA256 } from 'hash-wasm';
 import { CATALOG } from './catalog.js';
 import * as db from './storage.js';
+import { isSmartphone } from './phone-gate.js';
 
 const paths = { default: `${import.meta.env.BASE_URL}wasm/wllama.wasm` };
 const manager = new ModelManager();
@@ -77,6 +78,7 @@ export async function deleteModel(id) {
 }
 export async function unload() { if (engine) await engine.exit(); engine = undefined; loadedId = undefined; }
 export async function loadModel(id) {
+  if (isSmartphone()) throw Error('SMARTPHONE_DISABLED');
   if (loadedId === id && engine) return;
   const record = await db.get('models', id);
   const files = record?.files || sessionFiles.get(id);

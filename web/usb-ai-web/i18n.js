@@ -15,11 +15,11 @@ const searchStrings = {
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], searchStrings[language]);
 const recoveryStrings = {
-  en: { phoneModel:'For phones · English focused', loadSlow:'Safari may take several minutes', loadTimeout:'Loading took too long. Try the 105 MB phone model, then reopen the page before retrying.' },
-  it: { phoneModel:'Per smartphone · soprattutto inglese', loadSlow:'Safari può impiegare alcuni minuti', loadTimeout:'Il caricamento dura troppo. Prova il modello per smartphone da 105 MB e riapri la pagina prima di riprovare.' },
-  fr: { phoneModel:'Pour téléphone · surtout en anglais', loadSlow:'Safari peut prendre plusieurs minutes', loadTimeout:'Le chargement prend trop de temps. Essayez le modèle de 105 Mo, puis rouvrez la page.' },
-  de: { phoneModel:'Für Smartphones · vor allem Englisch', loadSlow:'Safari kann einige Minuten benötigen', loadTimeout:'Das Laden dauert zu lange. Versuchen Sie das 105-MB-Modell und öffnen Sie die Seite erneut.' },
-  es: { phoneModel:'Para móviles · principalmente inglés', loadSlow:'Safari puede tardar varios minutos', loadTimeout:'La carga tarda demasiado. Prueba el modelo de 105 MB y vuelve a abrir la página.' }
+  en: { phoneModel:'For phones · English focused', phoneUnavailable:'USB-AI Web is temporarily unavailable on smartphones.', loadSlow:'Safari may take several minutes', loadTimeout:'Loading took too long. Try the 105 MB phone model, then reopen the page before retrying.' },
+  it: { phoneModel:'Per smartphone · soprattutto inglese', phoneUnavailable:'USB-AI Web non è temporaneamente disponibile su smartphone.', loadSlow:'Safari può impiegare alcuni minuti', loadTimeout:'Il caricamento dura troppo. Prova il modello per smartphone da 105 MB e riapri la pagina prima di riprovare.' },
+  fr: { phoneModel:'Pour téléphone · surtout en anglais', phoneUnavailable:'USB-AI Web est temporairement indisponible sur smartphone.', loadSlow:'Safari peut prendre plusieurs minutes', loadTimeout:'Le chargement prend trop de temps. Essayez le modèle de 105 Mo, puis rouvrez la page.' },
+  de: { phoneModel:'Für Smartphones · vor allem Englisch', phoneUnavailable:'USB-AI Web ist vorübergehend auf Smartphones nicht verfügbar.', loadSlow:'Safari kann einige Minuten benötigen', loadTimeout:'Das Laden dauert zu lange. Versuchen Sie das 105-MB-Modell und öffnen Sie die Seite erneut.' },
+  es: { phoneModel:'Para móviles · principalmente inglés', phoneUnavailable:'USB-AI Web no está disponible temporalmente en móviles.', loadSlow:'Safari puede tardar varios minutos', loadTimeout:'La carga tarda demasiado. Prueba el modelo de 105 MB y vuelve a abrir la página.' }
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], recoveryStrings[language]);
 export function preferredLanguage(value = navigator.language) { return translations[value?.slice(0,2).toLowerCase()] ? value.slice(0,2).toLowerCase() : 'en'; }
