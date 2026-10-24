@@ -18,11 +18,15 @@ export function searchTerm(query) {
     .replace(/^Qwen_(?=Qwen)/i, '');
 }
 
+export function splitSearchTerm(query) {
+  return searchTerm(query).replace(/([A-Za-z])\s+(?=\d)/g, '$1').replace(/\s+/g, '-').replace(/-GGUF$/i, '') + '-split';
+}
+
 export function modelFromEntry(repo, entry, license = 'see source', allowShard = false) {
   if (!REPO.test(repo) || typeof entry?.path !== 'string') return null;
   const parts = entry.path.split('/');
   const name = parts.at(-1);
-  if (!parts.every(part => PART.test(part) && part !== '.' && part !== '..') || !/\.gguf$/i.test(name) || /(?:mmproj|adapter|lora|vocab|tokenizer|embedding)/i.test(name) || (!allowShard && /-of-\d+\.gguf$/i.test(name))) return null;
+  if (!parts.every(part => PART.test(part) && part !== '.' && part !== '..') || !/\.gguf$/i.test(name) || /(?:mmproj|adapter|lora|vocab|tokenizer|embedding|mtp|draft)/i.test(name) || (!allowShard && /-of-\d+\.gguf$/i.test(name))) return null;
   const size = entry.size;
   const sha256 = String(entry.lfs?.sha256 || entry.lfs?.oid || '').toLowerCase();
   if (!Number.isSafeInteger(size) || size < MIN_MODEL_SIZE || !HASH.test(sha256)) return null;
@@ -61,8 +65,19 @@ export async function searchModels(query, skip = 0, fetcher = fetch) {
   if (term.length < 2 || term.length > 80) throw Error('Use 2–80 characters');
   const response = await fetcher(`https://huggingface.co/api/models?filter=gguf&search=${encodeURIComponent(term)}&sort=downloads&direction=-1&limit=8&skip=${skip}`);
   if (!response.ok) throw Error(`Hugging Face search: HTTP ${response.status}`);
-  const repos = await response.json();
-  if (!Array.isArray(repos)) throw Error('Invalid search results');
+  const primaryRepos = await response.json();
+  if (!Array.isArray(primaryRepos)) throw Error('Invalid search results');
+  let repos = primaryRepos;
+  if (skip === 0) {
+    const splitTerm = splitSearchTerm(query);
+    if (splitTerm !== term) {
+      const splitResponse = await fetcher(`https://huggingface.co/api/models?filter=gguf&search=${encodeURIComponent(splitTerm)}&sort=downloads&direction=-1&limit=8`);
+      if (splitResponse.ok) {
+        const splitRepos = await splitResponse.json();
+        if (Array.isArray(splitRepos)) repos = [...splitRepos, ...primaryRepos.filter(repo => !splitRepos.some(split => split.id === repo.id))];
+      }
+    }
+  }
   const models = [];
   for (const repo of repos) {
     if (!REPO.test(repo.id || '') || repo.gated) continue;
@@ -82,5 +97,5 @@ export async function searchModels(query, skip = 0, fetcher = fetch) {
   const alternate = filenameSearch ? models.filter(item => item.name.toLowerCase().endsWith(` / ${alternateName}`)) : [];
   const selected = exact.length ? exact : alternate.length ? alternate : models;
   selected.sort((a, b) => Number(a.tooLargeForWeb) - Number(b.tooLargeForWeb) || a.size - b.size);
-  return { models: selected, nextSkip: repos.length === 8 ? skip + 8 : null };
+  return { models: selected, nextSkip: primaryRepos.length === 8 ? skip + 8 : null };
 }

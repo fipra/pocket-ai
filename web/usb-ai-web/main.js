@@ -26,6 +26,8 @@ function renderSearch() {
   const box = $('hub-results'); box.replaceChildren();
   const mobile = /iP(hone|ad|od)|Android/.test(navigator.userAgent);
   const visible = mobile ? [...hubResults].sort((a,b) => a.size - b.size) : hubResults;
+  const desktopOnly = node('details', undefined, 'desktop-only-results');
+  desktopOnly.append(node('summary', `${tr('desktopOnlyResults')} (${visible.filter(item => item.tooLargeForWeb).length})`));
   for (const item of visible) {
     const card = node('div', undefined, 'model-card');
     const info = node('div'); info.append(node('strong', item.name), node('small', `${(item.size/1e6).toFixed(0)} MB · ${item.license}`));
@@ -47,8 +49,9 @@ function renderSearch() {
       }
       await chooseModel(item.id);
     });
-    card.append(button); box.append(card);
+    card.append(button); (item.tooLargeForWeb ? desktopOnly : box).append(card);
   }
+  if (desktopOnly.querySelector('.model-card')) box.append(desktopOnly);
   $('hub-more').hidden = hubNext == null || hubSearching;
   $('hub-more').disabled = busy;
 }

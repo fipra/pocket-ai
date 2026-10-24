@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { estimateMemory, modelFromEntry, modelsFromEntries, searchModels, searchTerm } from '../hub.js';
+import { estimateMemory, modelFromEntry, modelsFromEntries, searchModels, searchTerm, splitSearchTerm } from '../hub.js';
 
 const hash = 'a'.repeat(64);
 test('only verified standalone GGUF files become results', () => {
@@ -12,11 +12,14 @@ test('only verified standalone GGUF files become results', () => {
   assert.equal(modelFromEntry('owner/repo', { path:'tiny.gguf', size:30_000_000 }), null);
   assert.equal(modelFromEntry('owner/repo', { path:'tiny.gguf', size:5_000_000, lfs:{sha256:hash} }), null);
   assert.equal(modelFromEntry('owner/repo', { path:'adapter.gguf', size:100_000_000, lfs:{sha256:hash} }), null);
+  assert.equal(modelFromEntry('owner/repo', { path:'mtp-q4.gguf', size:100_000_000, lfs:{sha256:hash} }), null);
+  assert.equal(modelFromEntry('owner/repo', { path:'draft-q4.gguf', size:100_000_000, lfs:{sha256:hash} }), null);
   const large = modelFromEntry('owner/repo', { path:'Qwen3.5-9B-Q4_K_M.gguf', size:5_627_044_256, lfs:{sha256:hash} });
   assert.equal(large.tooLargeForWeb, true);
 });
 test('a GGUF filename searches for its model repository', () => {
   assert.equal(searchTerm('Qwen_Qwen3.5-9B-Q4_K_M.gguf'), 'Qwen3.5-9B');
+  assert.equal(splitSearchTerm('Qwen 3.5 9B'), 'Qwen3.5-9B-split');
 });
 test('search lists verified files from public repositories', async () => {
   const fetcher = async url => ({ ok:true, json:async () => url.includes('/tree/')
@@ -46,6 +49,19 @@ test('complete GGUF shard sets can exceed 2 GB in total', () => {
   assert.equal(models[0].shards.length, 3);
   assert.match(models[0].shards[1].url, /large-00002-of-00003\.gguf$/);
   assert.equal(modelsFromEntries('owner/repo', entries.slice(0,2)).length, 0);
+});
+test('search includes split repositories before single files above 2 GB', async () => {
+  const fetcher = async url => ({ok:true,json:async () => url.includes('/tree/')
+    ? url.includes('/split/')
+      ? [1,2].map(i=>({path:`Qwen3.5-9B-0000${i}-of-00002.gguf`,size:1_500_000_000,lfs:{sha256:String(i).repeat(64)}}))
+      : [{path:'Qwen3.5-9B-Q4.gguf',size:5_000_000_000,lfs:{sha256:hash}}]
+    : url.includes('search=Qwen3.5-9B-split')
+      ? [{id:'owner/split',tags:[]}]
+      : [{id:'owner/single',tags:[]}]});
+  const result = await searchModels('Qwen 3.5 9B', 0, fetcher);
+  assert.equal(result.models[0].shards.length, 2);
+  assert.equal(result.models[0].tooLargeForWeb, false);
+  assert.equal(result.models[1].tooLargeForWeb, true);
 });
 test('full Qwen GGUF filename finds large files but marks them unavailable in Web', async () => {
   const urls = [];
