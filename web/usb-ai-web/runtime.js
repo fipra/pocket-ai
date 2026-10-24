@@ -38,7 +38,7 @@ export async function downloadVerified(item, onProgress) {
   if (!item || !/^https:\/\/huggingface\.co\//.test(item.url) || !/^[a-f0-9]{64}$/.test(item.sha256) || !Number.isSafeInteger(item.size)) throw Error('Invalid model metadata');
   if (canSaveToFolder()) {
     const file = await saveVerifiedFile(item, onProgress);
-    await db.put('models', { id: item.id, name: item.name, source: 'directory', fileHandle: file.handle, filename: file.filename, url: item.url, size: file.size });
+    await db.put('models', { id: item.id, name: item.name, source: 'directory', fileHandle: file.handle, folderHandle: file.folderHandle, folderLabel: file.folderLabel, filename: file.filename, url: item.url, size: file.size });
     return;
   }
   await manager.downloadModel({ url: item.url }, { progressCallback: onProgress });
@@ -64,7 +64,7 @@ export async function moveCachedToFolder(model, onProgress) {
   // Start the directory picker before awaiting browser cache operations so it
   // retains the user gesture required by showDirectoryPicker().
   const saved = await saveVerifiedFile({ ...model, sha256 }, onProgress);
-  await db.put('models', { ...model, source: 'directory', fileHandle: saved.handle, filename: saved.filename });
+  await db.put('models', { ...model, source: 'directory', fileHandle: saved.handle, folderHandle: saved.folderHandle, folderLabel: saved.folderLabel, filename: saved.filename });
   const cached = (await manager.getModels()).find(entry => entry.url === model.url || entry.source?.url === model.url);
   if (cached) await cached.remove();
 }

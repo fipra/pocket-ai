@@ -1,6 +1,7 @@
 import { createSHA256 } from 'hash-wasm';
 
 let folder;
+let folderLabel;
 
 export function canSaveToFolder() {
   return typeof window.showDirectoryPicker === 'function';
@@ -15,7 +16,15 @@ async function modelsFolder() {
   // The user chooses Downloads. A website cannot silently access that folder.
   const parent = await window.showDirectoryPicker({ id: 'usb-ai-models', mode: 'readwrite', startIn: 'downloads' });
   folder = parent.name === 'usb-ai-models' ? parent : await parent.getDirectoryHandle('usb-ai-models', { create: true });
+  folderLabel = parent.name === 'usb-ai-models' ? parent.name : `${parent.name}/usb-ai-models`;
   return folder;
+}
+
+export async function showModelFolder(model) {
+  if (!canSaveToFolder() || !model?.fileHandle) throw Error('FOLDER_UNAVAILABLE');
+  // Browsers do not expose an API to open Finder or Explorer directly. The
+  // directory picker opens at the model's file so the user can locate it.
+  await window.showDirectoryPicker({ id: 'usb-ai-models-reveal', mode: 'read', startIn: model.folderHandle || model.fileHandle });
 }
 
 export async function saveVerifiedFile(item, onProgress = () => {}, fetcher = fetch) {
@@ -50,7 +59,7 @@ export async function saveVerifiedFile(item, onProgress = () => {}, fetcher = fe
     if (loaded !== item.size) throw Error('Downloaded model size mismatch');
     if (hasher.digest('hex') !== item.sha256) throw Error('Downloaded model checksum mismatch');
     await writable.close();
-    return { handle, filename, size: loaded };
+    return { handle, filename, size: loaded, folderHandle: directory, folderLabel };
   } catch (error) {
     if (writable) await writable.abort().catch(() => {});
     if (!existed) await directory.removeEntry(filename).catch(() => {});
