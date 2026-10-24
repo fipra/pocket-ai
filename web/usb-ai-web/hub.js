@@ -1,6 +1,16 @@
 const REPO = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 const PART = /^[A-Za-z0-9._-]+$/;
 const HASH = /^[a-f0-9]{64}$/;
+const WEB_FILE_LIMIT = 2_000_000_000;
+
+export function searchTerm(query) {
+  const raw = query.trim();
+  if (!/\.gguf$/i.test(raw)) return raw;
+  return raw.split('/').at(-1)
+    .replace(/\.gguf$/i, '')
+    .replace(/[-_.](?:I?Q\d+(?:_[A-Za-z0-9]+)*|BF16|F16)$/i, '')
+    .replace(/^Qwen_(?=Qwen)/i, '');
+}
 
 export function modelFromEntry(repo, entry, license = 'see source') {
   if (!REPO.test(repo) || typeof entry?.path !== 'string') return null;
@@ -9,14 +19,14 @@ export function modelFromEntry(repo, entry, license = 'see source') {
   if (!parts.every(part => PART.test(part) && part !== '.' && part !== '..') || !/\.gguf$/i.test(name) || /mmproj/i.test(name) || /-of-\d+\.gguf$/i.test(name)) return null;
   const size = entry.size;
   const sha256 = String(entry.lfs?.sha256 || entry.lfs?.oid || '').toLowerCase();
-  if (!Number.isSafeInteger(size) || size < 1_048_576 || size > 2_000_000_000 || !HASH.test(sha256)) return null;
+  if (!Number.isSafeInteger(size) || size < 1_048_576 || !HASH.test(sha256)) return null;
   const url = `https://huggingface.co/${repo}/resolve/main/${parts.map(encodeURIComponent).join('/')}`;
-  return { id: `hf:${sha256}`, name: `${repo} / ${name}`, size, sha256, url,
+  return { id: `hf:${sha256}`, name: `${repo} / ${name}`, size, sha256, url, tooLargeForWeb: size > WEB_FILE_LIMIT,
     source: `https://huggingface.co/${repo}/blob/main/${parts.map(encodeURIComponent).join('/')}`, license };
 }
 
 export async function searchModels(query, skip = 0, fetcher = fetch) {
-  const term = query.trim();
+  const term = searchTerm(query);
   if (term.length < 2 || term.length > 80) throw Error('Use 2–80 characters');
   const response = await fetcher(`https://huggingface.co/api/models?filter=gguf&search=${encodeURIComponent(term)}&sort=downloads&direction=-1&limit=8&skip=${skip}`);
   if (!response.ok) throw Error(`Hugging Face search: HTTP ${response.status}`);
@@ -30,7 +40,10 @@ export async function searchModels(query, skip = 0, fetcher = fetch) {
     const entries = await tree.json();
     if (!Array.isArray(entries)) continue;
     const license = repo.tags?.find(tag => tag.startsWith('license:'))?.slice(8) || 'see source';
-    models.push(...entries.map(entry => modelFromEntry(repo.id, entry, license)).filter(Boolean).slice(0, 5));
+    const files = entries.map(entry => modelFromEntry(repo.id, entry, license)).filter(Boolean);
+    const requestedName = query.trim().split('/').at(-1).replace(/^Qwen_(?=Qwen)/i, '').toLowerCase();
+    if (/\.gguf$/i.test(requestedName)) files.sort((a, b) => Number(b.name.toLowerCase().endsWith(requestedName)) - Number(a.name.toLowerCase().endsWith(requestedName)));
+    models.push(...files.slice(0, 12));
   }
   return { models, nextSkip: repos.length === 8 ? skip + 8 : null };
 }

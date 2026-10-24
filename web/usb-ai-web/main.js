@@ -29,11 +29,12 @@ function renderSearch() {
   for (const item of visible) {
     const card = node('div', undefined, 'model-card');
     const info = node('div'); info.append(node('strong', item.name), node('small', `${(item.size/1e6).toFixed(0)} MB · ${item.license}`));
+    if (item.tooLargeForWeb) info.append(node('small', tr('webFileLimit'), 'warning'));
     if (mobile && item.size > 500_000_000) info.append(node('small', tr('tooLarge'), 'warning'));
     const link = node('a', tr('source')); link.href = item.source; link.target = '_blank'; link.rel = 'noopener noreferrer'; info.append(link); card.append(info);
     const installed = models.some(model => model.id === item.id);
-    const button = node('button', installed ? tr('load') : tr('download'), 'action');
-    button.disabled = busy || (!installed && !navigator.onLine);
+    const button = node('button', item.tooLargeForWeb ? tr('webFileLimitShort') : installed ? tr('load') : tr('download'), 'action');
+    button.disabled = item.tooLargeForWeb || busy || (!installed && !navigator.onLine);
     button.onclick = () => run(async () => {
       if (!installed) {
         setBusy(true); setStatus(tr('downloading')); $('model-progress').classList.add('loading');
