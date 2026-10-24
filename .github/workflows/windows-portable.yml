@@ -1,6 +1,15 @@
 name: Windows portable
 
 on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'web/**'
+      - 'models/catalog.json'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'scripts/package-windows.ps1'
+      - '.github/workflows/windows-portable.yml'
   push:
     branches: [main]
     paths:
