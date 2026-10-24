@@ -38,3 +38,13 @@ test('full Qwen GGUF filename finds large files but marks them unavailable in We
   assert.equal(result.models[0].tooLargeForWeb, true);
   assert.match(result.models[0].name, /Qwen3\.5-9B-Q4_K_M\.gguf/);
 });
+test('exact GGUF filename takes priority over similar quantizations', async () => {
+  const fetcher = async url => ({ ok:true, json:async () => url.includes('/tree/')
+    ? [
+      {path:'Qwen_Qwen3.5-9B-Q3_K_M.gguf',size:4_000_000_000,lfs:{sha256:hash}},
+      {path:'Qwen_Qwen3.5-9B-Q4_K_M.gguf',size:6_000_000_000,lfs:{sha256:'b'.repeat(64)}}
+    ] : [{id:'bartowski/Qwen_Qwen3.5-9B-GGUF',tags:[]}] });
+  const result = await searchModels('Qwen_Qwen3.5-9B-Q4_K_M.gguf', 0, fetcher);
+  assert.equal(result.models.length, 1);
+  assert.match(result.models[0].name, /Qwen_Qwen3\.5-9B-Q4_K_M\.gguf/);
+});
