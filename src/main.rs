@@ -152,10 +152,31 @@ fn valid_hub_path(path: &str) -> bool {
                     .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
         })
         && !path.contains("-of-")
-        && !path
-            .rsplit('/')
-            .next()
-            .is_some_and(|name| name.to_ascii_lowercase().contains("mmproj"))
+        && !path.rsplit('/').next().is_some_and(|name| {
+            let name = name.to_ascii_lowercase();
+            [
+                "mmproj",
+                "adapter",
+                "lora",
+                "vocab",
+                "tokenizer",
+                "embedding",
+                "embedder",
+                "vision-encoder",
+                "vision_encoder",
+                "vision.encoder",
+                "image-encoder",
+                "audio-encoder",
+                "projector",
+                "preprocessor",
+                "siglip",
+                "clip-vision",
+                "mtp",
+                "draft",
+            ]
+            .iter()
+            .any(|part| name.contains(part))
+        })
 }
 
 fn hub_model(repo: &str, path: &str, entry: &Value, license: &str) -> Option<ModelDownload> {
@@ -167,7 +188,7 @@ fn hub_model(repo: &str, path: &str, entry: &Value, license: &str) -> Option<Mod
         .as_str()
         .or_else(|| entry["lfs"]["oid"].as_str())?
         .to_ascii_lowercase();
-    if size < 1024 * 1024 || hash.len() != 64 || !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
+    if size < 32_000_000 || hash.len() != 64 || !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }
     let basename = path.rsplit('/').next()?;
@@ -219,14 +240,19 @@ fn search_hub(query: &str, skip: u64) -> Result<Value, String> {
     if skip > 10_000 {
         return Err("Troppi risultati".into());
     }
-    let url = format!("https://huggingface.co/api/models?filter=gguf&search={}&sort=downloads&direction=-1&limit=8&skip={skip}", url_component(query));
+    const PAGE_SIZE: u64 = 24;
+    let url = format!("https://huggingface.co/api/models?filter=gguf&search={}&sort=downloads&direction=-1&limit={PAGE_SIZE}&skip={skip}", url_component(query));
     let repos = hub_json(&url)?;
-    let next_skip = if skip < 10_000 && repos.as_array().is_some_and(|items| items.len() == 8) {
-        Some(skip + 8)
+    let next_skip = if skip < 10_000
+        && repos
+            .as_array()
+            .is_some_and(|items| items.len() == PAGE_SIZE as usize)
+    {
+        Some(skip + PAGE_SIZE)
     } else {
         None
     };
-    let mut models = Vec::new();
+    let mut selected_repos = Vec::new();
     for repo in repos.as_array().ok_or("Risultati non validi")? {
         let Some(name) = repo["id"].as_str() else {
             continue;
@@ -242,10 +268,24 @@ fn search_hub(query: &str, skip: u64) -> Result<Value, String> {
                     .find_map(|s| s.strip_prefix("license:"))
             })
             .unwrap_or("see source");
-        if let Ok(files) = hub_files(name, license) {
-            models.extend(files.into_iter().take(12));
+        selected_repos.push((name.to_owned(), license.to_owned()));
+    }
+    let mut models = Vec::new();
+    for batch in selected_repos.chunks(6) {
+        let handles: Vec<_> = batch
+            .iter()
+            .map(|(name, license)| {
+                let (name, license) = (name.clone(), license.clone());
+                thread::spawn(move || hub_files(&name, &license).unwrap_or_default())
+            })
+            .collect();
+        for handle in handles {
+            if let Ok(files) = handle.join() {
+                models.extend(files);
+            }
         }
     }
+    models.sort_by(|a, b| a.download_gb.total_cmp(&b.download_gb));
     Ok(
         json!({"nextSkip":next_skip,"models": models.iter().map(|model| json!({
         "id":model.id,"name":model.name,"file":model.file,"sourceUrl":model.source_url,
@@ -1742,6 +1782,20 @@ mod tests {
             "Example/Model-GGUF",
             "Ternary-Bonsai-2-9B-mmproj-Q8_0.gguf",
             &entry,
+            "x"
+        )
+        .is_none());
+        assert!(hub_model(
+            "Example/Model-GGUF",
+            "DeepSeek-V4-Flash-Vision-Encoder.gguf",
+            &entry,
+            "x"
+        )
+        .is_none());
+        assert!(hub_model(
+            "Example/Model-GGUF",
+            "tiny-fragment.gguf",
+            &json!({"size": 5_000_000_u64, "lfs": {"sha256": "a".repeat(64)}}),
             "x"
         )
         .is_none());

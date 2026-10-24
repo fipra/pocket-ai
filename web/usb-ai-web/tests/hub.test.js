@@ -14,8 +14,22 @@ test('only verified standalone GGUF files become results', () => {
   assert.equal(modelFromEntry('owner/repo', { path:'adapter.gguf', size:100_000_000, lfs:{sha256:hash} }), null);
   assert.equal(modelFromEntry('owner/repo', { path:'mtp-q4.gguf', size:100_000_000, lfs:{sha256:hash} }), null);
   assert.equal(modelFromEntry('owner/repo', { path:'draft-q4.gguf', size:100_000_000, lfs:{sha256:hash} }), null);
+  assert.equal(modelFromEntry('owner/repo', { path:'DeepSeek-V4-Flash-Vision-Encoder.gguf', size:500_000_000, lfs:{sha256:hash} }), null);
+  assert.equal(modelFromEntry('owner/repo', { path:'vision_projector.gguf', size:500_000_000, lfs:{sha256:hash} }), null);
   const large = modelFromEntry('owner/repo', { path:'Qwen3.5-9B-Q4_K_M.gguf', size:5_627_044_256, lfs:{sha256:hash} });
   assert.equal(large.tooLargeForWeb, true);
+});
+test('DeepSeek search reaches small distill models beyond the first eight repositories', async () => {
+  const repos = Array.from({length:24}, (_,i) => ({id:i === 9 ? 'unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF' : `owner/DeepSeek-V4-${i}-GGUF`,tags:[]}));
+  const fetcher = async url => ({ok:true,json:async () => url.includes('/tree/')
+    ? url.includes('Distill-Qwen-1.5B')
+      ? [{path:'DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf',size:1_100_000_000,lfs:{sha256:hash}}]
+      : [{path:'DeepSeek-V4-Flash-Vision-Encoder.gguf',size:500_000_000,lfs:{sha256:hash}}]
+    : repos});
+  const result = await searchModels('deepseek', 0, fetcher);
+  assert.equal(result.models.length, 1);
+  assert.match(result.models[0].name, /1\.5B-Q4_K_M/);
+  assert.equal(result.nextSkip, 24);
 });
 test('a GGUF filename searches for its model repository', () => {
   assert.equal(searchTerm('Qwen_Qwen3.5-9B-Q4_K_M.gguf'), 'Qwen3.5-9B');

@@ -3,6 +3,8 @@ const PART = /^[A-Za-z0-9._-]+$/;
 const HASH = /^[a-f0-9]{64}$/;
 const WEB_FILE_LIMIT = 2_000_000_000;
 const MIN_MODEL_SIZE = 32_000_000;
+const SEARCH_PAGE_SIZE = 24;
+const AUXILIARY = /(?:mmproj|adapter|lora|vocab|tokenizer|embedding|embedder|vision[-_.]?encoder|image[-_.]?encoder|audio[-_.]?encoder|projector|preprocessor|siglip|clip[-_.]?vision|mtp|draft)/i;
 
 export function estimateMemory(size) {
   const gib = size / 1_073_741_824;
@@ -26,7 +28,7 @@ export function modelFromEntry(repo, entry, license = 'see source', allowShard =
   if (!REPO.test(repo) || typeof entry?.path !== 'string') return null;
   const parts = entry.path.split('/');
   const name = parts.at(-1);
-  if (!parts.every(part => PART.test(part) && part !== '.' && part !== '..') || !/\.gguf$/i.test(name) || /(?:mmproj|adapter|lora|vocab|tokenizer|embedding|mtp|draft)/i.test(name) || (!allowShard && /-of-\d+\.gguf$/i.test(name))) return null;
+  if (!parts.every(part => PART.test(part) && part !== '.' && part !== '..') || !/\.gguf$/i.test(name) || AUXILIARY.test(name) || (!allowShard && /-of-\d+\.gguf$/i.test(name))) return null;
   const size = entry.size;
   const sha256 = String(entry.lfs?.sha256 || entry.lfs?.oid || '').toLowerCase();
   if (!Number.isSafeInteger(size) || size < MIN_MODEL_SIZE || !HASH.test(sha256)) return null;
@@ -63,12 +65,12 @@ export async function searchModels(query, skip = 0, fetcher = fetch) {
   const alternateName = requestedName.replace(/^qwen_(?=qwen)/, '');
   const filenameSearch = /\.gguf$/i.test(requestedName);
   if (term.length < 2 || term.length > 80) throw Error('Use 2–80 characters');
-  const response = await fetcher(`https://huggingface.co/api/models?filter=gguf&search=${encodeURIComponent(term)}&sort=downloads&direction=-1&limit=8&skip=${skip}`);
+  const response = await fetcher(`https://huggingface.co/api/models?filter=gguf&search=${encodeURIComponent(term)}&sort=downloads&direction=-1&limit=${SEARCH_PAGE_SIZE}&skip=${skip}`);
   if (!response.ok) throw Error(`Hugging Face search: HTTP ${response.status}`);
   const primaryRepos = await response.json();
   if (!Array.isArray(primaryRepos)) throw Error('Invalid search results');
   let repos = primaryRepos;
-  if (skip === 0) {
+  if (skip === 0 && /\d/.test(term)) {
     const splitTerm = splitSearchTerm(query);
     if (splitTerm !== term) {
       const splitResponse = await fetcher(`https://huggingface.co/api/models?filter=gguf&search=${encodeURIComponent(splitTerm)}&sort=downloads&direction=-1&limit=8`);
@@ -79,23 +81,28 @@ export async function searchModels(query, skip = 0, fetcher = fetch) {
     }
   }
   const models = [];
-  for (const repo of repos) {
-    if (!REPO.test(repo.id || '') || repo.gated) continue;
-    const tree = await fetcher(`https://huggingface.co/api/models/${repo.id}/tree/main?recursive=true`);
-    if (!tree.ok) continue;
-    const entries = await tree.json();
-    if (!Array.isArray(entries)) continue;
-    const license = repo.tags?.find(tag => tag.startsWith('license:'))?.slice(8) || 'see source';
-    const files = modelsFromEntries(repo.id, entries, license);
-    if (filenameSearch) files.sort((a, b) => {
-      const score = item => item.name.toLowerCase().endsWith(` / ${requestedName}`) ? 2 : item.name.toLowerCase().endsWith(` / ${alternateName}`) ? 1 : 0;
-      return score(b) - score(a);
-    });
-    models.push(...files);
+  for (let start = 0; start < repos.length; start += 6) {
+    const batch = await Promise.all(repos.slice(start, start + 6).map(async repo => {
+      if (!REPO.test(repo.id || '') || repo.gated) return [];
+      try {
+        const tree = await fetcher(`https://huggingface.co/api/models/${repo.id}/tree/main?recursive=true`);
+        if (!tree.ok) return [];
+        const entries = await tree.json();
+        if (!Array.isArray(entries)) return [];
+        const license = repo.tags?.find(tag => tag.startsWith('license:'))?.slice(8) || 'see source';
+        const files = modelsFromEntries(repo.id, entries, license);
+        if (filenameSearch) files.sort((a, b) => {
+          const score = item => item.name.toLowerCase().endsWith(` / ${requestedName}`) ? 2 : item.name.toLowerCase().endsWith(` / ${alternateName}`) ? 1 : 0;
+          return score(b) - score(a);
+        });
+        return files;
+      } catch { return []; }
+    }));
+    models.push(...batch.flat());
   }
   const exact = filenameSearch ? models.filter(item => item.name.toLowerCase().endsWith(` / ${requestedName}`)) : [];
   const alternate = filenameSearch ? models.filter(item => item.name.toLowerCase().endsWith(` / ${alternateName}`)) : [];
   const selected = exact.length ? exact : alternate.length ? alternate : models;
   selected.sort((a, b) => Number(a.tooLargeForWeb) - Number(b.tooLargeForWeb) || a.size - b.size);
-  return { models: selected, nextSkip: primaryRepos.length === 8 ? skip + 8 : null };
+  return { models: selected, nextSkip: primaryRepos.length === SEARCH_PAGE_SIZE ? skip + SEARCH_PAGE_SIZE : null };
 }
