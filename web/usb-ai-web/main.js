@@ -3,7 +3,7 @@ import * as db from './storage.js';
 import { translations, preferredLanguage } from './i18n.js';
 import { CATALOG } from './catalog.js';
 import { searchModels, estimateMemory } from './hub.js';
-import { readDocument, chunks, retrieve } from './retrieval.js';
+import { readDocument, chunks, retrieve, documentQuestion, recentContext } from './retrieval.js';
 import { savedModels, downloadCurated, downloadVerified, moveCachedToFolder, addLocalModel, deleteModel, loadModel, loadedModelId, streamChat } from './runtime.js';
 import { canSaveToFolder, showModelFolder } from './folder-models.js';
 
@@ -69,7 +69,7 @@ async function searchHub(skip = 0) {
 }
 function render() { translate(); renderChats(); renderMessages(); renderModels(); renderSearch(); renderDocs(); $('model-trigger').textContent = `${models.find(model => model.id === selectedId)?.name || tr('chooseModel')} ⌄`; $('send').disabled = busy || !selectedId; $('stop').hidden = !controller; $('use-docs').classList.toggle('on', useDocs); $('use-docs').textContent = useDocs ? `▣ ${tr('useDocs')}` : `▤ ${tr('useDocs')}`; $('capability').textContent = `${navigator.gpu ? tr('capabilityGpu') : tr('capabilityWasm')} · ${navigator.onLine ? tr('private') : tr('offline')}`; $('folder-hint').textContent = tr(canSaveToFolder() ? 'folderHint' : 'folderFallbackHint'); }
 function setBusy(value) { busy = value; render(); }
-async function run(callback) { try { await callback(); } catch (error) { if (error.name === 'AbortError') { $('model-progress').classList.remove('loading'); $('model-progress').textContent = ''; setStatus(); return; } console.error(error); const message = error.message === 'SMARTPHONE_DISABLED' ? tr('phoneUnavailable') : error.message === 'MODEL_FILE_PERMISSION' ? tr('folderPermission') : error.message === 'LOAD_TIMEOUT' ? tr('loadTimeout') : /QuotaExceeded|storage|no space/i.test(error.name + ' ' + error.message) ? tr('storageError') : error.message; setStatus(`${tr('error')}: ${message}`, true); $('model-progress').classList.remove('loading'); $('model-progress').textContent = `${tr('error')}: ${message}`; } finally { if (busy && !controller) setBusy(false); } }
+async function run(callback) { try { await callback(); } catch (error) { if (error.name === 'AbortError') { $('model-progress').classList.remove('loading'); $('model-progress').textContent = ''; setStatus(); return; } console.error(error); const message = error.message === 'SMARTPHONE_DISABLED' ? tr('phoneUnavailable') : error.message === 'MODEL_FILE_PERMISSION' ? tr('folderPermission') : error.message === 'LOAD_TIMEOUT' ? tr('loadTimeout') : error.message === 'DOCUMENT_NO_TEXT' ? tr('documentNoText') : /QuotaExceeded|storage|no space/i.test(error.name + ' ' + error.message) ? tr('storageError') : error.message; setStatus(`${tr('error')}: ${message}`, true); $('model-progress').classList.remove('loading'); $('model-progress').textContent = `${tr('error')}: ${message}`; } finally { if (busy && !controller) setBusy(false); } }
 async function chooseModel(id) {
   if (busy && controller) return;
   setBusy(true);
@@ -96,7 +96,43 @@ async function chooseModel(id) {
   }
 }
 async function newChat() { const chat = { id: crypto.randomUUID(), title: tr('newChat').replace('＋ ',''), messages: [], updated: Date.now() }; chats.unshift(chat); activeId = chat.id; await db.put('chats', chat); await saveSettings(); render(); closeSidebar(); $('prompt').focus(); }
-async function send() { const text = $('prompt').value.trim(); if (!text || busy) return; if (!selectedId) { $('models-dialog').showModal(); setStatus(tr('noModel'), true); return; } let chat = chats.find(item => item.id === activeId); if (!chat) { await newChat(); chat = chats.find(item => item.id === activeId); } const sources = useDocs ? retrieve(text, documents) : []; const question = sources.length ? `${text}\n\nRelevant local document excerpts:\n${sources.map((source,i) => `[${i+1}] ${source.name}: ${source.text}`).join('\n\n')}\n\nUse these excerpts when relevant and cite their numbers.` : text; const context = chat.messages.map(message => ({ role: message.role, content: message.text })); context.push({ role:'user', content: question }); const answer = { role:'assistant', text:'', sources: sources.map(({name,text}) => ({name,text})) }; chat.messages.push({ role:'user', text }, answer); chat.title = chat.messages.find(message => message.role === 'user')?.text.slice(0,55) || chat.title; chat.updated = Date.now(); $('prompt').value = ''; controller = new AbortController(); setBusy(true); setStatus(tr('generating')); renderMessages(); try { if (loadedModelId() !== selectedId) await loadModel(selectedId); await streamChat(context.slice(-12), token => { answer.text += token; const body = $('messages').lastElementChild?.querySelector('.message-body'); if (body) { body.textContent = answer.text; $('thread').scrollTop = $('thread').scrollHeight; } }, controller.signal); setStatus(controller.signal.aborted ? tr('stopped') : tr('ready')); } catch (error) { if (!controller.signal.aborted) { answer.text ||= `${tr('error')}: ${error.message}`; setStatus(answer.text, true); } } finally { controller = undefined; chat.updated = Date.now(); await db.put('chats', chat); setBusy(false); render(); } }
+async function send() {
+  const text = $('prompt').value.trim();
+  if (!text || busy) return;
+  if (!selectedId) { $('models-dialog').showModal(); setStatus(tr('noModel'), true); return; }
+  let chat = chats.find(item => item.id === activeId);
+  if (!chat) { await newChat(); chat = chats.find(item => item.id === activeId); }
+  const sources = useDocs ? retrieve(text, documents, 3) : [];
+  const question = documentQuestion(text, sources);
+  const context = recentContext(chat.messages, question);
+  const answer = { role:'assistant', text:'', sources: sources.map(({name,text}) => ({name,text})) };
+  chat.messages.push({ role:'user', text }, answer);
+  chat.title = chat.messages.find(message => message.role === 'user')?.text.slice(0,55) || chat.title;
+  chat.updated = Date.now();
+  $('prompt').value = '';
+  controller = new AbortController();
+  setBusy(true); setStatus(tr('generating')); renderMessages();
+  try {
+    if (loadedModelId() !== selectedId) await loadModel(selectedId);
+    await streamChat(context, token => {
+      answer.text += token;
+      const body = $('messages').lastElementChild?.querySelector('.message-body');
+      if (body) { body.textContent = answer.text; $('thread').scrollTop = $('thread').scrollHeight; }
+    }, controller.signal);
+    if (!answer.text && !controller.signal.aborted) answer.text = tr('emptyResponse');
+    setStatus(controller.signal.aborted ? tr('stopped') : tr('ready'));
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      answer.text ||= `${tr('error')}: ${error.message}`;
+      setStatus(`${tr('error')}: ${error.message}`, true);
+    }
+  } finally {
+    controller = undefined;
+    chat.updated = Date.now();
+    await db.put('chats', chat);
+    setBusy(false); render();
+  }
+}
 async function init() { try { const settings = await db.get('settings','main'); language = settings?.language || preferredLanguage(); selectedId = settings?.selectedId; activeId = settings?.activeId; useDocs = !!settings?.useDocs; [chats, documents, models] = await Promise.all([db.all('chats'), db.all('documents'), savedModels()]); if (!chats.some(chat => chat.id === activeId)) activeId = chats[0]?.id; render(); if (!models.length) $('models-dialog').showModal(); } catch (error) { setStatus(`${tr('error')}: ${error.message}`, true); } }
 $('prompt-form').onsubmit = event => { event.preventDefault(); run(send); };
 $('prompt').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('prompt-form').requestSubmit(); } };
@@ -111,7 +147,30 @@ $('use-docs').onclick = () => { useDocs = !useDocs; saveSettings(); render(); };
 $('model-file').onchange = event => run(async () => { const files = [...event.target.files]; event.target.value = ''; const result = await addLocalModel(files); models = await savedModels(); if (!result.persistent) models.push({ id:result.id, name:result.name, size:files.reduce((n,f) => n+f.size,0) }); renderModels(); setStatus(result.persistent ? tr('modelSaved') : tr('modelSession')); await chooseModel(result.id); });
 $('hub-search-form').onsubmit = event => { event.preventDefault(); searchHub(); };
 $('hub-more').onclick = () => searchHub(hubNext);
-$('doc-file').onchange = event => run(async () => { for (const file of event.target.files) { const text = await readDocument(file); const doc = { id:crypto.randomUUID(), name:file.name, chunks:chunks(text), updated:Date.now() }; await db.put('documents', doc); documents.push(doc); } event.target.value = ''; useDocs = true; await saveSettings(); render(); setStatus(tr('documentAdded')); });
+$('doc-file').onchange = event => run(async () => {
+  const files = [...event.target.files];
+  event.target.value = '';
+  $('doc-status').textContent = tr('readingDocument');
+  try {
+    for (const file of files) {
+      const text = await readDocument(file);
+      const parts = chunks(text);
+      const doc = { id:crypto.randomUUID(), name:file.name, chunks:parts, updated:Date.now() };
+      await db.put('documents', doc);
+      documents.push(doc);
+    }
+    useDocs = true;
+    await saveSettings(); render();
+    const message = tr('documentReady').replace('{count}', files.length);
+    $('doc-status').textContent = message;
+    $('docs-dialog').close();
+    setStatus(message);
+    $('prompt').focus();
+  } catch (error) {
+    $('doc-status').textContent = error.message === 'DOCUMENT_NO_TEXT' ? tr('documentNoText') : `${tr('error')}: ${error.message}`;
+    throw error;
+  }
+});
 $('delete-chat').onclick = () => run(async () => { if (!activeId || !confirm(tr('deleteConfirm'))) return; await db.remove('chats', activeId); chats = chats.filter(chat => chat.id !== activeId); activeId = chats[0]?.id; await saveSettings(); render(); });
 $('export-chat').onclick = () => { const chat = chats.find(item => item.id === activeId); if (!chat) return; const content = chat.messages.map(item => `## ${item.role === 'user' ? tr('you') : tr('assistant')}\n\n${item.text}`).join('\n\n'); const url = URL.createObjectURL(new Blob([content], {type:'text/markdown'})); const link = node('a'); link.href = url; link.download = 'usb-ai-chat.md'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); };
 window.addEventListener('beforeinstallprompt', event => { event.preventDefault(); installing = event; });

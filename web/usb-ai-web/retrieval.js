@@ -10,8 +10,35 @@ export function chunks(text, size = 1100, overlap = 180) {
 }
 export function retrieve(question, documents, limit = 4) {
   const terms = [...new Set((question.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []))];
-  return documents.flatMap(doc => doc.chunks.map((text, index) => ({ name: doc.name, text, index, score: terms.reduce((sum, term) => sum + (text.toLowerCase().includes(term) ? 1 : 0), 0) })))
+  const scored = documents.flatMap(doc => doc.chunks.map((text, index) => ({ name: doc.name, text, index, score: terms.reduce((sum, term) => sum + (text.toLowerCase().includes(term) ? 1 : 0), 0) })))
     .filter(item => item.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
+  if (scored.length) return scored;
+  // Generic requests such as "summarize this document" still need context.
+  const latest = [...documents].sort((a,b) => (b.updated || 0) - (a.updated || 0))[0];
+  return latest?.chunks.slice(0, Math.min(limit, 2)).map((text,index) => ({name:latest.name,text,index,score:0})) || [];
+}
+
+export function documentQuestion(question, sources, maxExcerptChars = 2600) {
+  if (!sources.length) return question;
+  let remaining = maxExcerptChars;
+  const excerpts = sources.map((source,i) => {
+    const text = source.text.slice(0, Math.min(remaining, 900));
+    remaining -= text.length;
+    return text ? `[${i+1}] ${source.name}: ${text}` : '';
+  }).filter(Boolean);
+  return `${question}\n\nLocal document excerpts:\n${excerpts.join('\n\n')}\n\nAnswer using these excerpts. Cite the source numbers. If the excerpts are insufficient, say so.`;
+}
+
+export function recentContext(messages, question, maxHistoryChars = 2400) {
+  let remaining = maxHistoryChars;
+  const history = [];
+  for (const message of [...messages].reverse()) {
+    if (remaining <= 0) break;
+    const content = message.text.slice(-remaining);
+    history.push({role:message.role,content});
+    remaining -= content.length;
+  }
+  return [...history.reverse(), {role:'user',content:question}];
 }
 export async function readDocument(file) {
   if (file.size > 20_000_000) throw Error('Document exceeds 20 MB');
@@ -24,8 +51,11 @@ export async function readDocument(file) {
       const content = await (await pdf.getPage(page)).getTextContent();
       text += `\n[Page ${page}]\n` + content.items.map(item => item.str).join(' ');
     }
+    if (!text.trim()) throw Error('DOCUMENT_NO_TEXT');
     return text;
   }
   if (!/\.(txt|md|csv|json)$/i.test(file.name)) throw Error('Unsupported document type');
-  return file.text();
+  const text = await file.text();
+  if (!text.trim()) throw Error('DOCUMENT_NO_TEXT');
+  return text;
 }
