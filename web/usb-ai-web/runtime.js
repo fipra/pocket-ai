@@ -85,16 +85,19 @@ export async function loadModel(id) {
   const next = instance();
   const mobileSafari = /iP(hone|ad|od)/.test(navigator.userAgent);
   const options = mobileSafari ? { n_ctx: 1024, n_batch: 64, n_threads: 1, n_gpu_layers: 0, jinja: true } : { n_ctx: 2048, n_threads: 1, jinja: true };
+  let timer;
   try {
-    if (files) await next.loadModel(files, options);
-    else {
+    const loading = (async () => {
+      if (files) return next.loadModel(files, options);
       const models = await manager.getModels();
       const cached = models.find(model => model.url === record.url || model.source?.url === record.url);
       if (!cached) throw Error('Cached model unavailable. Download it again.');
-      await next.loadModel(cached, options);
-    }
+      return next.loadModel(cached, options);
+    })();
+    await Promise.race([loading, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('LOAD_TIMEOUT')), mobileSafari ? 90_000 : 180_000); })]);
     engine = next; loadedId = id;
-  } catch (error) { try { await next.exit(); } catch {} throw error; }
+  } catch (error) { void next.exit().catch(() => {}); throw error; }
+  finally { clearTimeout(timer); }
 }
 export async function streamChat(messages, onToken, signal) {
   if (!engine) throw Error('Select a model first');

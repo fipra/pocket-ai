@@ -14,4 +14,12 @@ const searchStrings = {
   es: { searchModels:'Buscar modelos GGUF', searchHint:'Busca en Hugging Face. Descargas verificadas con SHA-256. En móviles, empieza con menos de 500 MB.', searchPlaceholder:'Nombre del modelo…', search:'Buscar', searching:'Buscando…', noResults:'No se encontraron archivos GGUF compatibles.', more:'Más resultados', tooLarge:'Este modelo puede superar la memoria del móvil.', storageError:'Almacenamiento del navegador lleno o no disponible. Libera espacio o elige un modelo más pequeño.', loadError:'Este dispositivo no puede cargar el modelo. Prueba un GGUF más pequeño u otro navegador.' }
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], searchStrings[language]);
+const recoveryStrings = {
+  en: { phoneModel:'For phones · English focused', loadTimeout:'Loading took too long. Try the 105 MB phone model, then reopen the page before retrying.' },
+  it: { phoneModel:'Per smartphone · soprattutto inglese', loadTimeout:'Il caricamento dura troppo. Prova il modello per smartphone da 105 MB e riapri la pagina prima di riprovare.' },
+  fr: { phoneModel:'Pour téléphone · surtout en anglais', loadTimeout:'Le chargement prend trop de temps. Essayez le modèle de 105 Mo, puis rouvrez la page.' },
+  de: { phoneModel:'Für Smartphones · vor allem Englisch', loadTimeout:'Das Laden dauert zu lange. Versuchen Sie das 105-MB-Modell und öffnen Sie die Seite erneut.' },
+  es: { phoneModel:'Para móviles · principalmente inglés', loadTimeout:'La carga tarda demasiado. Prueba el modelo de 105 MB y vuelve a abrir la página.' }
+};
+for (const language of Object.keys(translations)) Object.assign(translations[language], recoveryStrings[language]);
 export function preferredLanguage(value = navigator.language) { return translations[value?.slice(0,2).toLowerCase()] ? value.slice(0,2).toLowerCase() : 'en'; }

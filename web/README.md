@@ -22,7 +22,7 @@ USB-AI Web can also be deployed as an independent Vercel project: import the rep
 ## What runs locally
 
 - Wllama runs GGUF models in a browser worker using WebAssembly, and may use WebGPU where supported. Inference is on the user's device; there is no cloud inference endpoint, Ollama, account, or server API.
-- The recommended Qwen 2.5 0.5B GGUF is copied from the desktop catalog. Its download is checked against the pinned size and SHA-256 before selection. The model source and its Apache 2.0 license are linked in the UI.
+- The catalog includes Qwen 2.5 0.5B and a smaller 105 MB SmolLM2 135M model for phones. SmolLM2 is mainly useful in English and has limited answer quality. Downloads are checked against pinned sizes and SHA-256 hashes before selection; sources and licenses are linked in the UI.
 - Model search reads public Hugging Face GGUF metadata directly from the browser. Search results must include an exact file size and LFS SHA-256; downloads are checked against both before use. Files above 2 GB, projector files, and model shards are omitted from search. Local split files can still be selected together.
 - Users can select GGUF files with the standard file picker, including **Browse > Files** on iOS. For split GGUF models, select every shard together. Local file selection is validated by Wllama when loaded.
 - Chats, settings, extracted document text, and selected local model blobs are stored in IndexedDB. Downloaded models use Wllama's browser cache. Chat responses stream into the current message and Stop aborts generation. The loaded model stays in memory between prompts.
@@ -35,6 +35,8 @@ USB-AI Web can also be deployed as an independent Vercel project: import the rep
 Browser memory, GPU support, IndexedDB quota, and persistent storage vary by device and browser. Small Q4 GGUF models are the practical starting point on phones. Large models can fail to load, even when the file picker accepts them. Wllama notes a 2 GB per-file ArrayBuffer limit; larger models need GGUF splits. WebGPU is not guaranteed, so WebAssembly is the fallback. On iOS, PWA installation uses Safari's **Add to Home Screen** command. A local model that cannot be saved to IndexedDB remains available only during the current page session. Clearing site data deletes chats, documents, and cached models. Private data is stored locally but is not encrypted by this app.
 
 Safari needs Wllama's compatibility WASM and worker. These assets are bundled and served from the same site. On iPhone/iPad, model loading uses CPU mode with a smaller context and batch to reduce memory pressure. A model can still fail if the device or browser cannot allocate enough memory. Try a smaller quantized GGUF and keep the tab open while it loads.
+
+The model dialog displays a spinner and loading text while downloading or opening a model. A load that has not completed within 90 seconds on iPhone/iPad (180 seconds elsewhere) reports an error so the controls do not remain disabled indefinitely. After a timeout, reopen the page before trying another model because the browser worker may still hold memory.
 
 Model downloads require internet the first time and the model host must allow browser cross-origin requests. The PWA is offline-capable after the app shell and a model have been loaded at least once. Browser inference performance will usually differ from native desktop inference.
 
