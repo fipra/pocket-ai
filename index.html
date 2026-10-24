@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fcfcfa">
+  <meta name="description" content="USB AI è un assistente AI gratuito e portatile per Mac e Windows. Scaricalo sul computer o su una chiavetta USB e usa modelli GGUF in locale.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="USB AI — La tua AI, ovunque vai">
+  <meta property="og:description" content="Un assistente AI gratuito e portatile per Mac e Windows, creato da FipraAI.">
+  <title>USB AI — AI locale e portatile per Mac e Windows</title>
+  <style>
+    :root{color-scheme:light;--paper:#fcfcfa;--white:#fff;--ink:#17191b;--muted:#646a70;--line:#e8e9e7;--soft:#f5f6f3;--accent:#e8a36e;--shadow:0 28px 80px rgba(26,32,31,.09)}
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;background:var(--paper);color:var(--ink);font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+    a{color:inherit;text-decoration:none}
+    button{font:inherit}
+    svg{display:block}
+    .wrap{width:min(1160px,calc(100% - 48px));margin-inline:auto}
+    .site-header{border-bottom:1px solid var(--line);background:rgba(252,252,250,.94)}
+    .nav{min-height:76px;display:flex;align-items:center;justify-content:space-between;gap:24px}
+    .brand{display:inline-flex;align-items:center;gap:10px;font-size:20px;font-weight:760;letter-spacing:-.055em;white-space:nowrap}
+    .brand-mark{width:43px;height:43px;flex:none}
+    .brand small{font-size:10px;font-weight:800;letter-spacing:.13em;align-self:flex-start;margin-top:3px;color:#a46d48}
+    .nav-links{display:flex;align-items:center;gap:32px;color:#4d5358;font-size:14px;font-weight:600}
+    .nav-links a:hover,.footer-links a:hover{color:#ad693c}
+    .nav-download{border:1px solid #cfd2d0;border-radius:999px;padding:11px 18px;color:var(--ink);background:var(--white);font-size:13px;font-weight:700;transition:transform .2s,border-color .2s}
+    .nav-download:hover{transform:translateY(-2px);border-color:#9da5a0}
+    .hero{display:grid;grid-template-columns:minmax(0,1.04fr) minmax(0,.96fr);gap:64px;align-items:center;padding-top:106px;padding-bottom:116px}
+    .eyebrow{display:inline-flex;align-items:center;gap:9px;font-size:11px;letter-spacing:.15em;font-weight:800;text-transform:uppercase;color:#636a6d}
+    .eyebrow .dot{width:8px;height:8px;border-radius:50%;background:#a9c8b0;box-shadow:0 0 0 4px #eaf2e9}
+    h1{font-size:clamp(54px,6.4vw,88px);line-height:.99;letter-spacing:-.085em;margin:25px 0 28px;font-weight:750;max-width:700px}
+    h1 em{font-style:normal;color:#aa7554}
+    .hero-copy{color:var(--muted);font-size:18px;line-height:1.65;max-width:530px;margin:0}
+    .hero-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:38px}
+    .button{min-height:52px;display:inline-flex;align-items:center;justify-content:center;gap:10px;border-radius:14px;padding:0 22px;font-weight:700;font-size:14px;transition:transform .2s,box-shadow .2s,background .2s}
+    .button:hover{transform:translateY(-2px)}
+    .button-dark{background:var(--ink);color:var(--white);box-shadow:0 7px 17px rgba(20,23,24,.12)}
+    .button-dark:hover{background:#303538;box-shadow:0 12px 24px rgba(20,23,24,.16)}
+    .button-light{background:var(--white);border:1px solid var(--line);color:#2d3133}
+    .hero-note{display:flex;align-items:center;gap:8px;margin:22px 0 0;color:#697075;font-size:12px}
+    .hero-note svg{color:#609372}
+    .preview-stage{position:relative;padding:27px 0 22px 22px}
+    .preview-stage:before{content:"";position:absolute;inset:0 0 0 8%;background:radial-gradient(ellipse at 62% 40%,#f5e7d9 0%,#f9f4eb 44%,transparent 70%);border-radius:50%;transform:scale(1.13);z-index:0}
+    .app-preview{position:relative;z-index:1;background:#fff;border:1px solid #e3e5e2;border-radius:21px;box-shadow:var(--shadow);overflow:hidden;transform:rotate(1deg)}
+    .preview-top{height:43px;border-bottom:1px solid #eceeec;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:#fdfdfc}
+    .traffic{display:flex;gap:6px}.traffic i{display:block;width:8px;height:8px;background:#e0e3df;border-radius:50%}
+    .preview-top-label{font-size:10px;font-weight:700;color:#858a8b;letter-spacing:.03em}
+    .preview-main{display:grid;grid-template-columns:105px 1fr;min-height:364px}
+    .preview-side{background:#f6f7f5;border-right:1px solid #e9ebe8;padding:17px 11px}
+    .preview-side-head{display:flex;align-items:center;gap:6px;font-size:9px;font-weight:800;margin-bottom:24px}.preview-side-head span{width:13px;height:13px;border-radius:4px;background:#24292a}
+    .side-line{height:7px;border-radius:6px;background:#dfe2de;margin:13px 3px}.side-line.short{width:54%}.side-line.active{height:19px;background:#e9ece7;margin-left:0;margin-right:0}
+    .preview-chat{display:flex;flex-direction:column;padding:21px 25px 17px;gap:22px}
+    .preview-title{font-size:10px;font-weight:700;color:#686f70;text-align:center}
+    .chat-bubble{align-self:flex-end;max-width:79%;background:#f2f3f1;padding:10px 13px;border-radius:12px 12px 3px 12px;font-size:10px;line-height:1.4;color:#43494a}
+    .chat-answer{display:flex;gap:9px;max-width:90%}.chat-answer .mini-mark{display:grid;place-items:center;flex:none;width:19px;height:19px;border:1px solid #d9ded8;border-radius:7px;font-size:12px;font-weight:900;color:#856448}.chat-answer p{margin:0;font-size:10px;line-height:1.65;color:#484f50}
+    .preview-input{margin-top:auto;border:1px solid #e4e7e2;border-radius:11px;padding:10px 11px;display:flex;justify-content:space-between;color:#a4aaa5;font-size:9px}.preview-input b{display:grid;place-items:center;width:18px;height:18px;background:#252a2b;color:white;border-radius:6px;font-size:11px}
+    .float-label{position:absolute;z-index:2;left:-14px;bottom:-10px;display:flex;align-items:center;gap:9px;border:1px solid #e4e6e1;border-radius:13px;padding:11px 14px;background:#fff;box-shadow:0 10px 30px rgba(20,30,26,.09);color:#45534a;font-size:12px;font-weight:700;transform:rotate(-3deg)}
+    .float-label span{width:8px;height:8px;border-radius:50%;background:#77b488}
+    .section{padding:100px 0;border-top:1px solid var(--line)}
+    .section-head{max-width:660px;margin-bottom:42px}.kicker{font-size:11px;color:#936c52;font-weight:800;letter-spacing:.15em;text-transform:uppercase}.section h2{font-size:clamp(35px,4vw,52px);line-height:1.08;letter-spacing:-.065em;margin:14px 0 15px;font-weight:740}.section-head p{color:var(--muted);font-size:16px;line-height:1.65;margin:0}
+    .download-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+    .download-card{border:1px solid #e5e7e3;border-radius:22px;background:#fff;padding:26px;display:flex;flex-direction:column;min-height:262px;transition:transform .2s,box-shadow .2s,border-color .2s}
+    .download-card:hover{transform:translateY(-4px);box-shadow:0 16px 40px rgba(20,30,26,.06);border-color:#c7cec6}
+    .download-icon{display:grid;place-items:center;width:42px;height:42px;background:#f5f5f2;border-radius:12px;margin-bottom:26px}.download-icon svg{width:22px;height:22px}
+    .download-card h3{font-size:20px;letter-spacing:-.04em;margin:0 0 7px}.download-card p{margin:0;color:#6c7374;font-size:13px;line-height:1.5}
+    .card-link{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:auto;padding-top:29px;color:#1b2021;font-size:13px;font-weight:800}.card-link span:last-child{font-size:19px;font-weight:400}
+    .download-foot{font-size:12px;color:#7b8282;line-height:1.6;margin:22px 0 0}
+    .features{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:26px}.feature{padding:6px 18px 2px 0}.feature-icon{width:34px;height:34px;margin-bottom:18px;color:#997150}.feature h3{font-size:18px;letter-spacing:-.035em;margin:0 0 9px}.feature p{font-size:14px;line-height:1.7;color:#6d7375;margin:0}
+    .steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;counter-reset:steps}.step{padding:27px;background:var(--soft);border:1px solid #ebede9;border-radius:20px}.step-number{font-size:12px;font-weight:800;color:#987356;margin-bottom:27px}.step h3{font-size:17px;margin:0 0 9px;letter-spacing:-.035em}.step p{font-size:13px;color:#677071;line-height:1.65;margin:0}
+    .closing{padding:86px 32px;background:#f1f2ee;border-radius:28px;text-align:center;margin-bottom:95px}.closing h2{font-size:clamp(32px,4vw,48px);letter-spacing:-.065em;margin:0 0 14px}.closing p{color:#697071;line-height:1.6;margin:0 auto 25px;max-width:500px}
+    .footer{border-top:1px solid var(--line);padding:27px 0 33px}.footer-inner{display:flex;align-items:center;justify-content:space-between;gap:20px}.footer-brand{font-size:12px;line-height:1.6;color:#707779}.footer-brand strong{font-size:14px;color:#24292a}.footer-links{display:flex;gap:22px;font-size:12px;font-weight:650;color:#596062}
+    :focus-visible{outline:3px solid #bd845b;outline-offset:4px}
+    @media(max-width:900px){.hero{gap:36px;padding-top:76px;padding-bottom:90px}.preview-stage{padding-left:5px}.download-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.features{gap:12px}}
+    @media(max-width:680px){.wrap{width:min(100% - 34px,560px)}.nav{min-height:68px}.nav-links{display:none}.nav-download{padding:10px 14px}.hero{grid-template-columns:1fr;gap:54px;padding-top:70px;padding-bottom:80px}.hero-copy{font-size:16px}.preview-stage{max-width:520px;margin:auto;width:100%;padding:0 0 15px 12px}.float-label{left:0}.section{padding:74px 0}.download-grid,.features,.steps{grid-template-columns:1fr}.download-card{min-height:218px}.features{gap:35px}.step{min-height:155px}.closing{padding:62px 20px;margin-bottom:65px}.footer-inner{align-items:flex-start;flex-direction:column}.footer-links{flex-wrap:wrap}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.button,.download-card,.nav-download{transition:none}}
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap nav">
+      <a class="brand" href="#top" aria-label="USB AI, torna all'inizio">
+        <svg class="brand-mark" viewBox="0 0 64 64" role="img" aria-label="Volpe, simbolo di USB AI" xmlns="http://www.w3.org/2000/svg">
+          <path d="M8 11 25 20c4-2 10-2 14 0l17-9-4 25c-2 13-10 21-20 21S14 49 12 36L8 11Z" fill="#fff8ef" stroke="#272a28" stroke-width="3" stroke-linejoin="round"/>
+          <path d="m13 18 8 6-7 2m37-8-8 6 7 2" fill="#e6a476"/>
+          <path d="M17 38c4 6 9 10 15 10s11-4 15-10" fill="none" stroke="#d5dcd4" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="23" cy="34" r="2.1" fill="#272a28"/><circle cx="41" cy="34" r="2.1" fill="#272a28"/>
+          <path d="m29 40 3 2 3-2-3-2-3 2Z" fill="#272a28"/><path d="M32 42v3m0 0c-2 2-4 2-6 0m6 0c2 2 4 2 6 0" fill="none" stroke="#272a28" stroke-width="1.7" stroke-linecap="round"/>
+        </svg>
+        <span>USB AI</span><small>FREE</small>
+      </a>
+      <nav class="nav-links" aria-label="Navigazione principale"><a href="#vantaggi">Perché USB AI</a><a href="#come-funziona">Come funziona</a><a href="https://github.com/fipra/usb-ai" target="_blank" rel="noopener noreferrer">GitHub</a></nav>
+      <a class="nav-download" href="#download">Scarica gratis ↓</a>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="wrap hero" aria-labelledby="hero-title">
+      <div>
+        <div class="eyebrow"><span class="dot" aria-hidden="true"></span> Un progetto FipraAI</div>
+        <h1 id="hero-title">La tua AI.<br><em>Ovunque vai.</em></h1>
+        <p class="hero-copy">Un assistente AI gratuito da tenere sul computer o su una chiavetta USB. Scegli un modello, conversa e lavora con i tuoi documenti, in locale.</p>
+        <div class="hero-actions"><a class="button button-dark" href="#download">Scarica USB AI <span aria-hidden="true">↗</span></a><a class="button button-light" href="#come-funziona">Scopri come funziona</a></div>
+        <p class="hero-note"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 2 3.5 4.8v5.3c0 4.1 2.4 6.7 6.5 8 4.1-1.3 6.5-3.9 6.5-8V4.8L10 2Z" stroke="currentColor" stroke-width="1.5"/><path d="m7 10 2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Gratis · Nessun account · Mac e Windows</p>
+      </div>
+      <div class="preview-stage" aria-label="Anteprima illustrativa della chat USB AI">
+        <div class="app-preview" aria-hidden="true">
+          <div class="preview-top"><div class="traffic"><i></i><i></i><i></i></div><span class="preview-top-label">USB AI · sul tuo computer</span><span></span></div>
+          <div class="preview-main"><div class="preview-side"><div class="preview-side-head"><span></span> USB AI</div><div class="side-line active"></div><div class="side-line"></div><div class="side-line short"></div></div><div class="preview-chat"><div class="preview-title">Nuova chat</div><div class="chat-bubble">Posso usarlo anche senza Internet?</div><div class="chat-answer"><span class="mini-mark">✳</span><p>Sì. Dopo aver scaricato un modello, puoi conversare e cercare nei tuoi documenti direttamente sul computer, anche offline.</p></div><div class="preview-input">Chiedi a USB AI… <b>↑</b></div></div></div>
+        </div>
+        <div class="float-label"><span></span> Pronto anche per la tua chiavetta USB</div>
+      </div>
+    </section>
+
+    <section class="section" id="download" aria-labelledby="download-title">
+      <div class="wrap"><div class="section-head"><span class="kicker">Download</span><h2 id="download-title">Scegli la tua versione.</h2><p>Scarica lo ZIP adatto al tuo computer. Estrai la cartella sul disco o direttamente su una chiavetta USB.</p></div>
+        <div class="download-grid">
+          <a class="download-card" href="https://github.com/fipra/usb-ai/releases/download/rust-mac-portable/USB-AI-Rust-mac-arm64.zip" aria-label="Scarica USB AI per Mac Apple Silicon, file ZIP"><div class="download-icon"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4c1.1-1.4 2.3-2 3.8-2-.1 1.7-.9 3-2.5 3.8M12 7c-3.3-1.9-8.4-.3-8.4 5.5 0 4.4 2.7 9.5 6.2 9.5 1.3 0 1.7-.7 3.2-.7s1.8.7 3.2.7c3.3 0 6.2-5 6.2-9.5 0-2.4-1-4.2-2.7-5.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div><h3>Mac Apple Silicon</h3><p>Per Mac con chip M1, M2, M3, M4 o successivi.</p><div class="card-link"><span>Scarica per Mac</span><span aria-hidden="true">↗</span></div></a>
+          <a class="download-card" href="https://github.com/fipra/usb-ai/releases/download/rust-mac-portable/USB-AI-Rust-mac-x86_64.zip" aria-label="Scarica USB AI per Mac Intel, file ZIP"><div class="download-icon"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 21h8M12 18v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div><h3>Mac Intel</h3><p>Per Mac con processore Intel.</p><div class="card-link"><span>Scarica per Mac Intel</span><span aria-hidden="true">↗</span></div></a>
+          <a class="download-card" href="https://github.com/fipra/usb-ai/releases/download/rust-windows-portable/USB-AI-Rust-Windows-x64.zip" aria-label="Scarica USB AI per Windows x64, file ZIP"><div class="download-icon"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3 5 8-1v8H3V5Zm10-1 8-1v9h-8V4ZM3 14h8v7l-8-1v-6Zm10 0h8v8l-8-1v-7Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></div><h3>Windows x64</h3><p>Per PC Windows con processore a 64 bit.</p><div class="card-link"><span>Scarica per Windows</span><span aria-hidden="true">↗</span></div></a>
+        </div>
+        <p class="download-foot">I file arrivano dalle release ufficiali su GitHub. Il programma è gratuito; i modelli AI si scaricano separatamente al primo utilizzo.</p>
+      </div>
+    </section>
+
+    <section class="section" id="vantaggi" aria-labelledby="features-title"><div class="wrap"><div class="section-head"><span class="kicker">Semplice per davvero</span><h2 id="features-title">Uno spazio tutto tuo.</h2><p>USB AI porta modelli, chat e documenti nella cartella che scegli. Puoi tenerla sul computer o portarla con te.</p></div><div class="features">
+      <article class="feature"><svg class="feature-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="5" y="4" width="22" height="24" rx="4" stroke="currentColor" stroke-width="1.7"/><path d="M10 11h12M10 16h12M10 21h7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><h3>I tuoi documenti</h3><p>Importa PDF testuali, TXT e Markdown. Cerca i passaggi rilevanti e consulta le fonti nella chat.</p></article>
+      <article class="feature"><svg class="feature-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="7" y="3" width="18" height="26" rx="4" stroke="currentColor" stroke-width="1.7"/><path d="M13 8v7m6-7v7m-6 0h6m-3 0v10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><h3>Portalo con te</h3><p>Estrai la cartella su una chiavetta USB. Modelli e dati restano insieme al programma.</p></article>
+      <article class="feature"><svg class="feature-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true"><circle cx="16" cy="16" r="11" stroke="currentColor" stroke-width="1.7"/><path d="m10 16 4 4 8-9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><h3>Libero di scegliere</h3><p>Scegli un modello GGUF con una stima della RAM necessaria. Dopo il download, la chat funziona in locale.</p></article>
+    </div></div></section>
+
+    <section class="section" id="come-funziona" aria-labelledby="steps-title"><div class="wrap"><div class="section-head"><span class="kicker">Inizia in tre passi</span><h2 id="steps-title">Dallo ZIP alla prima chat.</h2><p>Non serve un account. Tieni intera la cartella estratta per conservare il tuo spazio di lavoro.</p></div><div class="steps">
+      <article class="step"><div class="step-number">01 / SCARICA</div><h3>Scegli Mac o Windows</h3><p>Scarica la versione corretta e decomprimi lo ZIP sul computer o sulla chiavetta.</p></article>
+      <article class="step"><div class="step-number">02 / AVVIA</div><h3>Apri USB AI</h3><p>Su Mac apri “Avvia USB AI Rust.command”; su Windows apri “Avvia USB AI Rust.cmd”.</p></article>
+      <article class="step"><div class="step-number">03 / CONVERSA</div><h3>Scegli un modello</h3><p>Scarica un modello compatibile con la RAM del tuo computer. Poi puoi lavorare anche offline.</p></article>
+    </div></div></section>
+
+    <section class="wrap closing" aria-labelledby="closing-title"><h2 id="closing-title">La tua AI, alle tue condizioni.</h2><p>Un assistente locale, gratuito e portatile. Scaricalo e scegli dove tenere il tuo spazio di lavoro.</p><a class="button button-dark" href="#download">Scegli la tua versione <span aria-hidden="true">↗</span></a></section>
+  </main>
+
+  <footer class="footer"><div class="wrap footer-inner"><div class="footer-brand"><strong>FipraAI</strong> · un progetto di Fabrizio Casula<br>© 2026 Fabrizio Casula · Codice con licenza MIT</div><nav class="footer-links" aria-label="Link utili"><a href="https://github.com/fipra/usb-ai" target="_blank" rel="noopener noreferrer">Codice su GitHub</a><a href="https://github.com/fipra/usb-ai/releases/tag/rust-mac-portable" target="_blank" rel="noopener noreferrer">Release Mac</a><a href="https://github.com/fipra/usb-ai/releases/tag/rust-windows-portable" target="_blank" rel="noopener noreferrer">Release Windows</a></nav></div></footer>
+</body>
+</html>
