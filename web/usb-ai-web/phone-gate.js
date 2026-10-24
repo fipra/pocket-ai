@@ -3,11 +3,11 @@ export function isSmartphone(userAgent = navigator.userAgent, mobileHint = navig
 }
 
 const copy = {
-  en: ['USB-AI is temporarily unavailable on smartphones', 'Model loading on phones is currently too slow and unreliable. Please open USB-AI Web on a Mac or Windows computer. The desktop downloads are also available there.'],
-  it: ['USB-AI non è temporaneamente disponibile su smartphone', 'Il caricamento dei modelli sul telefono è ancora troppo lento e inaffidabile. Apri USB-AI Web su un computer Mac o Windows. Da lì puoi anche scaricare le versioni desktop.'],
-  fr: ['USB-AI est temporairement indisponible sur smartphone', 'Le chargement des modèles sur téléphone est actuellement trop lent et peu fiable. Ouvrez USB-AI Web sur un ordinateur Mac ou Windows.'],
-  de: ['USB-AI ist vorübergehend auf Smartphones nicht verfügbar', 'Das Laden von Modellen auf Smartphones ist derzeit zu langsam und unzuverlässig. Öffne USB-AI Web auf einem Mac oder Windows-Computer.'],
-  es: ['USB-AI no está disponible temporalmente en móviles', 'La carga de modelos en el móvil todavía es demasiado lenta y poco fiable. Abre USB-AI Web en un ordenador Mac o Windows.']
+  en: ['PC and Mac only', 'Not available for smartphones yet, but we are working on it.'],
+  it: ['Solo per PC e Mac', 'USB AI non è per smartphone al momento, ma ci stiamo lavorando.'],
+  fr: ['Uniquement sur PC et Mac', 'Pas encore disponible sur smartphone, mais nous y travaillons.'],
+  de: ['Nur für PC und Mac', 'Für Smartphones derzeit nicht verfügbar, aber wir arbeiten daran.'],
+  es: ['Solo para PC y Mac', 'Todavía no está disponible para móviles, pero estamos trabajando en ello.']
 };
 
 export function showPhoneGate(language = navigator.language) {

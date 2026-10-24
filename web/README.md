@@ -1,6 +1,6 @@
 # USB-AI Web
 
-**Temporary phone restriction:** USB-AI Web does not start on iPhone or Android smartphones while model loading is too slow and unreliable. The landing page disables its Mac, Windows, and Web links on phones and explains why. Mac, Windows, and tablet browsers remain available. The illustrative landing page demo remains accessible on phones. This is a browser UI restriction, not an access-control boundary.
+**Temporary phone restriction:** USB-AI Web does not start on iPhone or Android smartphones while model loading is too slow and unreliable. The landing page shows a short “PC and Mac only” note and an alert when phone users tap the Mac, Windows, or Web actions. Mac, Windows, and tablet browsers remain available. The illustrative landing page demo remains accessible on phones. This is a browser UI restriction, not an access-control boundary.
 
 This directory contains two separate interfaces. `index.html` and `i18n.js` are embedded by the existing Rust desktop application; keep them unchanged. `usb-ai-web/` is the independent browser app. Its Vite build outputs to `web/dist/` and never uses the desktop localhost API.
 
