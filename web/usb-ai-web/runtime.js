@@ -36,9 +36,14 @@ async function hashBlob(blob, onProgress = () => {}) {
 
 export async function downloadVerified(item, onProgress) {
   if (!item || !/^https:\/\/huggingface\.co\//.test(item.url) || !/^[a-f0-9]{64}$/.test(item.sha256) || !Number.isSafeInteger(item.size)) throw Error('Invalid model metadata');
+  const parts = item.shards || [item];
   if (canSaveToFolder()) {
-    const file = await saveVerifiedFile(item, onProgress);
-    await db.put('models', { id: item.id, name: item.name, source: 'directory', fileHandle: file.handle, folderHandle: file.folderHandle, folderLabel: file.folderLabel, filename: file.filename, url: item.url, size: file.size });
+    const files = []; let completed = 0;
+    for (const part of parts) {
+      const file = await saveVerifiedFile(part, ({loaded}) => onProgress?.({loaded:completed+loaded,total:item.size}));
+      files.push(file); completed += file.size;
+    }
+    await db.put('models', { id:item.id, name:item.name, source:'directory', fileHandle:files[0].handle, fileHandles:files.map(file=>file.handle), folderHandle:files[0].folderHandle, folderLabel:files[0].folderLabel, filename:files[0].filename, url:item.url, size:item.size, shards:parts });
     return;
   }
   await manager.downloadModel({ url: item.url }, { progressCallback: onProgress });
@@ -48,8 +53,11 @@ export async function downloadVerified(item, onProgress) {
     const blobs = await model.open();
     const total = blobs.reduce((sum, blob) => sum + blob.size, 0);
     if (total !== item.size) throw Error('Downloaded model size mismatch');
-    if (await hashBlob(blobs[0]) !== item.sha256) throw Error('Downloaded model checksum mismatch');
-    await db.put('models', { id: item.id, name: item.name, source: 'download', url: item.url, size: total });
+    if (blobs.length !== parts.length) throw Error('Downloaded model shard count mismatch');
+    for (let i=0;i<parts.length;i++) {
+      if (blobs[i].size !== parts[i].size || await hashBlob(blobs[i]) !== parts[i].sha256) throw Error('Downloaded model checksum mismatch');
+    }
+    await db.put('models', { id: item.id, name: item.name, source: 'download', url: item.url, size: total, shards:parts });
   } catch (error) { await model.remove(); throw error; }
 }
 export async function downloadCurated(id, onProgress) {
@@ -59,12 +67,17 @@ export async function downloadCurated(id, onProgress) {
 }
 
 export async function moveCachedToFolder(model, onProgress) {
-  const sha256 = CATALOG.find(item => item.id === model.id)?.sha256 || /^hf:([a-f0-9]{64})$/.exec(model.id)?.[1];
+  const sha256 = CATALOG.find(item => item.id === model.id)?.sha256 || /^hf(?:-split)?:([a-f0-9]{64})$/.exec(model.id)?.[1];
   if (model.source !== 'download' || !sha256) throw Error('Model cannot be moved automatically');
   // Start the directory picker before awaiting browser cache operations so it
   // retains the user gesture required by showDirectoryPicker().
-  const saved = await saveVerifiedFile({ ...model, sha256 }, onProgress);
-  await db.put('models', { ...model, source: 'directory', fileHandle: saved.handle, folderHandle: saved.folderHandle, folderLabel: saved.folderLabel, filename: saved.filename });
+  const parts = model.shards || [{...model,sha256}];
+  const files = []; let completed = 0;
+  for (const part of parts) {
+    const saved = await saveVerifiedFile(part, ({loaded}) => onProgress?.({loaded:completed+loaded,total:model.size}));
+    files.push(saved); completed += saved.size;
+  }
+  await db.put('models', { ...model, source:'directory', fileHandle:files[0].handle, fileHandles:files.map(file=>file.handle), folderHandle:files[0].folderHandle, folderLabel:files[0].folderLabel, filename:files[0].filename });
   const cached = (await manager.getModels()).find(entry => entry.url === model.url || entry.source?.url === model.url);
   if (cached) await cached.remove();
 }
@@ -100,10 +113,13 @@ export async function loadModel(id) {
   const record = await db.get('models', id);
   let files = record?.files || sessionFiles.get(id);
   if (record?.source === 'directory') {
-    const handle = record.fileHandle;
-    if (await handle.queryPermission?.({ mode: 'read' }) !== 'granted' &&
-        await handle.requestPermission?.({ mode: 'read' }) !== 'granted') throw Error('MODEL_FILE_PERMISSION');
-    files = [await handle.getFile()];
+    const handles = record.fileHandles || [record.fileHandle];
+    files = [];
+    for (const handle of handles) {
+      if (await handle.queryPermission?.({ mode: 'read' }) !== 'granted' &&
+          await handle.requestPermission?.({ mode: 'read' }) !== 'granted') throw Error('MODEL_FILE_PERMISSION');
+      files.push(await handle.getFile());
+    }
   }
   if (!record && !files) throw Error('Model unavailable');
   await unload();

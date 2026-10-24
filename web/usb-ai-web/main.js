@@ -29,6 +29,7 @@ function renderSearch() {
   for (const item of visible) {
     const card = node('div', undefined, 'model-card');
     const info = node('div'); info.append(node('strong', item.name), node('small', `${(item.size/1e6).toFixed(0)} MB · ${item.license}`));
+    if (item.shards) info.append(node('small', tr('splitParts').replace('{count}', item.shards.length)));
     const memory = estimateMemory(item.size);
     info.append(node('small', tr('memoryEstimate').replace('{minimum}', memory.minimum).replace('{recommended}', memory.recommended)));
     if (item.tooLargeForWeb) info.append(node('small', tr('webFileLimit'), 'warning'));

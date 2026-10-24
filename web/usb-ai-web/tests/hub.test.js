@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { estimateMemory, modelFromEntry, searchModels, searchTerm } from '../hub.js';
+import { estimateMemory, modelFromEntry, modelsFromEntries, searchModels, searchTerm } from '../hub.js';
 
 const hash = 'a'.repeat(64);
 test('only verified standalone GGUF files become results', () => {
@@ -36,6 +36,16 @@ test('search includes all usable quantizations and prioritizes Web-compatible fi
 });
 test('memory estimate includes browser and inference overhead', () => {
   assert.deepEqual(estimateMemory(1_073_741_824), {minimum:3,recommended:6});
+});
+test('complete GGUF shard sets can exceed 2 GB in total', () => {
+  const entries = [1,2,3].map(i => ({path:`large-0000${i}-of-00003.gguf`,size:1_100_000_000,lfs:{sha256:String(i).repeat(64)}}));
+  const models = modelsFromEntries('owner/repo', entries);
+  assert.equal(models.length, 1);
+  assert.equal(models[0].size, 3_300_000_000);
+  assert.equal(models[0].tooLargeForWeb, false);
+  assert.equal(models[0].shards.length, 3);
+  assert.match(models[0].shards[1].url, /large-00002-of-00003\.gguf$/);
+  assert.equal(modelsFromEntries('owner/repo', entries.slice(0,2)).length, 0);
 });
 test('full Qwen GGUF filename finds large files but marks them unavailable in Web', async () => {
   const urls = [];
