@@ -28,6 +28,10 @@ test('generic summary request includes recent document excerpts within context b
   assert.equal(context.at(-1).content, question);
   assert.ok(context.slice(0,-1).reduce((sum,message)=>sum+message.content.length,0) <= 2400);
 });
+test('a long document summary samples its beginning, middle, and end', () => {
+  const docs = [{name:'long.txt',updated:1,chunks:Array.from({length:21},(_,i)=>`Section ${i}`)}];
+  assert.deepEqual(retrieve('Riassumi il documento', docs, 3).map(source=>source.index), [0,10,20]);
+});
 test('empty text documents are rejected instead of silently saved', async () => {
   await assert.rejects(readDocument({name:'scan.txt',size:0,text:async()=>''}), /DOCUMENT_NO_TEXT/);
 });

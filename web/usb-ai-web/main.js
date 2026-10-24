@@ -3,7 +3,8 @@ import * as db from './storage.js';
 import { translations, preferredLanguage } from './i18n.js';
 import { CATALOG } from './catalog.js';
 import { searchModels, estimateMemory } from './hub.js';
-import { readDocument, chunks, retrieve, documentQuestion, recentContext } from './retrieval.js';
+import { readDocument, chunks, retrieve } from './retrieval.js';
+import { ragContexts, completeWithRetry } from './rag.js';
 import { savedModels, downloadCurated, downloadVerified, moveCachedToFolder, addLocalModel, deleteModel, loadModel, loadedModelId, streamChat } from './runtime.js';
 import { canSaveToFolder, showModelFolder } from './folder-models.js';
 
@@ -103,8 +104,7 @@ async function send() {
   let chat = chats.find(item => item.id === activeId);
   if (!chat) { await newChat(); chat = chats.find(item => item.id === activeId); }
   const sources = useDocs ? retrieve(text, documents, 3) : [];
-  const question = documentQuestion(text, sources);
-  const context = recentContext(chat.messages, question);
+  const contexts = ragContexts(chat.messages, text, sources);
   const answer = { role:'assistant', text:'', sources: sources.map(({name,text}) => ({name,text})) };
   chat.messages.push({ role:'user', text }, answer);
   chat.title = chat.messages.find(message => message.role === 'user')?.text.slice(0,55) || chat.title;
@@ -114,17 +114,20 @@ async function send() {
   setBusy(true); setStatus(tr('generating')); renderMessages();
   try {
     if (loadedModelId() !== selectedId) await loadModel(selectedId);
-    await streamChat(context, token => {
+    await completeWithRetry(contexts, streamChat, token => {
       answer.text += token;
       const body = $('messages').lastElementChild?.querySelector('.message-body');
       if (body) { body.textContent = answer.text; $('thread').scrollTop = $('thread').scrollHeight; }
-    }, controller.signal);
-    if (!answer.text && !controller.signal.aborted) answer.text = tr('emptyResponse');
+    }, controller.signal, () => {
+      answer.text = '';
+      setStatus(tr('retryingAnswer'));
+    });
     setStatus(controller.signal.aborted ? tr('stopped') : tr('ready'));
   } catch (error) {
     if (!controller.signal.aborted) {
-      answer.text ||= `${tr('error')}: ${error.message}`;
-      setStatus(`${tr('error')}: ${error.message}`, true);
+      const message = error.message === 'EMPTY_MODEL_RESPONSE' ? tr('emptyResponse') : `${tr('error')}: ${error.message}`;
+      answer.text ||= message;
+      setStatus(message, true);
     }
   } finally {
     controller = undefined;

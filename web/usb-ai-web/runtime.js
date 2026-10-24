@@ -125,7 +125,7 @@ export async function loadModel(id) {
   await unload();
   const next = instance();
   const mobileSafari = /iP(hone|ad|od)/.test(navigator.userAgent);
-  const options = mobileSafari ? { n_ctx: 1024, n_batch: 64, n_threads: 1, n_gpu_layers: 0, jinja: true } : { n_ctx: 2048, n_threads: 1, jinja: true };
+  const options = mobileSafari ? { n_ctx: 1024, n_batch: 64, n_threads: 1, n_gpu_layers: 0, jinja: true, reasoning: false } : { n_ctx: 2048, n_threads: 1, jinja: true, reasoning: false };
   let timer;
   try {
     const loading = (async () => {
@@ -147,7 +147,8 @@ export async function streamChat(messages, onToken, signal) {
   const response = await engine.createChatCompletion({ messages, max_tokens: 512, temperature: 0.7, stream: true, abortSignal: signal });
   for await (const chunk of response) {
     if (signal.aborted) break;
-    const token = chunk.choices?.[0]?.delta?.content;
+    const choice = chunk.choices?.[0];
+    const token = choice?.delta?.content ?? choice?.message?.content;
     if (token) onToken(token);
   }
 }

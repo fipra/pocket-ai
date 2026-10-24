@@ -9,13 +9,17 @@ export function chunks(text, size = 1100, overlap = 180) {
   return result;
 }
 export function retrieve(question, documents, limit = 4) {
-  const terms = [...new Set((question.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []))];
+  const generic = new Set(['the','and','for','this','that','document','summary','summarize','please','what','about','questo','questa','documento','documenti','riassumi','riassunto','dimmi','cosa','della','delle','degli','pour','avec','document','résume','résumé','dieses','dokument','zusammenfassung','resume','resumen','documento']);
+  const terms = [...new Set((question.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []).filter(term => !generic.has(term)))];
   const scored = documents.flatMap(doc => doc.chunks.map((text, index) => ({ name: doc.name, text, index, score: terms.reduce((sum, term) => sum + (text.toLowerCase().includes(term) ? 1 : 0), 0) })))
     .filter(item => item.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
   if (scored.length) return scored;
   // Generic requests such as "summarize this document" still need context.
   const latest = [...documents].sort((a,b) => (b.updated || 0) - (a.updated || 0))[0];
-  return latest?.chunks.slice(0, Math.min(limit, 2)).map((text,index) => ({name:latest.name,text,index,score:0})) || [];
+  if (!latest?.chunks.length) return [];
+  const count = Math.min(limit, 3, latest.chunks.length);
+  const indexes = [...new Set(Array.from({length:count}, (_,i) => Math.round(i * (latest.chunks.length - 1) / Math.max(1,count-1))))];
+  return indexes.map(index => ({name:latest.name,text:latest.chunks[index],index,score:0}));
 }
 
 export function documentQuestion(question, sources, maxExcerptChars = 2600) {
