@@ -125,7 +125,8 @@ export async function loadModel(id) {
   await unload();
   const next = instance();
   const mobileSafari = /iP(hone|ad|od)/.test(navigator.userAgent);
-  const options = mobileSafari ? { n_ctx: 1024, n_batch: 64, n_threads: 1, n_gpu_layers: 0, jinja: true, reasoning: false } : { n_ctx: 2048, n_threads: 1, jinja: true, reasoning: false };
+  const contextSize = navigator.deviceMemory && navigator.deviceMemory <= 4 ? 4096 : 8192;
+  const options = mobileSafari ? { n_ctx: 1024, n_batch: 64, n_threads: 1, n_gpu_layers: 0, jinja: true, reasoning: false } : { n_ctx: contextSize, n_threads: 1, jinja: true, reasoning: false };
   let timer;
   try {
     const loading = (async () => {
@@ -144,7 +145,7 @@ export async function loadModel(id) {
 }
 export async function streamChat(messages, onToken, signal) {
   if (!engine) throw Error('Select a model first');
-  const response = await engine.createChatCompletion({ messages, max_tokens: 512, temperature: 0.7, stream: true, abortSignal: signal });
+  const response = await engine.createChatCompletion({ messages, max_tokens: 3072, temperature: 0.7, stream: true, abortSignal: signal });
   for await (const chunk of response) {
     if (signal.aborted) break;
     const choice = chunk.choices?.[0];

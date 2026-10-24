@@ -17,6 +17,7 @@ use tiny_http::{Header, Method, Response, Server, StatusCode};
 const INDEX: &str = include_str!("../web/index.html");
 const MODEL_CATALOG: &str = include_str!("../models/catalog.json");
 const I18N: &str = include_str!("../web/i18n.js");
+const CODE_VIEW: &str = include_str!("../web/code-view.js");
 const MAX_FILE: usize = 20 * 1024 * 1024;
 
 fn normalize_language(value: &str) -> &'static str {
@@ -922,7 +923,7 @@ impl App {
             let child = Command::new(tool_path("LLAMA_SERVER", "llama-server"))
                 .args(["--host", "127.0.0.1", "--port", &port.to_string(), "-m"])
                 .arg(model)
-                .args(["-c", "4096", "--no-webui"])
+                .args(["-c", "8192", "--no-webui"])
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
@@ -976,7 +977,7 @@ impl App {
         if generation.cancelled.load(Ordering::SeqCst) {
             return Ok(String::new());
         }
-        let body = json!({"prompt":prompt,"n_predict":800,"temperature":0.3,"cache_prompt":true,"stream":true,"stop":["\nUser:"]}).to_string();
+        let body = json!({"prompt":prompt,"n_predict":3072,"temperature":0.3,"cache_prompt":true,"stream":true,"stop":["\nUser:"]}).to_string();
         let child = Command::new(if cfg!(windows) { "curl.exe" } else { "curl" })
             .args([
                 "--fail",
@@ -1543,6 +1544,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 200,
                 "text/javascript; charset=utf-8",
                 I18N.as_bytes().to_vec(),
+            )
+        } else if method == Method::Get && url == "/code-view.js" {
+            (
+                200,
+                "text/javascript; charset=utf-8",
+                CODE_VIEW.as_bytes().to_vec(),
             )
         } else if method == Method::Post && !allowed_origin {
             (
