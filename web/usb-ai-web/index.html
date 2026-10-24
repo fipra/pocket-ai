@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#171717"><meta name="description" content="USB-AI Web: private AI running in your browser"><link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="stylesheet" href="./style.css"><title>USB-AI Web</title></head>
+<body><div id="app" class="app">
+  <aside class="sidebar" id="sidebar"><div class="brand"><span class="mark">✦</span> USB-AI <small>WEB</small></div><button id="new-chat" class="new-chat" data-i18n="newChat"></button><div class="side-label" data-i18n="recent"></div><nav id="chat-list" class="chat-list"></nav><div class="sidebar-bottom"><button id="models-open" class="side-action" data-i18n="models"></button><button id="docs-open" class="side-action" data-i18n="documents"></button><button id="export-chat" class="side-action" data-i18n="export"></button><button id="delete-chat" class="side-action danger" data-i18n="deleteChat"></button><label class="language"><span data-i18n="language"></span><select id="language"><option value="en">English</option><option value="it">Italiano</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="es">Español</option></select></label></div></aside>
+  <main class="main"><header class="topbar"><button id="menu" class="icon-button mobile-menu" aria-label="Menu">☰</button><button id="model-trigger" class="model-trigger"></button><span class="local-pill" data-i18n="private"></span><span class="spacer"></span><button id="install" class="text-button" data-i18n="install"></button></header><section id="thread" class="thread"><div id="messages" class="thread-inner"></div></section><div class="composer-area"><div class="composer-wrap"><div id="status" class="status" role="status"></div><form id="prompt-form" class="composer"><textarea id="prompt" rows="2" data-placeholder="prompt" aria-label="Prompt"></textarea><div class="composer-bottom"><button type="button" id="use-docs" class="tool-chip" data-i18n="useDocs"></button><span class="spacer"></span><button type="button" id="stop" class="round-button" hidden aria-label="Stop">■</button><button type="submit" id="send" class="round-button" aria-label="Send">↑</button></div></form><p class="composer-note" data-i18n="localNote"></p></div></div></main>
+</div>
+<dialog id="models-dialog"><header class="dialog-head"><div><h2 data-i18n="models"></h2><p data-i18n="modelHint"></p></div><button class="close" data-close="models-dialog" aria-label="Close">×</button></header><div class="dialog-body"><p id="capability" class="hint"></p><h3 data-i18n="recommended"></h3><div id="catalog" class="cards"></div><h3 data-i18n="myModels"></h3><div id="saved-models" class="cards"></div><label class="file-button"><span data-i18n="chooseFile"></span><input id="model-file" type="file" accept=".gguf,application/octet-stream" multiple hidden></label><p class="hint" data-i18n="fileHint"></p><div id="model-progress" class="progress"></div></div></dialog>
+<dialog id="docs-dialog"><header class="dialog-head"><div><h2 data-i18n="documents"></h2><p data-i18n="docsHint"></p></div><button class="close" data-close="docs-dialog" aria-label="Close">×</button></header><div class="dialog-body"><label class="file-button"><span data-i18n="addDocuments"></span><input id="doc-file" type="file" accept=".txt,.md,.csv,.json,.pdf,text/plain,application/pdf" multiple hidden></label><div id="doc-list" class="cards"></div></div></dialog>
+<script>
+if (location.protocol === 'file:') {
+  const messages = {
+    en: ['Open USB-AI Web with the launcher', 'This app needs a local web address. Double-click “Open USB-AI Web.command” on Mac or “Open USB-AI Web.bat” on Windows in this folder. The launcher installs dependencies on first use, then opens the working app.'],
+    it: ['Apri USB-AI Web con il programma di avvio', 'Questa app richiede un indirizzo web locale. In questa cartella fai doppio clic su “Open USB-AI Web.command” su Mac oppure “Open USB-AI Web.bat” su Windows. Al primo avvio verranno installate le dipendenze, poi si aprirà l’app funzionante.'],
+    fr: ['Ouvrez USB-AI Web avec le lanceur', 'Cette application nécessite une adresse web locale. Dans ce dossier, ouvrez « Open USB-AI Web.command » sur Mac ou « Open USB-AI Web.bat » sur Windows.'],
+    de: ['USB-AI Web mit dem Starter öffnen', 'Diese App benötigt eine lokale Webadresse. Öffnen Sie in diesem Ordner „Open USB-AI Web.command“ auf dem Mac oder „Open USB-AI Web.bat“ unter Windows.'],
+    es: ['Abre USB-AI Web con el iniciador', 'Esta aplicación necesita una dirección web local. En esta carpeta abre «Open USB-AI Web.command» en Mac o «Open USB-AI Web.bat» en Windows.']
+  };
+  const [title, detail] = messages[navigator.language.slice(0, 2)] || messages.en;
+  document.addEventListener('DOMContentLoaded', () => {
+    document.body.replaceChildren();
+    const panel = document.createElement('main');
+    panel.style.cssText = 'max-width:600px;margin:12vh auto;padding:32px;font:16px/1.6 system-ui,sans-serif;color:#202123';
+    const heading = document.createElement('h1'); heading.textContent = title;
+    const paragraph = document.createElement('p'); paragraph.textContent = detail;
+    panel.append(heading, paragraph); document.body.append(panel);
+  });
+}
+</script>
+<script type="module" src="./main.js"></script></body></html>

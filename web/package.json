@@ -1,0 +1,19 @@
+{
+  "name": "usb-ai-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config usb-ai-web/vite.config.js",
+    "build": "vite build --config usb-ai-web/vite.config.js",
+    "test": "node --test usb-ai-web/tests/*.test.js"
+  },
+  "dependencies": {
+    "@wllama/wllama": "^3.0.0",
+    "hash-wasm": "^4.12.0",
+    "pdfjs-dist": "^5.4.0"
+  },
+  "devDependencies": {
+    "vite": "^7.1.0"
+  }
+}
