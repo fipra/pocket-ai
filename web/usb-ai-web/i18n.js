@@ -46,4 +46,12 @@ const auxiliaryStrings = {
   es: { auxiliaryFile:'Este es un archivo auxiliar, no un modelo de chat. Elimínalo y elige otro modelo.', invalidModel:'No disponible' }
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], auxiliaryStrings[language]);
+const starterStrings = {
+  en: { starterHint:'Write your first message. USB-AI will download and prepare Llama 3.2 (1.6 GB) when you send it.', starterDownloading:'Downloading the starter model…' },
+  it: { starterHint:'Scrivi il primo messaggio. All’invio USB-AI scaricherà e preparerà Llama 3.2 (1,6 GB).', starterDownloading:'Scaricamento del modello iniziale…' },
+  fr: { starterHint:'Écrivez votre premier message. USB-AI téléchargera Llama 3.2 (1,6 Go) lors de l’envoi.', starterDownloading:'Téléchargement du modèle initial…' },
+  de: { starterHint:'Schreibe deine erste Nachricht. USB-AI lädt beim Senden Llama 3.2 (1,6 GB) herunter.', starterDownloading:'Startmodell wird heruntergeladen…' },
+  es: { starterHint:'Escribe tu primer mensaje. USB-AI descargará Llama 3.2 (1,6 GB) al enviarlo.', starterDownloading:'Descargando el modelo inicial…' }
+};
+for (const language of Object.keys(translations)) Object.assign(translations[language], starterStrings[language]);
 export function preferredLanguage(value = navigator.language) { return translations[value?.slice(0,2).toLowerCase()] ? value.slice(0,2).toLowerCase() : 'en'; }

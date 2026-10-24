@@ -1525,11 +1525,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         inference: None,
     };
     let installed = app_state.models();
+    let starter = "Llama-3.2-3B-Instruct-IQ3_M.gguf";
     let preferred = recommended_id(&app_state.hardware, &app_state.catalog)
         .and_then(|id| app_state.catalog.iter().find(|model| model.id == id))
         .map(|model| model.file.clone());
-    app_state.selected = preferred
+    app_state.selected = Some(starter.to_owned())
         .filter(|name| installed.contains(name))
+        .or_else(|| preferred.filter(|name| installed.contains(name)))
         .or_else(|| installed.first().cloned());
     let app = Arc::new(Mutex::new(app_state));
     let active_generation: Arc<Mutex<Option<Arc<ActiveGeneration>>>> = Arc::new(Mutex::new(None));
@@ -2067,7 +2069,13 @@ mod tests {
                 .iter()
                 .map(|model| model.id.as_str())
                 .collect::<Vec<_>>(),
-            vec!["qwen-0.5b", "qwen-3b", "qwen-7b", "gemma-9b"]
+            vec![
+                "llama-3.2-3b-iq3m",
+                "qwen-0.5b",
+                "qwen-3b",
+                "qwen-7b",
+                "gemma-9b"
+            ]
         );
         for model in catalog {
             assert!(model.url.starts_with("https://huggingface.co/"));
@@ -2124,9 +2132,9 @@ mod tests {
             inference: None,
         };
         let state = app.state();
-        assert_eq!(state["catalog"].as_array().unwrap().len(), 4);
+        assert_eq!(state["catalog"].as_array().unwrap().len(), 5);
         assert_eq!(state["hardware"]["ram_gb"], 16.0);
-        assert_eq!(state["catalog"][2]["recommended"], true);
+        assert_eq!(state["catalog"][3]["recommended"], true);
     }
     #[test]
     fn selects_next_port_when_default_is_busy() {

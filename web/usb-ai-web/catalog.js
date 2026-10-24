@@ -1,5 +1,11 @@
 // Curated small model. Hash and size match the desktop catalog.
 export const CATALOG = [{
+  id: 'llama-3.2-3b-iq3m', name: 'Llama 3.2 · 3B Instruct', size: 1599668768,
+  url: 'https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-IQ3_M.gguf',
+  source: 'https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/blob/main/Llama-3.2-3B-Instruct-IQ3_M.gguf',
+  sha256: 'deac83b571f3982a12377181fdfd7780bf4ce8cbfbdcac179e4bf2ad47b1b228',
+  license: 'Llama 3.2'
+}, {
   id: 'smollm2-135m', name: 'SmolLM2 · 135M Q4', size: 105454144, mobile: true,
   url: 'https://huggingface.co/QuantFactory/SmolLM2-135M-Instruct-GGUF/resolve/main/SmolLM2-135M-Instruct.Q4_K_M.gguf',
   source: 'https://huggingface.co/QuantFactory/SmolLM2-135M-Instruct-GGUF/blob/main/SmolLM2-135M-Instruct.Q4_K_M.gguf',

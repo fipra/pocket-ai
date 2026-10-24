@@ -28,3 +28,11 @@ const simpleHubStrings = {
   es: { hubSearchTitle:'Buscar un modelo', hubSearchNote:'Escribe un nombre. USB AI elige una versión completa y verifica la descarga.', hubSearchPlaceholder:'Nombre del modelo…', hubNoResults:'No hay modelos compatibles en esta página.' }
 };
 for (const language of Object.keys(window.USB_AI_I18N)) Object.assign(window.USB_AI_I18N[language], simpleHubStrings[language]);
+const starterStrings = {
+  en: { starterHint:'Write your first message. USB AI will download and prepare Llama 3.2 (1.6 GB) when you send it.', starterDownloading:'Downloading the starter model…', starterPreparing:'Preparing the model…', modelLlama:'Starter model for private chat and documents.' },
+  it: { starterHint:'Scrivi il primo messaggio. All’invio USB AI scaricherà e preparerà Llama 3.2 (1,6 GB).', starterDownloading:'Scaricamento del modello iniziale…', starterPreparing:'Preparazione del modello…', modelLlama:'Modello iniziale per chat e documenti privati.' },
+  de: { starterHint:'Schreibe deine erste Nachricht. USB AI lädt beim Senden Llama 3.2 (1,6 GB) herunter.', starterDownloading:'Startmodell wird heruntergeladen…', starterPreparing:'Modell wird vorbereitet…', modelLlama:'Startmodell für private Chats und Dokumente.' },
+  fr: { starterHint:'Écrivez votre premier message. USB AI téléchargera Llama 3.2 (1,6 Go) lors de l’envoi.', starterDownloading:'Téléchargement du modèle initial…', starterPreparing:'Préparation du modèle…', modelLlama:'Modèle initial pour les discussions et documents privés.' },
+  es: { starterHint:'Escribe tu primer mensaje. USB AI descargará Llama 3.2 (1,6 GB) al enviarlo.', starterDownloading:'Descargando el modelo inicial…', starterPreparing:'Preparando el modelo…', modelLlama:'Modelo inicial para chat y documentos privados.' }
+};
+for (const language of Object.keys(window.USB_AI_I18N)) Object.assign(window.USB_AI_I18N[language], starterStrings[language]);

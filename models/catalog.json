@@ -1,5 +1,21 @@
 [
   {
+    "id": "llama-3.2-3b-iq3m",
+    "name": "Llama 3.2 · 3B Instruct",
+    "family": "Llama 3.2 Instruct",
+    "parameters": "3B",
+    "file": "Llama-3.2-3B-Instruct-IQ3_M.gguf",
+    "url": "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-IQ3_M.gguf",
+    "source_url": "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/blob/main/Llama-3.2-3B-Instruct-IQ3_M.gguf",
+    "size_bytes": 1599668768,
+    "download_gb": 1.60,
+    "sha256": "deac83b571f3982a12377181fdfd7780bf4ce8cbfbdcac179e4bf2ad47b1b228",
+    "minimum_ram_gb": 4,
+    "comfortable_ram_gb": 6,
+    "license": "Llama 3.2",
+    "summary": "Default starter model for chat and documents."
+  },
+  {
     "id": "qwen-0.5b",
     "name": "Qwen 2.5 · 0.5B",
     "family": "Qwen2.5 Instruct",
