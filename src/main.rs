@@ -414,6 +414,8 @@ struct Document {
     id: String,
     name: String,
     chunks: Vec<Chunk>,
+    #[serde(default, rename = "chatId")]
+    chat_id: Option<String>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 struct Message {
@@ -640,7 +642,8 @@ fn decode_name(s: &str) -> Result<String, String> {
     }
     String::from_utf8(out).map_err(|_| "Nome file non valido".into())
 }
-fn retrieve(query: &str, docs: &[Document]) -> Vec<Source> {
+fn retrieve<'a>(query: &str, docs: impl IntoIterator<Item = &'a Document>) -> Vec<Source> {
+    let docs = docs.into_iter().collect::<Vec<_>>();
     let q: Vec<String> = words(query)
         .into_iter()
         .filter(|w| {
@@ -702,7 +705,7 @@ fn retrieve(query: &str, docs: &[Document]) -> Vec<Source> {
         return sources;
     }
     let mut rows = Vec::new();
-    for doc in docs {
+    for doc in &docs {
         for chunk in &doc.chunks {
             let all = words(&format!("{} {}", doc.name, chunk.text));
             let score: usize = q
@@ -725,7 +728,7 @@ fn retrieve(query: &str, docs: &[Document]) -> Vec<Source> {
     rows.sort_by(|a, b| b.0.cmp(&a.0));
     let matches: Vec<Source> = rows.into_iter().take(4).map(|(_, s)| s).collect();
     if matches.is_empty() && docs.len() == 1 {
-        retrieve("riassumi il documento", docs)
+        retrieve("riassumi il documento", docs.iter().copied())
     } else {
         matches
     }
@@ -895,7 +898,7 @@ impl App {
                 "comfortableRamGb":model.comfortable_ram_gb,"license":model.license,"summary":model.summary,
                 "installed":installed.contains(&model.file),"fit":fit,"recommended":recommendation==Some(model.id.as_str())})
         }).collect::<Vec<_>>();
-        json!({"chats":self.db.chats,"memory":self.db.memory,"documents":self.db.documents.iter().map(|d|json!({"id":d.id,"name":d.name,"count":d.chunks.len()})).collect::<Vec<_>>(),
+        json!({"chats":self.db.chats,"memory":self.db.memory,"documents":self.db.documents.iter().map(|d|json!({"id":d.id,"name":d.name,"count":d.chunks.len(),"chatId":d.chat_id})).collect::<Vec<_>>(),
             "models":installed,"ignoredModelFiles":self.ignored_model_files(),"modelsDir":self.models,"model":self.selected,"root":self.root,"language":self.language(),"catalog":catalog,"hardware":self.hardware,
             "download":self.download_status()})
     }
@@ -959,6 +962,25 @@ impl App {
             "delete-chat" => {
                 let id = data["id"].as_str().ok_or("ID mancante")?;
                 self.db.chats.retain(|c| c.id != id);
+                self.db
+                    .documents
+                    .retain(|d| d.chat_id.as_deref() != Some(id));
+                self.save()?;
+                Ok(self.state())
+            }
+            "attach-document" => {
+                let id = data["id"].as_str().ok_or("ID mancante")?;
+                let chat_id = data["chatId"].as_str().ok_or("Chat mancante")?;
+                if !self.db.chats.iter().any(|c| c.id == chat_id) {
+                    return Err("Chat non trovata".into());
+                }
+                let doc = self
+                    .db
+                    .documents
+                    .iter_mut()
+                    .find(|d| d.id == id && d.chat_id.is_none())
+                    .ok_or("Documento non disponibile")?;
+                doc.chat_id = Some(chat_id.to_owned());
                 self.save()?;
                 Ok(self.state())
             }
@@ -1024,9 +1046,15 @@ impl App {
             .iter()
             .position(|c| c.id == chat_id)
             .ok_or("Chat non trovata")?;
-        let use_docs = data["documents"].as_bool().unwrap_or(false);
+        let chat_docs = self
+            .db
+            .documents
+            .iter()
+            .filter(|d| d.chat_id.as_deref() == Some(chat_id))
+            .collect::<Vec<_>>();
+        let use_docs = !chat_docs.is_empty();
         let sources = if use_docs {
-            retrieve(text, &self.db.documents)
+            retrieve(text, chat_docs.iter().copied())
         } else {
             vec![]
         };
@@ -1254,7 +1282,10 @@ impl App {
         }
         Ok(answer.trim().to_owned())
     }
-    fn upload(&mut self, name: &str, bytes: &[u8]) -> Result<Value, String> {
+    fn upload(&mut self, chat_id: &str, name: &str, bytes: &[u8]) -> Result<Value, String> {
+        if !self.db.chats.iter().any(|c| c.id == chat_id) {
+            return Err("Chat non trovata".into());
+        }
         let base = Path::new(name)
             .file_name()
             .and_then(|n| n.to_str())
@@ -1301,6 +1332,7 @@ impl App {
             id: id(),
             name: name.into(),
             chunks: std::mem::take(&mut parts),
+            chat_id: Some(chat_id.to_owned()),
         });
         self.save()?;
         Ok(self.state())
@@ -1809,7 +1841,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Err(e) => Err(e.to_string()),
                 }
             } else {
-                decode_name(&url[8..]).and_then(|name| app.lock().unwrap().upload(&name, &body))
+                url[8..]
+                    .split_once('/')
+                    .ok_or_else(|| "Chat mancante".to_owned())
+                    .and_then(|(raw_chat_id, raw_name)| {
+                        let chat_id = decode_name(raw_chat_id)?;
+                        let name = decode_name(raw_name)?;
+                        app.lock().unwrap().upload(&chat_id, &name, &body)
+                    })
             };
             match result {
                 Ok(v) => (200, "application/json", serde_json::to_vec(&v).unwrap()),
@@ -2123,6 +2162,7 @@ mod tests {
         let d = Document {
             id: "id".into(),
             name: "memo.txt".into(),
+            chat_id: None,
             chunks: vec![Chunk {
                 page: Some(3),
                 text: "password portale segreto".into(),
@@ -2134,10 +2174,80 @@ mod tests {
         assert_eq!(r[0].doc_id, "id");
     }
     #[test]
+    fn chat_documents_are_isolated_and_legacy_documents_remain_unassigned() {
+        let docs = [
+            Document { id: "a".into(), name: "a.txt".into(), chunks: chunks("Secret alpha"), chat_id: Some("chat-a".into()) },
+            Document { id: "b".into(), name: "b.txt".into(), chunks: chunks("Secret beta"), chat_id: Some("chat-b".into()) },
+            serde_json::from_value(json!({"id":"old","name":"old.txt","chunks":[{"page":null,"text":"Secret legacy"}]})).unwrap(),
+        ];
+        assert!(docs[2].chat_id.is_none());
+        let sources = retrieve(
+            "Secret",
+            docs.iter()
+                .filter(|doc| doc.chat_id.as_deref() == Some("chat-a")),
+        );
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].doc_id, "a");
+    }
+    #[test]
+    fn uploaded_documents_persist_with_chat_and_are_removed_with_it() {
+        let root = env::temp_dir().join(format!("usb-ai-chat-documents-{}", id()));
+        fs::create_dir_all(&root).unwrap();
+        let mut app = App {
+            root: root.clone(),
+            models: root.join("models"),
+            db: Workspace::default(),
+            selected: None,
+            catalog: model_catalog(),
+            hardware: Hardware {
+                os: "macos",
+                arch: "aarch64",
+                logical_cores: 8,
+                ram_gb: Some(16.0),
+            },
+            downloading: None,
+            download_error: None,
+            inference: None,
+        };
+        let chat_id = app.command("new-chat", json!({})).unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert!(app
+            .upload("missing", "report.txt", b"Private report")
+            .is_err());
+        let state = app
+            .upload(&chat_id, "report.txt", b"Private report")
+            .unwrap();
+        assert_eq!(state["documents"][0]["chatId"], chat_id);
+        let saved: Workspace =
+            serde_json::from_slice(&fs::read(root.join("workspace.json")).unwrap()).unwrap();
+        assert_eq!(
+            saved.documents[0].chat_id.as_deref(),
+            Some(chat_id.as_str())
+        );
+        app.db.documents.push(Document {
+            id: "legacy".into(),
+            name: "old.txt".into(),
+            chunks: chunks("Older text"),
+            chat_id: None,
+        });
+        app.command("attach-document", json!({"id":"legacy","chatId":chat_id}))
+            .unwrap();
+        assert_eq!(
+            app.db.documents[1].chat_id.as_deref(),
+            Some(chat_id.as_str())
+        );
+        app.command("delete-chat", json!({"id":chat_id})).unwrap();
+        assert!(app.db.documents.is_empty());
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
     fn generic_summary_samples_document_and_bounds_prompt() {
         let doc = Document {
             id: "recent".into(),
             name: "report.txt".into(),
+            chat_id: None,
             chunks: (0..12)
                 .map(|i| Chunk {
                     page: None,

@@ -44,3 +44,12 @@ const memoryStrings = {
   es: { rememberCorrection:'Corregir y recordar', memory:'Memoria', memoryIntro:'Guarda solo correcciones y preferencias que apruebes. Las notas pertinentes se usarán en futuros chats.', memoryPlaceholder:'Para este proyecto, recuerda que…', memorySave:'Guardar nota', memoryEdit:'Editar', memoryEmpty:'Aún no hay notas guardadas.', memoryPath:'Copia Markdown:', removeMemory:'Eliminar nota' }
 };
 for (const language of Object.keys(window.USB_AI_I18N)) Object.assign(window.USB_AI_I18N[language], memoryStrings[language]);
+
+const attachmentStrings = {
+  en: {'attachFiles': 'Attach files', 'noChatDocs': 'No files in this chat yet.', 'legacyDocs': 'Documents imported before this update', 'attachToChat': 'Attach to this chat', 'docsHint': 'Files in this chat are used automatically. Local data:'},
+  it: {'attachFiles': 'Allega file', 'noChatDocs': 'Nessun file in questa chat.', 'legacyDocs': 'Documenti importati prima di questo aggiornamento', 'attachToChat': 'Allega a questa chat', 'docsHint': 'I file di questa chat vengono usati automaticamente. Dati locali:'},
+  de: {'attachFiles': 'Dateien anhängen', 'noChatDocs': 'Noch keine Dateien in diesem Chat.', 'legacyDocs': 'Vor diesem Update importierte Dokumente', 'attachToChat': 'Diesem Chat zuordnen', 'docsHint': 'Dateien in diesem Chat werden automatisch verwendet. Lokale Daten:'},
+  fr: {'attachFiles': 'Joindre des fichiers', 'noChatDocs': 'Aucun fichier dans cette discussion.', 'legacyDocs': 'Documents importés avant cette mise à jour', 'attachToChat': 'Joindre à cette discussion', 'docsHint': 'Les fichiers de cette discussion sont utilisés automatiquement. Données locales :'},
+  es: {'attachFiles': 'Adjuntar archivos', 'noChatDocs': 'Aún no hay archivos en este chat.', 'legacyDocs': 'Documentos importados antes de esta actualización', 'attachToChat': 'Adjuntar a este chat', 'docsHint': 'Los archivos de este chat se usan automáticamente. Datos locales:'}
+};
+for (const language of Object.keys(window.USB_AI_I18N)) Object.assign(window.USB_AI_I18N[language], attachmentStrings[language]);

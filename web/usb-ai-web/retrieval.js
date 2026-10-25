@@ -1,3 +1,7 @@
+export function documentsForChat(documents, chatId) {
+  return chatId ? documents.filter(document => document.chatId === chatId) : [];
+}
+
 export function chunks(text, size = 1100, overlap = 180) {
   const clean = text.replace(/\r\n?/g, '\n').trim();
   if (!clean) return [];

@@ -87,3 +87,12 @@ const memoryStrings = {
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], memoryStrings[language]);
 export function preferredLanguage(value = navigator.language) { return translations[value?.slice(0,2).toLowerCase()] ? value.slice(0,2).toLowerCase() : 'en'; }
+
+const attachmentStrings = {
+  en: {'attachFiles': 'Attach files', 'noChatDocs': 'No files in this chat yet.', 'legacyDocs': 'Documents imported before this update', 'attachToChat': 'Attach to this chat', 'docsHint': 'Text, Markdown, CSV, JSON and text PDFs. Files in this chat are used automatically and stay in this browser.'},
+  it: {'attachFiles': 'Allega file', 'noChatDocs': 'Nessun file in questa chat.', 'legacyDocs': 'Documenti importati prima di questo aggiornamento', 'attachToChat': 'Allega a questa chat', 'docsHint': 'Testo, Markdown, CSV, JSON e PDF testuali. I file di questa chat vengono usati automaticamente e restano in questo browser.'},
+  de: {'attachFiles': 'Dateien anhängen', 'noChatDocs': 'Noch keine Dateien in diesem Chat.', 'legacyDocs': 'Vor diesem Update importierte Dokumente', 'attachToChat': 'Diesem Chat zuordnen', 'docsHint': 'Text, Markdown, CSV, JSON und Text-PDFs. Dateien dieses Chats werden automatisch verwendet und bleiben in diesem Browser.'},
+  fr: {'attachFiles': 'Joindre des fichiers', 'noChatDocs': 'Aucun fichier dans cette discussion.', 'legacyDocs': 'Documents importés avant cette mise à jour', 'attachToChat': 'Joindre à cette discussion', 'docsHint': 'Texte, Markdown, CSV, JSON et PDF textuels. Les fichiers de cette discussion sont utilisés automatiquement et restent dans ce navigateur.'},
+  es: {'attachFiles': 'Adjuntar archivos', 'noChatDocs': 'Aún no hay archivos en este chat.', 'legacyDocs': 'Documentos importados antes de esta actualización', 'attachToChat': 'Adjuntar a este chat', 'docsHint': 'Texto, Markdown, CSV, JSON y PDF de texto. Los archivos de este chat se usan automáticamente y permanecen en este navegador.'}
+};
+for (const language of Object.keys(translations)) Object.assign(translations[language], attachmentStrings[language]);

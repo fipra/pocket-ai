@@ -1,6 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chunks, retrieve, documentQuestion, recentContext, readDocument } from '../retrieval.js';
+import { chunks, retrieve, documentQuestion, recentContext, readDocument, documentsForChat } from '../retrieval.js';
+
+test('attachments stay with their chat, including after stored records are reloaded', () => {
+  const stored = JSON.parse(JSON.stringify([
+    {id:'a',chatId:'chat-a',name:'a.txt',chunks:['alpha']},
+    {id:'b',chatId:'chat-b',name:'b.txt',chunks:['beta']},
+    {id:'old',name:'old.txt',chunks:['legacy']}
+  ]));
+  assert.deepEqual(documentsForChat(stored, 'chat-a').map(doc => doc.id), ['a']);
+  assert.deepEqual(documentsForChat(stored, 'chat-b').map(doc => doc.id), ['b']);
+});
 
 test('chunks retain overlap and final text', () => {
   const text = 'a'.repeat(2400);
