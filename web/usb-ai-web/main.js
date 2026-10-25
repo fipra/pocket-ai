@@ -87,8 +87,13 @@ async function searchHub(skip = 0) {
   } catch (error) { $('hub-status').textContent = `${tr('error')}: ${error.message}`; }
   finally { hubSearching = false; renderSearch(); }
 }
-function render() { translate(); renderBrowserModelWarning(); renderChats(); renderMessages(); renderModels(); renderSearch(); renderDocs(); renderMemory(); $('model-trigger').textContent = `${models.find(model => model.id === selectedId)?.name || tr('chooseModel')} ⌄`; $('send').disabled = busy; $('stop').hidden = !controller; $('use-docs').classList.toggle('on', useDocs); $('use-docs').textContent = useDocs ? `▣ ${tr('useDocs')}` : `▤ ${tr('useDocs')}`; $('capability').textContent = `${navigator.gpu ? tr('capabilityGpu') : tr('capabilityWasm')} · ${navigator.onLine ? tr('private') : tr('offline')}`; $('folder-hint').textContent = tr(canSaveToFolder() ? 'folderHint' : 'folderFallbackHint'); }
-function setBusy(value) { busy = value; render(); }
+function render() { translate(); renderBrowserModelWarning(); renderChats(); renderMessages(); if ($('models-dialog').open) { renderModels(); renderSearch(); } if ($('docs-dialog').open) renderDocs(); if ($('memory-dialog').open) renderMemory(); $('model-trigger').textContent = `${models.find(model => model.id === selectedId)?.name || tr('chooseModel')} ⌄`; $('send').disabled = busy; $('stop').hidden = !controller; $('use-docs').classList.toggle('on', useDocs); $('use-docs').textContent = useDocs ? `▣ ${tr('useDocs')}` : `▤ ${tr('useDocs')}`; $('capability').textContent = `${navigator.gpu ? tr('capabilityGpu') : tr('capabilityWasm')} · ${navigator.onLine ? tr('private') : tr('offline')}`; $('folder-hint').textContent = tr(canSaveToFolder() ? 'folderHint' : 'folderFallbackHint'); }
+function setBusy(value) {
+  busy = value;
+  $('send').disabled = value;
+  $('stop').hidden = !controller;
+  if ($('models-dialog').open) { renderModels(); renderSearch(); }
+}
 async function run(callback) { try { await callback(); } catch (error) { if (error.name === 'AbortError') { $('model-progress').classList.remove('loading'); $('model-progress').textContent = ''; setStatus(); return; } console.error(error); const message = error.message === 'SMARTPHONE_DISABLED' ? tr('phoneUnavailable') : error.message === 'MODEL_FILE_PERMISSION' ? tr('folderPermission') : error.message === 'AUXILIARY_GGUF' ? tr('auxiliaryFile') : error.message === 'LOAD_TIMEOUT' ? tr('loadTimeout') : error.message === 'DOCUMENT_NO_TEXT' ? tr('documentNoText') : /QuotaExceeded|storage|no space/i.test(error.name + ' ' + error.message) ? tr('storageError') : error.message; setStatus(`${tr('error')}: ${message}`, true); $('model-progress').classList.remove('loading'); $('model-progress').textContent = `${tr('error')}: ${message}`; } finally { if (busy && !controller) setBusy(false); } }
 async function chooseModel(id) {
   if (busy && controller) return;
@@ -114,6 +119,7 @@ async function chooseModel(id) {
     clearInterval(elapsed);
     progress.classList.remove('loading');
     setBusy(false);
+    render();
   }
 }
 async function newChat() { const chat = { id: crypto.randomUUID(), title: tr('newChat').replace('＋ ',''), messages: [], updated: Date.now() }; chats.unshift(chat); activeId = chat.id; await db.put('chats', chat); await saveSettings(); render(); closeSidebar(); $('prompt').focus(); }
@@ -155,6 +161,8 @@ async function send() {
   $('prompt').value = '';
   controller = new AbortController();
   setBusy(true); setStatus(tr('generating'), false, true); renderMessages();
+  const body = $('messages').lastElementChild?.querySelector('.message-body');
+  const streamView = body && window.USB_AI_CODE_VIEW.streamRenderer(body, () => answer.text, language, $('thread'));
   try {
     if (loadedModelId() !== selectedId) {
       setStatus(tr('loading'), false, true);
@@ -163,8 +171,7 @@ async function send() {
     }
     await completeWithRetry(contexts, streamChat, token => {
       answer.text += token;
-      const body = $('messages').lastElementChild?.querySelector('.message-body');
-      if (body) { window.USB_AI_CODE_VIEW.render(body, answer.text, language); $('thread').scrollTop = $('thread').scrollHeight; }
+      streamView?.update();
     }, controller.signal, () => {
       answer.text = '';
       setStatus(tr('retryingAnswer'));
@@ -177,6 +184,7 @@ async function send() {
       setStatus(message, true);
     }
   } finally {
+    streamView?.flush();
     controller = undefined;
     chat.updated = Date.now();
     await db.put('chats', chat);
@@ -189,8 +197,8 @@ $('prompt').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey 
 $('stop').onclick = () => controller?.abort();
 $('new-chat').onclick = () => run(newChat);
 $('menu').onclick = () => $('sidebar').classList.toggle('open');
-for (const id of ['models-open','model-trigger']) $(id).onclick = () => { closeSidebar(); $('models-dialog').showModal(); };
-$('docs-open').onclick = () => { closeSidebar(); $('docs-dialog').showModal(); };
+for (const id of ['models-open','model-trigger']) $(id).onclick = () => { closeSidebar(); renderModels(); renderSearch(); $('models-dialog').showModal(); };
+$('docs-open').onclick = () => { closeSidebar(); renderDocs(); $('docs-dialog').showModal(); };
 $('memory-open').onclick = () => { closeSidebar(); renderMemory(); $('memory-dialog').showModal(); };
 $('memory-form').onsubmit = event => run(async () => { event.preventDefault(); const text = $('memory-text').value.replace(/\s+/g, ' ').trim(); if (!text || text.length > 500) return; if (!$('memory-id').value && memories.length >= 100) throw Error(tr('memoryFull')); const id = $('memory-id').value || crypto.randomUUID(); const note = { id, text, updated:Date.now() }; await db.put('memory', note); memories = memories.filter(item => item.id !== id); memories.push(note); $('memory-id').value = ''; $('memory-text').value = ''; renderMemory(); });
 $('memory-export').onclick = () => { const url = URL.createObjectURL(new Blob([memoryMarkdown(memories)], {type:'text/markdown'})); const link = node('a'); link.href = url; link.download = 'usb-ai-memory.md'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); };

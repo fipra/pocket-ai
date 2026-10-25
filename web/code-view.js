@@ -131,6 +131,15 @@
     dialog.showModal();
   }
   function render(container, text, language = 'en') {
+    if (!text?.includes('```')) {
+      const plain = text || '';
+      if (container.childNodes.length === 1 && container.firstChild.nodeType === 3) {
+        if (container.firstChild.data !== plain) container.firstChild.data = plain;
+      } else {
+        container.replaceChildren(document.createTextNode(plain));
+      }
+      return;
+    }
     const translations = labels[language] || labels.en;
     const parts = blocks(text || '');
     const app = appFiles(parts);
@@ -163,5 +172,17 @@
       container.append(shell);
     }
   }
-  window.USB_AI_CODE_VIEW = { render, blocks, appFiles, previewDocument, zipFiles };
+  function streamRenderer(container, readText, language, scrollContainer) {
+    let frame = null;
+    const paint = () => {
+      frame = null;
+      render(container, readText(), language);
+      if (scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    };
+    return {
+      update() { if (frame === null) frame = requestAnimationFrame(paint); },
+      flush() { if (frame !== null) cancelAnimationFrame(frame); paint(); }
+    };
+  }
+  window.USB_AI_CODE_VIEW = { render, streamRenderer, blocks, appFiles, previewDocument, zipFiles };
 })();

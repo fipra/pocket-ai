@@ -10,6 +10,33 @@ test('complete fenced code becomes a code block, partial streaming text stays vi
   assert.deepEqual(blocks('```html\n<h1>Still streaming').map(part => part.type), ['text']);
 });
 
+test('stream rendering coalesces tokens and flushes the final answer', () => {
+  const originalDocument = globalThis.document;
+  const originalAnimation = globalThis.requestAnimationFrame;
+  const originalCancel = globalThis.cancelAnimationFrame;
+  const frames = new Map();
+  let next = 1;
+  globalThis.document = { createTextNode: data => ({ nodeType:3, data }) };
+  globalThis.requestAnimationFrame = callback => { const id = next++; frames.set(id, callback); return id; };
+  globalThis.cancelAnimationFrame = id => frames.delete(id);
+  try {
+    const container = { childNodes:[], firstChild:null, replaceChildren(child) { this.childNodes = [child]; this.firstChild = child; } };
+    let answer = '';
+    const view = window.USB_AI_CODE_VIEW.streamRenderer(container, () => answer, 'en');
+    answer = 'C'; view.update(); answer = 'Ci'; view.update(); answer = 'Ciao'; view.update();
+    assert.equal(frames.size, 1);
+    frames.values().next().value(); frames.clear();
+    assert.equal(container.firstChild.data, 'Ciao');
+    answer = 'Ciao!'; view.update(); view.flush();
+    assert.equal(frames.size, 0);
+    assert.equal(container.firstChild.data, 'Ciao!');
+  } finally {
+    globalThis.document = originalDocument;
+    globalThis.requestAnimationFrame = originalAnimation;
+    globalThis.cancelAnimationFrame = originalCancel;
+  }
+});
+
 test('preview stays sandboxed with no external network access', () => {
   const { previewDocument } = window.USB_AI_CODE_VIEW;
   const parts = [

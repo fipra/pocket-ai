@@ -1,5 +1,3 @@
-import { Wllama, ModelManager, LoggerWithoutDebug } from '@wllama/wllama';
-import compatWorker from '@wllama/wllama-compat/wasm/wllama.js?raw';
 import { createSHA256 } from 'hash-wasm';
 import { CATALOG } from './catalog.js';
 import * as db from './storage.js';
@@ -9,17 +7,25 @@ import { isAuxiliaryGguf } from './hub.js';
 import { modelOptions, usesSafariCpu } from './browser-capability.js';
 
 const paths = { default: `${import.meta.env.BASE_URL}wasm/wllama.wasm` };
-const manager = new ModelManager();
+let managerPromise;
+async function modelManager() {
+  if (!managerPromise) managerPromise = import('@wllama/wllama').then(({ ModelManager }) => new ModelManager());
+  return managerPromise;
+}
 let engine;
 let loadedId;
 export const loadedModelId = () => loadedId;
 
-function instance() {
+async function instance() {
+  const [{ Wllama, LoggerWithoutDebug }, { default: compatWorker }] = await Promise.all([
+    import('@wllama/wllama'),
+    import('@wllama/wllama-compat/wasm/wllama.js?raw')
+  ]);
   const runtime = new Wllama(paths, { logger: LoggerWithoutDebug, allowOffline: true });
   runtime.setCompat({ wasm: `${import.meta.env.BASE_URL}wasm/wllama-compat.wasm`, worker: { code: compatWorker } });
   return runtime;
 }
-export async function cachedModels() { return manager.getModels(); }
+export async function cachedModels() { return (await modelManager()).getModels(); }
 export async function savedModels() { return db.all('models'); }
 
 async function hashBlob(blob, onProgress = () => {}) {
@@ -49,6 +55,7 @@ export async function downloadVerified(item, onProgress) {
     await db.put('models', { id:item.id, name:item.name, source:'directory', fileHandle:files[0].handle, fileHandles:files.map(file=>file.handle), folderHandle:files[0].folderHandle, folderLabel:files[0].folderLabel, filename:files[0].filename, url:item.url, size:item.size, shards:parts });
     return;
   }
+  const manager = await modelManager();
   await manager.downloadModel({ url: item.url }, { progressCallback: onProgress });
   const model = (await manager.getModels()).find(entry => entry.url === item.url || entry.source?.url === item.url);
   if (!model) throw Error('Downloaded model missing from browser cache');
@@ -81,7 +88,7 @@ export async function moveCachedToFolder(model, onProgress) {
     files.push(saved); completed += saved.size;
   }
   await db.put('models', { ...model, source:'directory', fileHandle:files[0].handle, fileHandles:files.map(file=>file.handle), folderHandle:files[0].folderHandle, folderLabel:files[0].folderLabel, filename:files[0].filename });
-  const cached = (await manager.getModels()).find(entry => entry.url === model.url || entry.source?.url === model.url);
+  const cached = (await (await modelManager()).getModels()).find(entry => entry.url === model.url || entry.source?.url === model.url);
   if (cached) await cached.remove();
 }
 
@@ -103,7 +110,7 @@ export async function deleteModel(id) {
   if (loadedId === id) await unload();
   const record = await db.get('models', id);
   if (record?.source === 'download') {
-    const models = await manager.getModels();
+    const models = await (await modelManager()).getModels();
     const target = models.find(model => model.url === record.url || model.source?.url === record.url);
     if (target) await target.remove();
   }
@@ -128,13 +135,13 @@ export async function loadModel(id) {
   }
   if (!record && !files) throw Error('Model unavailable');
   await unload();
-  const next = instance();
+  const next = await instance();
   const options = modelOptions();
   let timer;
   try {
     const loading = (async () => {
       if (files) return next.loadModel(files, options);
-      const models = await manager.getModels();
+      const models = await (await modelManager()).getModels();
       const cached = models.find(model => model.url === record.url || model.source?.url === record.url);
       if (!cached) throw Error('Cached model unavailable. Download it again.');
       return next.loadModel(cached, options);

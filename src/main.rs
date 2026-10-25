@@ -895,6 +895,11 @@ impl App {
                 "comfortableRamGb":model.comfortable_ram_gb,"license":model.license,"summary":model.summary,
                 "installed":installed.contains(&model.file),"fit":fit,"recommended":recommendation==Some(model.id.as_str())})
         }).collect::<Vec<_>>();
+        json!({"chats":self.db.chats,"memory":self.db.memory,"documents":self.db.documents.iter().map(|d|json!({"id":d.id,"name":d.name,"count":d.chunks.len()})).collect::<Vec<_>>(),
+            "models":installed,"ignoredModelFiles":self.ignored_model_files(),"modelsDir":self.models,"model":self.selected,"root":self.root,"language":self.language(),"catalog":catalog,"hardware":self.hardware,
+            "download":self.download_status()})
+    }
+    fn download_status(&self) -> Value {
         let (download_name, downloaded, total) = if let Some(model) = &self.downloading {
             let part = self
                 .root
@@ -910,13 +915,12 @@ impl App {
         } else {
             (None, 0, 0)
         };
-        json!({"chats":self.db.chats,"memory":self.db.memory,"documents":self.db.documents.iter().map(|d|json!({"id":d.id,"name":d.name,"count":d.chunks.len()})).collect::<Vec<_>>(),
-            "models":installed,"ignoredModelFiles":self.ignored_model_files(),"modelsDir":self.models,"model":self.selected,"root":self.root,"language":self.language(),"catalog":catalog,"hardware":self.hardware,
-            "download":{"active":self.downloading.is_some(),"error":self.download_error,"bytes":downloaded,"total":total,"name":download_name}})
+        json!({"active":self.downloading.is_some(),"error":self.download_error,"bytes":downloaded,"total":total,"name":download_name})
     }
     fn command(&mut self, action: &str, data: Value) -> Result<Value, String> {
         match action {
             "state" => Ok(self.state()),
+            "download-status" => Ok(self.download_status()),
             "set-language" => {
                 let value = data["language"].as_str().ok_or("Language missing")?;
                 if !["en", "it", "de", "fr", "es"].contains(&value) {
@@ -2216,7 +2220,7 @@ mod tests {
     }
     #[test]
     fn state_exposes_hardware_and_model_choices() {
-        let app = App {
+        let mut app = App {
             root: env::temp_dir().join(format!("usb-ai-state-{}", id())),
             models: env::temp_dir().join("usb-ai-no-models"),
             db: Workspace::default(),
@@ -2236,6 +2240,9 @@ mod tests {
         assert_eq!(state["catalog"].as_array().unwrap().len(), 5);
         assert_eq!(state["hardware"]["ram_gb"], 16.0);
         assert_eq!(state["catalog"][3]["recommended"], true);
+        let progress = app.command("download-status", json!({})).unwrap();
+        assert_eq!(progress["active"], false);
+        assert!(progress.get("chats").is_none());
     }
     #[test]
     fn selects_next_port_when_default_is_busy() {
