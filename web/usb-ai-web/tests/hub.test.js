@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { estimateMemory, isAuxiliaryGguf, modelFromEntry, modelsFromEntries, searchModels, searchTerm, splitSearchTerm } from '../hub.js';
+import { estimateMemory, isAuxiliaryGguf, isNonChatRepo, plausibleModelSize, modelFromEntry, modelsFromEntries, searchModels, searchTerm, splitSearchTerm } from '../hub.js';
 
 const hash = 'a'.repeat(64);
 test('only verified standalone GGUF files become results', () => {
@@ -22,6 +22,11 @@ test('only verified standalone GGUF files become results', () => {
   assert.equal(modelFromEntry('owner/repo', { path:'imatrix-dsv41-262144.gguf', size:789_000_000, lfs:{sha256:hash} }), null);
   assert.equal(modelFromEntry('owner/repo', { path:'imatrix/model-Q4_K_M.gguf', size:789_000_000, lfs:{sha256:hash} }), null);
   assert.equal(isAuxiliaryGguf('https://huggingface.co/owner/repo/resolve/main/imatrix/DeepSeek-V4.1-Flash-1017-imatrix.gguf'), true);
+  assert.equal(modelFromEntry('ggml-org/Qwen3.8-27B-GGUF', {path:'dflash-Qwen3.8-27B-Q4_0.gguf',size:1_094_000_000,lfs:{sha256:hash}}), null);
+  assert.equal(modelFromEntry('owner/Qwen3-TTS-12Hz-0.6B-GGUF', {path:'model-Q4_K_M.gguf',size:605_000_000,lfs:{sha256:hash}}), null);
+  assert.equal(isNonChatRepo('owner/Qwen3-TTS-12Hz-0.6B-GGUF'), true);
+  assert.equal(plausibleModelSize('owner/Qwen3.8-27B-GGUF', 'Qwen3.8-27B-Q4_0.gguf', 1_094_000_000), false);
+  assert.equal(plausibleModelSize('owner/Qwen3.5-4B-GGUF', 'Qwen3.5-4B-Q4_K_M.gguf', 1_949_000_000), true);
   const large = modelFromEntry('owner/repo', { path:'Qwen3.5-9B-Q4_K_M.gguf', size:5_627_044_256, lfs:{sha256:hash} });
   assert.equal(large.tooLargeForWeb, true);
 });
@@ -129,10 +134,27 @@ test('Web search hides a single GGUF too large for the browser to load', async (
 test('exact GGUF filename takes priority over similar quantizations', async () => {
   const fetcher = async url => ({ ok:true, json:async () => url.includes('/tree/')
     ? [
-      {path:'Qwen_Qwen3.5-9B-Q3_K_M.gguf',size:1_400_000_000,lfs:{sha256:hash}},
-      {path:'Qwen_Qwen3.5-9B-Q4_K_M.gguf',size:1_600_000_000,lfs:{sha256:'b'.repeat(64)}}
-    ] : [{id:'bartowski/Qwen_Qwen3.5-9B-GGUF',tags:[]}] });
-  const result = await searchModels('Qwen_Qwen3.5-9B-Q4_K_M.gguf', 0, fetcher);
+      {path:'Qwen_Qwen3.5-3B-Q3_K_M.gguf',size:1_400_000_000,lfs:{sha256:hash}},
+      {path:'Qwen_Qwen3.5-3B-Q4_K_M.gguf',size:1_600_000_000,lfs:{sha256:'b'.repeat(64)}}
+    ] : [{id:'bartowski/Qwen_Qwen3.5-3B-GGUF',tags:[]}] });
+  const result = await searchModels('Qwen_Qwen3.5-3B-Q4_K_M.gguf', 0, fetcher);
   assert.equal(result.models.length, 1);
-  assert.match(result.models[0].url, /Qwen_Qwen3\.5-9B-Q4_K_M\.gguf/);
+  assert.match(result.models[0].url, /Qwen_Qwen3\.5-3B-Q4_K_M\.gguf/);
+});
+
+test('search hides Qwen auxiliary weights and speech models while retaining a small chat model', async () => {
+  const repos = [
+    {id:'ggml-org/Qwen3.8-27B-GGUF',tags:['license:apache-2.0']},
+    {id:'owner/Qwen3-TTS-12Hz-0.6B-GGUF',tags:['license:apache-2.0']},
+    {id:'owner/Qwen3.5-4B-GGUF',tags:['license:apache-2.0']}
+  ];
+  const fetcher = async url => ({ok:true,json:async () => url.includes('/tree/')
+    ? url.includes('Qwen3.8-27B')
+      ? [{path:'dflash-Qwen3.8-27B-Q4_0.gguf',size:1_094_000_000,lfs:{sha256:hash}},
+         {path:'Qwen3.8-27B-Q4_K_M.gguf',size:19_000_000_000,lfs:{sha256:'b'.repeat(64)}}]
+      : [{path:'Qwen3.5-4B-Q4_K_M.gguf',size:1_949_000_000,lfs:{sha256:'c'.repeat(64)}}]
+    : repos});
+  const result = await searchModels('qwen', 0, fetcher);
+  assert.deepEqual(result.models.map(model => model.name), ['Qwen3.5 4B']);
+  assert.equal(result.models[0].filename, 'Qwen3.5-4B-Q4_K_M.gguf');
 });

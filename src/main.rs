@@ -139,6 +139,45 @@ fn valid_repo(repo: &str) -> bool {
         })
 }
 
+fn non_chat_repo(repo: &str) -> bool {
+    repo.rsplit('/')
+        .next()
+        .unwrap_or(repo)
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .any(|part| {
+            matches!(
+                part.to_ascii_lowercase().as_str(),
+                "tts"
+                    | "asr"
+                    | "speech"
+                    | "audio"
+                    | "music"
+                    | "vocoder"
+                    | "vision"
+                    | "image"
+                    | "video"
+                    | "ocr"
+                    | "embedding"
+                    | "embedder"
+                    | "rerank"
+                    | "reward"
+                    | "vl"
+                    | "omni"
+            )
+        })
+}
+
+fn plausible_model_size(repo: &str, filename: &str, size: u64) -> bool {
+    let names = [repo.rsplit('/').next().unwrap_or(repo), filename];
+    let billions = names
+        .iter()
+        .flat_map(|name| name.split(|c: char| !c.is_ascii_alphanumeric() && c != '.'))
+        .filter_map(|part| part.strip_suffix('B').or_else(|| part.strip_suffix('b')))
+        .filter_map(|number| number.parse::<f64>().ok())
+        .fold(0.0_f64, f64::max);
+    billions == 0.0 || size as f64 >= billions * 220_000_000.0
+}
+
 fn valid_hub_path(path: &str) -> bool {
     !path.is_empty()
         && path.len() <= 220
@@ -171,11 +210,16 @@ fn valid_hub_path(path: &str) -> bool {
                 "siglip",
                 "clip-vision",
                 "mtp",
+                "dflash",
                 "draft",
                 "imatrix",
                 "importance-matrix",
                 "importance_matrix",
                 "calibration",
+                "vocoder",
+                "speech",
+                "tts",
+                "asr",
             ]
             .iter()
             .any(|part| name.contains(part))
@@ -183,7 +227,7 @@ fn valid_hub_path(path: &str) -> bool {
 }
 
 fn hub_model(repo: &str, path: &str, entry: &Value, license: &str) -> Option<ModelDownload> {
-    if !valid_repo(repo) || !valid_hub_path(path) {
+    if !valid_repo(repo) || non_chat_repo(repo) || !valid_hub_path(path) {
         return None;
     }
     let size = entry["size"].as_u64()?;
@@ -195,6 +239,9 @@ fn hub_model(repo: &str, path: &str, entry: &Value, license: &str) -> Option<Mod
         return None;
     }
     let basename = path.rsplit('/').next()?;
+    if !plausible_model_size(repo, basename, size) {
+        return None;
+    }
     let file = format!("hf-{}-{}", &hash[..12], basename);
     let size_gib = size as f64 / 1_073_741_824.0;
     Some(ModelDownload {
@@ -290,7 +337,7 @@ fn search_hub(query: &str, skip: u64) -> Result<Value, String> {
         let Some(name) = repo["id"].as_str() else {
             continue;
         };
-        if !valid_repo(name) || repo["gated"].as_bool() == Some(true) {
+        if !valid_repo(name) || non_chat_repo(name) || repo["gated"].as_bool() == Some(true) {
             continue;
         }
         let license = repo["tags"]
@@ -335,7 +382,7 @@ fn search_hub(query: &str, skip: u64) -> Result<Value, String> {
     models.sort_by(|a, b| a.download_gb.total_cmp(&b.download_gb));
     Ok(
         json!({"nextSkip":next_skip,"models": models.iter().map(|model| json!({
-        "id":model.id,"name":model.name,"file":model.file,"sourceUrl":model.source_url,
+        "id":model.id,"name":model.name,"file":model.file,"filename":model.id.rsplit(':').next().unwrap_or("").rsplit('/').next().unwrap_or(""),"sourceUrl":model.source_url,
         "downloadGb":model.download_gb,"minimumRamGb":model.minimum_ram_gb,
         "comfortableRamGb":model.comfortable_ram_gb,"license":model.license
     })).collect::<Vec<_>>() }),
@@ -2009,6 +2056,31 @@ mod tests {
             "x"
         )
         .is_none());
+        assert!(hub_model(
+            "ggml-org/Qwen3.8-27B-GGUF",
+            "dflash-Qwen3.8-27B-Q4_0.gguf",
+            &json!({"size": 1_094_000_000_u64, "lfs": {"sha256": "a".repeat(64)}}),
+            "x"
+        )
+        .is_none());
+        assert!(non_chat_repo("owner/Qwen3-TTS-12Hz-0.6B-GGUF"));
+        assert!(hub_model(
+            "owner/Qwen3-TTS-12Hz-0.6B-GGUF",
+            "model-Q4_K_M.gguf",
+            &entry,
+            "x"
+        )
+        .is_none());
+        assert!(!plausible_model_size(
+            "ggml-org/Qwen3.8-27B-GGUF",
+            "Qwen3.8-27B-Q4_0.gguf",
+            1_094_000_000
+        ));
+        assert!(plausible_model_size(
+            "owner/Qwen3.5-4B-GGUF",
+            "Qwen3.5-4B-Q4_K_M.gguf",
+            1_949_000_000
+        ));
         assert!(hub_model(
             "Example/Model-GGUF",
             "tiny-fragment.gguf",

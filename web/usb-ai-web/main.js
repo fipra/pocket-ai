@@ -69,6 +69,7 @@ function renderSearch() {
   for (const item of hubResults) {
     const card = node('div', undefined, 'model-card');
     const info = node('div'); info.append(node('strong', item.name), node('small', `${(item.size/1e6).toFixed(0)} MB · ${item.license}`));
+    if (item.filename) info.append(node('small', item.filename));
     const memory = estimateMemory(item.size);
     info.append(node('small', tr('memoryEstimate').replace('{minimum}', memory.minimum).replace('{recommended}', memory.recommended)));
     appendModelAdvice(info, item, browserHardware());

@@ -4,10 +4,25 @@ const HASH = /^[a-f0-9]{64}$/;
 const WEB_FILE_LIMIT = 2_000_000_000;
 const MIN_MODEL_SIZE = 32_000_000;
 const SEARCH_PAGE_SIZE = 24;
-const AUXILIARY = /(?:mmproj|adapter|lora|vocab|tokenizer|embedding|embedder|vision|audio|image[-_.]?encoder|projector|preprocessor|siglip|mtp|draft|imatrix|importance[-_.]?matrix|calibration)/i;
+const AUXILIARY = /(?:mmproj|adapter|lora|vocab|tokenizer|embedding|embedder|vision|audio|image[-_.]?encoder|projector|preprocessor|siglip|mtp|dflash|draft|imatrix|importance[-_.]?matrix|calibration|vocoder|speech|tts|asr)/i;
+const NON_CHAT_REPO = /(?:^|[-_.])(?:tts|asr|speech|audio|music|vocoder|vision|image|video|ocr|embedding|embedder|rerank|reward|vl|omni)(?:$|[-_.])/i;
 
 export function isAuxiliaryGguf(filename) {
   return String(filename).split(/[/?#]/).some(part => AUXILIARY.test(part));
+}
+
+export function isNonChatRepo(repo) {
+  return NON_CHAT_REPO.test(String(repo).split('/').at(-1));
+}
+
+export function plausibleModelSize(repo, filename, size) {
+  const modelName = `${String(repo).split('/').at(-1)}/${filename}`;
+  const declared = [...modelName.matchAll(/(?:^|[^a-z0-9])(\d+(?:\.\d+)?)B(?=$|[^a-z0-9])/gi)]
+    .map(match => Number(match[1]));
+  if (!declared.length) return true;
+  // Even very aggressive text-model quantization needs roughly 0.22 bytes per parameter.
+  // This deliberately loose floor catches small auxiliary files mislabeled as the full model.
+  return size >= Math.max(...declared) * 1_000_000_000 * 0.22;
 }
 
 export function estimateMemory(size) {
@@ -29,15 +44,15 @@ export function splitSearchTerm(query) {
 }
 
 export function modelFromEntry(repo, entry, license = 'see source', allowShard = false) {
-  if (!REPO.test(repo) || typeof entry?.path !== 'string') return null;
+  if (!REPO.test(repo) || isNonChatRepo(repo) || typeof entry?.path !== 'string') return null;
   const parts = entry.path.split('/');
   const name = parts.at(-1);
   if (!parts.every(part => PART.test(part) && part !== '.' && part !== '..') || !/\.gguf$/i.test(name) || isAuxiliaryGguf(entry.path) || (!allowShard && /-of-\d+\.gguf$/i.test(name))) return null;
   const size = entry.size;
   const sha256 = String(entry.lfs?.sha256 || entry.lfs?.oid || '').toLowerCase();
-  if (!Number.isSafeInteger(size) || size < MIN_MODEL_SIZE || !HASH.test(sha256)) return null;
+  if (!Number.isSafeInteger(size) || size < MIN_MODEL_SIZE || !HASH.test(sha256) || (!allowShard && !plausibleModelSize(repo, name, size))) return null;
   const url = `https://huggingface.co/${repo}/resolve/main/${parts.map(encodeURIComponent).join('/')}`;
-  return { id: `hf:${sha256}`, name: `${repo} / ${name}`, size, sha256, url, tooLargeForWeb: size > WEB_FILE_LIMIT,
+  return { id: `hf:${sha256}`, name: `${repo} / ${name}`, filename: name, size, sha256, url, tooLargeForWeb: size > WEB_FILE_LIMIT,
     source: `https://huggingface.co/${repo}/blob/main/${parts.map(encodeURIComponent).join('/')}`, license };
 }
 
@@ -58,7 +73,9 @@ export function modelsFromEntries(repo, entries, license = 'see source') {
     const shards = Array.from({length:group.count}, (_,i) => modelFromEntry(repo, group.entries.get(i+1), license, true));
     if (shards.some(shard => !shard || shard.tooLargeForWeb)) continue;
     const parts = shards;
-    models.push({id:`hf-split:${parts[0].sha256}`,name:`${repo} / ${group.name}.gguf`,size:parts.reduce((sum,part)=>sum+part.size,0),sha256:parts[0].sha256,url:parts[0].url,source:parts[0].source,license,tooLargeForWeb:false,shards:parts});
+    const total = parts.reduce((sum,part)=>sum+part.size,0);
+    if (!plausibleModelSize(repo, group.name, total)) continue;
+    models.push({id:`hf-split:${parts[0].sha256}`,name:`${repo} / ${group.name}.gguf`,filename:`${group.name}.gguf`,size:total,sha256:parts[0].sha256,url:parts[0].url,source:parts[0].source,license,tooLargeForWeb:false,shards:parts});
   }
   return models;
 }
@@ -117,7 +134,7 @@ export async function searchModels(query, skip = 0, fetcher = fetch) {
   const candidates = [];
   for (let start = 0; start < repos.length; start += 6) {
     const batch = await Promise.all(repos.slice(start, start + 6).map(async repo => {
-      if (!REPO.test(repo.id || '') || repo.gated) return [];
+      if (!REPO.test(repo.id || '') || isNonChatRepo(repo.id) || repo.gated) return [];
       try {
         const tree = await fetcher(`https://huggingface.co/api/models/${repo.id}/tree/main?recursive=true`);
         if (!tree.ok) return [];
