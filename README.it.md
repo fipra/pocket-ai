@@ -26,6 +26,7 @@ modelli di terzi mantengono le rispettive licenze.
 ## Funzioni
 
 - Chat con un modello GGUF locale.
+- Quantizzazione locale dei GGUF in Q8_0, Q4_K_M, Q3_K_M o Q2_K nelle versioni Mac e Windows.
 - Importazione di PDF testuali, TXT e Markdown (massimo 20 MB per file).
 - Ricerca per parole chiave nei documenti, con estratti e numeri di pagina per i PDF.
 - Conversazioni persistenti ed esportazione Markdown.
@@ -35,9 +36,11 @@ modelli di terzi mantengono le rispettive licenze.
 
 L'interfaccia si apre normalmente su `http://127.0.0.1:48157`. Se la porta è occupata, l'app sceglie automaticamente una porta libera tra `48158` e `48167` e apre l'indirizzo corretto nel browser. Il server ascolta solo sul computer locale. I dati sono salvati senza cifratura in `PocketAI-data/`.
 
+In **Modelli → Quantizza modello**, scegli un GGUF e il livello desiderato. L'app verifica una stima della RAM e lo spazio libero, mostra i byte scritti e permette di annullare. L'originale resta intatto; il risultato viene aggiunto alla libreria con un suffisso come `-Q3_K_M.gguf`. Una seconda quantizzazione può peggiorare molto la qualità e richiede una conferma esplicita. Per risultati migliori usa un originale F16/BF16/F32. I vecchi ZIP delle release potrebbero non includere ancora `llama-quantize`: crea il pacchetto dal sorgente aggiornato o scarica una nuova release che lo include. La Web autonoma offre un link alle versioni locali.
+
 ## Avvio dal sorgente
 
-Servono Rust, `llama-server` e `llama-cli` di llama.cpp e, per leggere i PDF, `pdftotext` di Poppler. Su macOS puoi installare llama.cpp e Poppler con `brew install llama.cpp poppler`. Poi esegui:
+Servono Rust, `llama-server`, `llama-cli` e `llama-quantize` di llama.cpp e, per leggere i PDF, `pdftotext` di Poppler. Su macOS puoi installare llama.cpp e Poppler con `brew install llama.cpp poppler`. Poi esegui:
 
 ```bash
 cargo run --release
@@ -54,7 +57,7 @@ Il browser si apre automaticamente. Apri **Scegli un modello** per vedere RAM to
 
 Queste soglie sono stime prudenti basate sulla **RAM totale**, non una misura della memoria libera. Velocità e capacità effettive dipendono anche da GPU, contesto e programmi aperti. Il catalogo e le fonti dei file sono in [models/catalog.json](models/catalog.json).
 
-Su Windows, installa Rust, `llama-server.exe`, `llama-cli.exe` e `pdftotext.exe` nel PATH, poi esegui `cargo run --release` da PowerShell.
+Su Windows, installa Rust, `llama-server.exe`, `llama-cli.exe`, `llama-quantize.exe` e `pdftotext.exe` nel PATH, poi esegui `cargo run --release` da PowerShell.
 
 Questa repo non contiene pesi GGUF nel controllo versione. Una copia locale del modello rimane in `models/` e viene inclusa nel pacchetto portabile. Usa un modello *instruct* compatibile e controlla la sua licenza prima di distribuirlo.
 
@@ -66,13 +69,13 @@ Questa repo non contiene pesi GGUF nel controllo versione. Una copia locale del 
 
 **Windows x64:** scarica lo ZIP **USB-AI-Rust-Windows-x64.zip** dalla [nuova release Windows portatile](https://github.com/fipra/usb-ai/releases/tag/rust-windows-stop-2026-10-24), estrai **tutta la cartella** e fai doppio clic su `Avvia USB AI Rust.cmd`. Non servono Rust, Cargo, PowerShell o installazioni aggiuntive sul PC di destinazione. Al primo avvio scegli un modello e scaricalo dall'interfaccia; poi puoi usare la chiavetta offline. I dati e il modello scaricato restano nella cartella portatile. La build è per Windows x64 ed è da collaudare su un PC Windows reale.
 
-Per ricreare il pacchetto da sorgente su Windows, lo script `scripts/package-windows.ps1` richiede Rust, `llama-server.exe`, `llama-cli.exe` e `pdftotext.exe`; la release sopra è generata automaticamente da GitHub Actions.
+Per ricreare il pacchetto da sorgente su Windows, lo script `scripts/package-windows.ps1` richiede Rust, `llama-server.exe`, `llama-cli.exe`, `llama-quantize.exe` e `pdftotext.exe`; la release sopra è generata automaticamente da GitHub Actions.
 
 ## Dati e requisiti
 
 - `POCKET_AI_HOME` sceglie una cartella dati alternativa.
 - `USB_AI_DIR` sceglie la cartella base che contiene `models/` e, per impostazione predefinita, `PocketAI-data/`.
-- `LLAMA_SERVER` e `PDFTOTEXT` indicano eseguibili esterni alternativi.
+- `LLAMA_SERVER`, `LLAMA_QUANTIZE` e `PDFTOTEXT` indicano eseguibili esterni alternativi.
 - Alla prima risposta l'app avvia `llama-server`; le risposte successive riutilizzano il modello caricato fino al cambio GGUF o alla chiusura di USB AI. La risposta appare mentre viene generata. Il pulsante Stop interrompe la risposta corrente e conserva il testo già prodotto, così puoi inviare un altro prompt.
 - I PDF scansionati richiedono OCR esterno; la ricerca nei documenti è lessicale, non semantica.
 

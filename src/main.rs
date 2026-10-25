@@ -7,12 +7,13 @@ use std::{
     process::{Child, Command, Stdio},
     sync::{
         atomic::{AtomicBool, Ordering},
-        mpsc, Arc, Mutex,
+        mpsc, Arc, Mutex, OnceLock,
     },
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tiny_http::{Header, Method, Response, Server, StatusCode};
+mod quantize;
 
 const INDEX: &str = include_str!("../web/index.html");
 const MODEL_CATALOG: &str = include_str!("../models/catalog.json");
@@ -593,6 +594,7 @@ struct App {
     downloading: Option<ModelDownload>,
     download_error: Option<String>,
     inference: Option<InferenceServer>,
+    quantization: Option<Arc<Mutex<quantize::Job>>>,
 }
 
 struct InferenceServer {
@@ -1105,7 +1107,7 @@ impl App {
         }).collect::<Vec<_>>();
         json!({"chats":self.db.chats,"memory":self.db.memory,"documents":self.db.documents.iter().map(|d|json!({"id":d.id,"name":d.name,"count":d.chunks.len(),"chatId":d.chat_id})).collect::<Vec<_>>(),
             "models":installed,"modelDetails":model_details,"ignoredModelFiles":self.ignored_model_files(),"modelsDir":self.models,"model":self.selected,"root":self.root,"language":self.language(),"catalog":catalog,"hardware":self.hardware,
-            "download":self.download_status()})
+            "download":self.download_status(),"quantizeAvailable":quantize_available(),"quantize":self.quantization.as_ref().map(|job|job.lock().unwrap().status())})
     }
     fn download_status(&self) -> Value {
         let (download_name, downloaded, total) = if let Some(model) = &self.downloading {
@@ -1133,6 +1135,49 @@ impl App {
                 None => Ok(json!({"cancelled":true})),
             },
             "download-status" => Ok(self.download_status()),
+            "quantize-status" => Ok(self
+                .quantization
+                .as_ref()
+                .map(|job| job.lock().unwrap().status())
+                .unwrap_or(Value::Null)),
+            "cancel-quantize" => {
+                if let Some(job) = &self.quantization {
+                    job.lock().unwrap().cancel();
+                }
+                Ok(self
+                    .quantization
+                    .as_ref()
+                    .map(|job| job.lock().unwrap().status())
+                    .unwrap_or(Value::Null))
+            }
+            "start-quantize" => {
+                if self
+                    .quantization
+                    .as_ref()
+                    .is_some_and(|job| job.lock().unwrap().active())
+                {
+                    return Err("A conversion is already running".into());
+                }
+                let name = data["name"].as_str().ok_or("Choose a GGUF model")?;
+                let kind = data["kind"].as_str().ok_or("Choose a quantization")?;
+                let source = self.model_path(name)?;
+                let target = quantize::target_name(name, kind)?;
+                if self.model_path(&target).is_ok() {
+                    return Err("Output model already exists".into());
+                }
+                let tool = tool_path("LLAMA_QUANTIZE", "llama-quantize");
+                let job = quantize::start(
+                    name,
+                    &source,
+                    &self.models,
+                    kind,
+                    data["allowRequantize"].as_bool() == Some(true),
+                    self.hardware.ram_gb,
+                    &tool,
+                )?;
+                self.quantization = Some(job);
+                Ok(self.state())
+            }
             "set-language" => {
                 let value = data["language"].as_str().ok_or("Language missing")?;
                 if !["en", "it", "de", "fr", "es"].contains(&value) {
@@ -1801,6 +1846,18 @@ fn tool_path(override_name: &str, name: &str) -> PathBuf {
     PathBuf::from(name)
 }
 
+fn quantize_available() -> bool {
+    static AVAILABLE: OnceLock<bool> = OnceLock::new();
+    *AVAILABLE.get_or_init(|| {
+        Command::new(tool_path("LLAMA_QUANTIZE", "llama-quantize"))
+            .arg("--help")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok()
+    })
+}
+
 fn open_browser(port: u16) {
     let url = format!("http://127.0.0.1:{port}");
     #[cfg(target_os = "macos")]
@@ -1868,6 +1925,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         downloading: None,
         download_error: None,
         inference: None,
+        quantization: None,
     };
     let installed = app_state.models();
     let starter = "Llama-3.2-3B-Instruct-IQ3_M.gguf";
@@ -2284,6 +2342,7 @@ mod tests {
             downloading: None,
             download_error: None,
             inference: None,
+            quantization: None,
         };
         let state = app.state();
         assert!(state["models"]
@@ -2324,6 +2383,7 @@ mod tests {
             downloading: None,
             download_error: None,
             inference: None,
+            quantization: None,
         };
         assert!(app.register_external_model(&invalid).is_err());
         assert!(app.db.external_models.is_empty());
@@ -2410,6 +2470,7 @@ mod tests {
             downloading: None,
             download_error: None,
             inference: None,
+            quantization: None,
         };
         assert_eq!(app.state()["language"], "en");
         assert_eq!(
@@ -2504,6 +2565,7 @@ mod tests {
             downloading: None,
             download_error: None,
             inference: None,
+            quantization: None,
         };
         let chat_id = app.command("new-chat", json!({})).unwrap()["id"]
             .as_str()
@@ -2671,6 +2733,7 @@ mod tests {
             downloading: None,
             download_error: None,
             inference: None,
+            quantization: None,
         };
         let state = app.state();
         assert_eq!(state["catalog"].as_array().unwrap().len(), 5);

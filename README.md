@@ -27,6 +27,7 @@ have their own licenses.
 ## Features
 
 - Chat with a local GGUF model.
+- Quantize a local GGUF to Q8_0, Q4_K_M, Q3_K_M, or Q2_K in the Mac and Windows app using bundled `llama-quantize`.
 - Import text PDFs, TXT, and Markdown files (up to 20 MB each).
 - Search documents by keyword, with excerpts and PDF page numbers.
 - Save conversations and export them as Markdown.
@@ -34,6 +35,8 @@ have their own licenses.
 - Use the interface in English by default, or select Italian, German, French, or Spanish in the sidebar. The saved choice also guides the language of model responses unless you ask for another language.
 
 The app normally opens at `http://127.0.0.1:48157`. If that port is busy, it picks a free port through `48167` and opens the right address. The server listens only on your computer. Data is stored **without encryption** in `PocketAI-data/`.
+
+Open **Models → Quantize Model** in a build that includes `llama-quantize`. Choose a local GGUF and a target precision. The app estimates RAM and free disk space before starting, writes progress in the background, and lets you cancel. It keeps the source file and adds the completed result to the model library with a suffix such as `-Q3_K_M.gguf`. Quantizing an already quantized model can significantly reduce quality; it requires explicit confirmation. Prefer an F16/BF16/F32 source. Older release ZIPs may not yet contain `llama-quantize`; build the current source or use a newly published package that includes it. The standalone Web app links to the desktop releases for this feature.
 
 ## Portable USB packages
 

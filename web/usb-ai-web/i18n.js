@@ -172,3 +172,12 @@ const modelGuidanceStrings = {
   }
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], modelGuidanceStrings[language]);
+
+const desktopQuantizeStrings = {
+  en: {desktopQuantizeNote:'Model quantization requires the Mac or Windows app and llama-quantize.',desktopDownloadLink:'Download desktop versions'},
+  it: {desktopQuantizeNote:'Per quantizzare i modelli servono l’app per Mac o Windows e llama-quantize.',desktopDownloadLink:'Scarica le versioni locali'},
+  de: {desktopQuantizeNote:'Zum Quantisieren von Modellen werden die Mac- oder Windows-App und llama-quantize benötigt.',desktopDownloadLink:'Desktop-Versionen herunterladen'},
+  fr: {desktopQuantizeNote:'La quantification nécessite l’application Mac ou Windows et llama-quantize.',desktopDownloadLink:'Télécharger les versions locales'},
+  es: {desktopQuantizeNote:'La cuantización requiere la aplicación para Mac o Windows y llama-quantize.',desktopDownloadLink:'Descargar versiones locales'}
+};
+for (const language of Object.keys(desktopQuantizeStrings)) Object.assign(translations[language], desktopQuantizeStrings[language]);

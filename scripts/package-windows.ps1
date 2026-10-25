@@ -6,6 +6,7 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'Rust build failed' }
   $llama = (Get-Command llama-cli.exe -ErrorAction Stop).Source
   $llamaServer = (Get-Command llama-server.exe -ErrorAction Stop).Source
+  $llamaQuantize = (Get-Command llama-quantize.exe -ErrorAction Stop).Source
   $pdf = (Get-Command pdftotext.exe -ErrorAction Stop).Source
   $out = Join-Path $root 'release\USB-AI-Rust-Windows-x64'
   $bin = Join-Path $out 'bin'
@@ -24,8 +25,9 @@ try {
   Copy-Item (Join-Path $root 'target\release\usb-ai-rust.exe') $bin
   Copy-Item $llama $bin
   Copy-Item $llamaServer $bin
+  Copy-Item $llamaQuantize $bin
   Copy-Item $pdf $bin
-  foreach ($toolDir in @((Split-Path $llama), (Split-Path $llamaServer), (Split-Path $pdf)) | Select-Object -Unique) {
+  foreach ($toolDir in @((Split-Path $llama), (Split-Path $llamaServer), (Split-Path $llamaQuantize), (Split-Path $pdf)) | Select-Object -Unique) {
     Get-ChildItem $toolDir -Filter '*.dll' | Copy-Item -Destination $bin -Force
   }
   Get-ChildItem (Join-Path $root 'models') -Filter '*.gguf' | Copy-Item -Destination (Join-Path $out 'models')
@@ -40,7 +42,7 @@ try {
   @'
 Double-click Avvia USB AI Rust.cmd. The browser opens at 127.0.0.1.
 Keep the whole folder on the USB drive. Models and data stay here.
-Build this package on a Windows x64 computer with Rust, llama-server, llama-cli and pdftotext.
+Build this package on a Windows x64 computer with Rust, llama-server, llama-cli, llama-quantize and pdftotext.
 '@ | Set-Content (Join-Path $out 'README.txt')
   Write-Host "Portable folder ready: $out"
 } finally { Pop-Location }

@@ -53,6 +53,7 @@ jobs:
           test -x "$folder/bin/usb-ai-rust"
           test -x "$folder/bin/llama-cli"
           test -x "$folder/bin/llama-server"
+          test -x "$folder/bin/llama-quantize"
           test -x "$folder/bin/pdftotext"
           test -f "$folder/models/catalog.json"
           test -f "$folder/LICENSE"
@@ -65,6 +66,7 @@ jobs:
           PY
           "$folder/bin/llama-cli" --help >/dev/null 2>&1
           "$folder/bin/llama-server" --help >/dev/null 2>&1
+          "$folder/bin/llama-quantize" --help >/dev/null 2>&1
           python3 - "$folder" <<'PY'
           from pathlib import Path
           import subprocess, sys
