@@ -508,6 +508,11 @@ struct MemoryNote {
     id: String,
     text: String,
 }
+#[derive(Clone, Serialize, Deserialize)]
+struct ExternalModel {
+    name: String,
+    path: PathBuf,
+}
 #[derive(Default, Serialize, Deserialize)]
 struct Workspace {
     #[serde(default)]
@@ -518,6 +523,35 @@ struct Workspace {
     memory: Vec<MemoryNote>,
     #[serde(default)]
     language: String,
+    #[serde(default)]
+    external_models: Vec<ExternalModel>,
+}
+
+fn choose_existing_model_file() -> Result<Option<PathBuf>, String> {
+    #[cfg(target_os = "macos")]
+    let output = Command::new("osascript")
+        .args([
+            "-e",
+            "POSIX path of (choose file with prompt \"Choose a GGUF model\" of type {\"gguf\"})",
+        ])
+        .output()
+        .map_err(|e| e.to_string())?;
+    #[cfg(target_os = "windows")]
+    let output = Command::new("powershell.exe")
+        .args(["-NoProfile", "-STA", "-Command", "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); Add-Type -AssemblyName System.Windows.Forms; $picker = New-Object System.Windows.Forms.OpenFileDialog; $picker.Filter = 'GGUF models (*.gguf)|*.gguf'; $picker.CheckFileExists = $true; if ($picker.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $picker.FileName }"])
+        .output()
+        .map_err(|e| e.to_string())?;
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    return Err("System file picker unavailable".into());
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        if !output.status.success() {
+            return Ok(None);
+        }
+        let raw = String::from_utf8(output.stdout).map_err(|e| e.to_string())?;
+        let path = raw.trim_end_matches(['\r', '\n']);
+        Ok((!path.is_empty()).then(|| PathBuf::from(path)))
+    }
 }
 
 fn memory_context(question: &str, notes: &[MemoryNote]) -> String {
@@ -909,6 +943,11 @@ impl App {
                 }
             }
         }
+        for model in &self.db.external_models {
+            if model.path.is_file() && !out.contains(&model.name) {
+                out.push(model.name.clone());
+            }
+        }
         out
     }
     fn ignored_model_files(&self) -> Vec<String> {
@@ -935,7 +974,7 @@ impl App {
     fn model_path(&self, name: &str) -> Result<PathBuf, String> {
         if name.contains('/')
             || name.contains('\\')
-            || !name.ends_with(".gguf")
+            || !name.to_ascii_lowercase().ends_with(".gguf")
             || name.to_ascii_lowercase().contains("mmproj")
         {
             return Err("Nome modello non valido".into());
@@ -946,7 +985,49 @@ impl App {
                 return Ok(path);
             }
         }
+        if let Some(model) = self
+            .db
+            .external_models
+            .iter()
+            .find(|model| model.name == name)
+        {
+            if model.path.is_file() {
+                return Ok(model.path.clone());
+            }
+        }
         Err("Modello non trovato".into())
+    }
+    fn register_external_model(&mut self, path: &Path) -> Result<Value, String> {
+        let path = fs::canonicalize(path).map_err(|e| e.to_string())?;
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or("Invalid model name")?
+            .to_owned();
+        if !name.to_ascii_lowercase().ends_with(".gguf")
+            || name.to_ascii_lowercase().contains("mmproj")
+            || !path.is_file()
+        {
+            return Err("Select a GGUF chat model".into());
+        }
+        if self.models.join(&name).is_file() || self.root.join("models").join(&name).is_file() {
+            return Err("A model with this filename is already in the app models folder".into());
+        }
+        let mut file = fs::File::open(&path).map_err(|e| e.to_string())?;
+        let mut head = [0; 4];
+        file.read_exact(&mut head).map_err(|e| e.to_string())?;
+        if &head != b"GGUF" {
+            return Err("Invalid GGUF file".into());
+        }
+        self.db.external_models.retain(|model| model.name != name);
+        self.db.external_models.push(ExternalModel {
+            name: name.clone(),
+            path,
+        });
+        self.inference = None;
+        self.selected = Some(name);
+        self.save()?;
+        Ok(self.state())
     }
     fn state(&self) -> Value {
         let installed = self.models();
@@ -991,6 +1072,10 @@ impl App {
     fn command(&mut self, action: &str, data: Value) -> Result<Value, String> {
         match action {
             "state" => Ok(self.state()),
+            "choose-local-model" => match choose_existing_model_file()? {
+                Some(path) => self.register_external_model(&path),
+                None => Ok(json!({"cancelled":true})),
+            },
             "download-status" => Ok(self.download_status()),
             "set-language" => {
                 let value = data["language"].as_str().ok_or("Language missing")?;
@@ -2143,6 +2228,49 @@ mod tests {
         assert_eq!(state["modelsDir"], json!(models));
         assert_eq!(state["modelDetails"][0]["name"], "Bonsai-Q2_0.gguf");
         assert_eq!(state["modelDetails"][0]["sizeBytes"], 4);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn existing_external_model_is_validated_and_persists_without_copying() {
+        let root = env::temp_dir().join(format!("usb-ai-external-model-{}", id()));
+        let models = root.join("models");
+        let elsewhere = root.join("elsewhere");
+        fs::create_dir_all(&models).unwrap();
+        fs::create_dir_all(&elsewhere).unwrap();
+        let model = elsewhere.join("Llama-3.2-3B-Instruct-IQ3_M.gguf");
+        let invalid = elsewhere.join("invalid.gguf");
+        fs::write(&model, b"GGUFtest").unwrap();
+        fs::write(&invalid, b"bad!").unwrap();
+        let mut app = App {
+            root: root.clone(),
+            models: models.clone(),
+            db: Workspace::default(),
+            selected: None,
+            catalog: model_catalog(),
+            hardware: detect_hardware(),
+            downloading: None,
+            download_error: None,
+            inference: None,
+        };
+        assert!(app.register_external_model(&invalid).is_err());
+        assert!(app.db.external_models.is_empty());
+        let state = app.register_external_model(&model).unwrap();
+        assert_eq!(state["model"], "Llama-3.2-3B-Instruct-IQ3_M.gguf");
+        assert_eq!(
+            app.model_path("Llama-3.2-3B-Instruct-IQ3_M.gguf").unwrap(),
+            fs::canonicalize(&model).unwrap()
+        );
+        assert!(!models.join("Llama-3.2-3B-Instruct-IQ3_M.gguf").exists());
+        let restored: Workspace =
+            serde_json::from_slice(&fs::read(root.join("workspace.json")).unwrap()).unwrap();
+        app.db = restored;
+        assert!(app
+            .models()
+            .contains(&"Llama-3.2-3B-Instruct-IQ3_M.gguf".to_owned()));
+        assert_eq!(
+            app.model_path("Llama-3.2-3B-Instruct-IQ3_M.gguf").unwrap(),
+            fs::canonicalize(&model).unwrap()
+        );
         fs::remove_dir_all(root).unwrap();
     }
     #[test]
