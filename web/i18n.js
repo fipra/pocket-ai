@@ -53,3 +53,61 @@ const attachmentStrings = {
   es: {'attachFiles': 'Adjuntar archivos', 'noChatDocs': 'Aún no hay archivos en este chat.', 'legacyDocs': 'Documentos importados antes de esta actualización', 'attachToChat': 'Adjuntar a este chat', 'docsHint': 'Los archivos de este chat se usan automáticamente. Datos locales:'}
 };
 for (const language of Object.keys(window.USB_AI_I18N)) Object.assign(window.USB_AI_I18N[language], attachmentStrings[language]);
+const hardwareGuidanceStrings = {
+  "en": {
+    "hardwareAdviceChoice": "Best estimated fit for this computer: {model}.",
+    "hardwareAdviceFast": "For quicker replies, try Qwen 0.5B.",
+    "hardwareAdviceNoFit": "No model meets the comfortable memory estimate. Try Qwen 0.5B with short chats and check free RAM.",
+    "modelAdviceLow": "Estimated minimum: {minimum} GB RAM. This model may not load.",
+    "modelAdviceSlow": "Few CPU cores for this model; replies may be slow.",
+    "modelAdvicePossible": "May run, but about {recommended} GB RAM is more comfortable.",
+    "modelAdviceGood": "Estimated memory fit. Actual speed depends on the processor and free RAM.",
+    "modelAdviceUnknown": "RAM could not be detected; check available memory before downloading.",
+    "cpuSlow": "Slow on this CPU"
+  },
+  "it": {
+    "hardwareAdviceChoice": "Modello più adatto stimato per questo computer: {model}.",
+    "hardwareAdviceFast": "Per risposte più rapide, prova Qwen 0.5B.",
+    "hardwareAdviceNoFit": "Nessun modello raggiunge la RAM consigliata. Prova Qwen 0.5B con chat brevi e controlla la memoria libera.",
+    "modelAdviceLow": "Minimo stimato: {minimum} GB di RAM. Il modello potrebbe non caricarsi.",
+    "modelAdviceSlow": "Pochi core CPU per questo modello; le risposte potrebbero essere lente.",
+    "modelAdvicePossible": "Può funzionare, ma circa {recommended} GB di RAM sono più comodi.",
+    "modelAdviceGood": "RAM stimata sufficiente. La velocità dipende da processore e memoria libera.",
+    "modelAdviceUnknown": "RAM non rilevata; controlla la memoria disponibile prima di scaricare.",
+    "cpuSlow": "Lento su questa CPU"
+  },
+  "de": {
+    "hardwareAdviceChoice": "Voraussichtlich passendstes Modell für diesen Computer: {model}.",
+    "hardwareAdviceFast": "Für schnellere Antworten Qwen 0.5B versuchen.",
+    "hardwareAdviceNoFit": "Kein Modell erreicht den empfohlenen RAM. Versuche Qwen 0.5B mit kurzen Chats und prüfe freien RAM.",
+    "modelAdviceLow": "Geschätztes Minimum: {minimum} GB RAM. Das Modell lädt möglicherweise nicht.",
+    "modelAdviceSlow": "Wenige CPU-Kerne für dieses Modell; Antworten könnten langsam sein.",
+    "modelAdvicePossible": "Kann laufen, mit etwa {recommended} GB RAM aber zuverlässiger.",
+    "modelAdviceGood": "RAM reicht voraussichtlich. Tempo hängt von Prozessor und freiem RAM ab.",
+    "modelAdviceUnknown": "RAM nicht erkannt; prüfe verfügbaren Speicher vor dem Download.",
+    "cpuSlow": "Langsam auf dieser CPU"
+  },
+  "fr": {
+    "hardwareAdviceChoice": "Modèle estimé le mieux adapté à cet ordinateur : {model}.",
+    "hardwareAdviceFast": "Pour des réponses plus rapides, essayez Qwen 0.5B.",
+    "hardwareAdviceNoFit": "Aucun modèle n’atteint la RAM conseillée. Essayez Qwen 0.5B avec des discussions courtes et vérifiez la RAM libre.",
+    "modelAdviceLow": "Minimum estimé : {minimum} Go de RAM. Le modèle peut ne pas se charger.",
+    "modelAdviceSlow": "Peu de cœurs CPU pour ce modèle ; les réponses peuvent être lentes.",
+    "modelAdvicePossible": "Peut fonctionner, mais environ {recommended} Go de RAM sont préférables.",
+    "modelAdviceGood": "RAM estimée suffisante. La vitesse dépend du processeur et de la RAM libre.",
+    "modelAdviceUnknown": "RAM non détectée ; vérifiez la mémoire disponible avant le téléchargement.",
+    "cpuSlow": "Lent sur ce CPU"
+  },
+  "es": {
+    "hardwareAdviceChoice": "Modelo estimado más adecuado para este ordenador: {model}.",
+    "hardwareAdviceFast": "Para respuestas más rápidas, prueba Qwen 0.5B.",
+    "hardwareAdviceNoFit": "Ningún modelo alcanza la RAM aconsejada. Prueba Qwen 0.5B con chats cortos y comprueba la RAM libre.",
+    "modelAdviceLow": "Mínimo estimado: {minimum} GB de RAM. Puede que el modelo no cargue.",
+    "modelAdviceSlow": "Pocos núcleos de CPU para este modelo; las respuestas pueden ser lentas.",
+    "modelAdvicePossible": "Puede funcionar, pero unos {recommended} GB de RAM son preferibles.",
+    "modelAdviceGood": "RAM estimada suficiente. La velocidad depende del procesador y la RAM libre.",
+    "modelAdviceUnknown": "RAM no detectada; comprueba la memoria disponible antes de descargar.",
+    "cpuSlow": "Lento en esta CPU"
+  }
+};
+for (const language of Object.keys(window.USB_AI_I18N)) Object.assign(window.USB_AI_I18N[language], hardwareGuidanceStrings[language]);

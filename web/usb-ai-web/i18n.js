@@ -96,3 +96,71 @@ const attachmentStrings = {
   es: {'attachFiles': 'Adjuntar archivos', 'noChatDocs': 'Aún no hay archivos en este chat.', 'legacyDocs': 'Documentos importados antes de esta actualización', 'attachToChat': 'Adjuntar a este chat', 'docsHint': 'Texto, Markdown, CSV, JSON y PDF de texto. Los archivos de este chat se usan automáticamente y permanecen en este navegador.'}
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], attachmentStrings[language]);
+const modelGuidanceStrings = {
+  "en": {
+    "hardwareAdviceTitle": "Advice for this device",
+    "browserRamUnknown": "This browser does not reveal RAM; the estimate is cautious.",
+    "browserHardware": "Browser estimate: {ram} GB RAM, {cores} logical cores.",
+    "hardwareAdviceChoice": "Suggested model: {model}.",
+    "deviceChoice": "Suggested",
+    "modelBrowserLimit": "Large models are not supported in this browser. Use Chrome, Edge, or the desktop app.",
+    "modelRamUnknown": "RAM is unavailable; check free memory before loading.",
+    "modelRamLow": "Estimated minimum: {minimum} GB RAM. This device may run out of memory.",
+    "modelCpuSlow": "Few CPU cores: generation may be slow.",
+    "modelRamBorderline": "May run, but about {recommended} GB RAM is more comfortable.",
+    "modelFits": "Estimated memory fit. Actual speed depends on the device."
+  },
+  "it": {
+    "hardwareAdviceTitle": "Consiglio per questo dispositivo",
+    "browserRamUnknown": "Il browser non comunica la RAM; la stima è prudente.",
+    "browserHardware": "Stima del browser: {ram} GB di RAM, {cores} core logici.",
+    "hardwareAdviceChoice": "Modello suggerito: {model}.",
+    "deviceChoice": "Suggerito",
+    "modelBrowserLimit": "I modelli grandi non sono supportati in questo browser. Usa Chrome, Edge o l’app desktop.",
+    "modelRamUnknown": "RAM non disponibile; controlla la memoria libera prima di caricare il modello.",
+    "modelRamLow": "Minimo stimato: {minimum} GB di RAM. La memoria potrebbe esaurirsi.",
+    "modelCpuSlow": "Pochi core CPU: la generazione potrebbe essere lenta.",
+    "modelRamBorderline": "Può funzionare, ma circa {recommended} GB di RAM sono più comodi.",
+    "modelFits": "Memoria stimata sufficiente. La velocità dipende dal dispositivo."
+  },
+  "de": {
+    "hardwareAdviceTitle": "Empfehlung für dieses Gerät",
+    "browserRamUnknown": "Dieser Browser gibt den RAM nicht an; die Einschätzung ist vorsichtig.",
+    "browserHardware": "Browser-Schätzung: {ram} GB RAM, {cores} logische Kerne.",
+    "hardwareAdviceChoice": "Empfohlenes Modell: {model}.",
+    "deviceChoice": "Empfohlen",
+    "modelBrowserLimit": "Große Modelle werden in diesem Browser nicht unterstützt. Nutze Chrome, Edge oder die Desktop-App.",
+    "modelRamUnknown": "RAM unbekannt; prüfe freien Speicher vor dem Laden.",
+    "modelRamLow": "Geschätztes Minimum: {minimum} GB RAM. Der Speicher könnte nicht reichen.",
+    "modelCpuSlow": "Wenige CPU-Kerne: die Ausgabe könnte langsam sein.",
+    "modelRamBorderline": "Kann laufen, mit etwa {recommended} GB RAM aber zuverlässiger.",
+    "modelFits": "Geschätzter Speicher reicht aus. Tempo hängt vom Gerät ab."
+  },
+  "fr": {
+    "hardwareAdviceTitle": "Conseil pour cet appareil",
+    "browserRamUnknown": "Ce navigateur ne fournit pas la RAM ; l’estimation est prudente.",
+    "browserHardware": "Estimation du navigateur : {ram} Go de RAM, {cores} cœurs logiques.",
+    "hardwareAdviceChoice": "Modèle conseillé : {model}.",
+    "deviceChoice": "Conseillé",
+    "modelBrowserLimit": "Les grands modèles ne sont pas pris en charge ici. Utilisez Chrome, Edge ou l’application de bureau.",
+    "modelRamUnknown": "RAM inconnue ; vérifiez la mémoire libre avant le chargement.",
+    "modelRamLow": "Minimum estimé : {minimum} Go de RAM. La mémoire peut manquer.",
+    "modelCpuSlow": "Peu de cœurs CPU : la génération peut être lente.",
+    "modelRamBorderline": "Peut fonctionner, mais environ {recommended} Go de RAM sont préférables.",
+    "modelFits": "Mémoire estimée suffisante. La vitesse dépend de l’appareil."
+  },
+  "es": {
+    "hardwareAdviceTitle": "Consejo para este dispositivo",
+    "browserRamUnknown": "El navegador no informa de la RAM; la estimación es prudente.",
+    "browserHardware": "Estimación del navegador: {ram} GB de RAM, {cores} núcleos lógicos.",
+    "hardwareAdviceChoice": "Modelo sugerido: {model}.",
+    "deviceChoice": "Sugerido",
+    "modelBrowserLimit": "Los modelos grandes no son compatibles con este navegador. Usa Chrome, Edge o la aplicación de escritorio.",
+    "modelRamUnknown": "RAM desconocida; comprueba la memoria libre antes de cargarlo.",
+    "modelRamLow": "Mínimo estimado: {minimum} GB de RAM. Puede faltar memoria.",
+    "modelCpuSlow": "Pocos núcleos de CPU: la generación puede ser lenta.",
+    "modelRamBorderline": "Puede funcionar, pero unos {recommended} GB de RAM son preferibles.",
+    "modelFits": "Memoria estimada suficiente. La velocidad depende del dispositivo."
+  }
+};
+for (const language of Object.keys(translations)) Object.assign(translations[language], modelGuidanceStrings[language]);

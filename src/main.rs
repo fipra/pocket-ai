@@ -393,15 +393,33 @@ fn detect_hardware() -> Hardware {
 }
 
 fn recommended_id<'a>(hardware: &Hardware, catalog: &'a [ModelDownload]) -> Option<&'a str> {
-    let ram = hardware.ram_gb?;
     catalog
         .iter()
         .filter(|model| {
-            ram >= model.comfortable_ram_gb as f64
-                && (hardware.logical_cores >= 4 || model.minimum_ram_gb <= 8)
+            model_fit(
+                hardware,
+                model.minimum_ram_gb,
+                model.comfortable_ram_gb,
+                model.download_gb,
+            ) == "good"
         })
-        .last()
+        .max_by(|a, b| a.download_gb.total_cmp(&b.download_gb))
         .map(|model| model.id.as_str())
+}
+
+fn model_fit(
+    hardware: &Hardware,
+    minimum: u64,
+    comfortable: u64,
+    download_gb: f64,
+) -> &'static str {
+    match hardware.ram_gb {
+        None => "unknown",
+        Some(ram) if ram < minimum as f64 => "low",
+        Some(_) if hardware.logical_cores <= 2 && download_gb > 1.0 => "slow",
+        Some(ram) if ram < comfortable as f64 => "possible",
+        Some(_) => "good",
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -885,21 +903,24 @@ impl App {
     }
     fn state(&self) -> Value {
         let installed = self.models();
+        let model_details = installed.iter().filter_map(|name| {
+            let bytes = fs::metadata(self.model_path(name).ok()?).ok()?.len();
+            let gib = bytes as f64 / 1_073_741_824.0;
+            let minimum = (gib + 2.0).ceil() as u64;
+            let comfortable = (gib * 1.3 + 4.0).ceil() as u64;
+            Some(json!({"name":name,"sizeBytes":bytes,"minimumRamGb":minimum,"comfortableRamGb":comfortable,
+                "fit":model_fit(&self.hardware, minimum, comfortable, bytes as f64 / 1_000_000_000.0)}))
+        }).collect::<Vec<_>>();
         let recommendation = recommended_id(&self.hardware, &self.catalog);
         let catalog = self.catalog.iter().map(|model| {
-            let fit = match self.hardware.ram_gb {
-                None => "unknown",
-                Some(ram) if ram < model.minimum_ram_gb as f64 => "low",
-                Some(ram) if ram < model.comfortable_ram_gb as f64 => "possible",
-                Some(_) => "good",
-            };
+            let fit = model_fit(&self.hardware, model.minimum_ram_gb, model.comfortable_ram_gb, model.download_gb);
             json!({"id":model.id,"name":model.name,"family":model.family,"parameters":model.parameters,"file":model.file,
                 "sourceUrl":model.source_url,"downloadGb":model.download_gb,"minimumRamGb":model.minimum_ram_gb,
                 "comfortableRamGb":model.comfortable_ram_gb,"license":model.license,"summary":model.summary,
                 "installed":installed.contains(&model.file),"fit":fit,"recommended":recommendation==Some(model.id.as_str())})
         }).collect::<Vec<_>>();
         json!({"chats":self.db.chats,"memory":self.db.memory,"documents":self.db.documents.iter().map(|d|json!({"id":d.id,"name":d.name,"count":d.chunks.len(),"chatId":d.chat_id})).collect::<Vec<_>>(),
-            "models":installed,"ignoredModelFiles":self.ignored_model_files(),"modelsDir":self.models,"model":self.selected,"root":self.root,"language":self.language(),"catalog":catalog,"hardware":self.hardware,
+            "models":installed,"modelDetails":model_details,"ignoredModelFiles":self.ignored_model_files(),"modelsDir":self.models,"model":self.selected,"root":self.root,"language":self.language(),"catalog":catalog,"hardware":self.hardware,
             "download":self.download_status()})
     }
     fn download_status(&self) -> Value {
@@ -2048,6 +2069,8 @@ mod tests {
             .unwrap()
             .contains(&json!("Bonsai-mmproj-Q8_0.gguf")));
         assert_eq!(state["modelsDir"], json!(models));
+        assert_eq!(state["modelDetails"][0]["name"], "Bonsai-Q2_0.gguf");
+        assert_eq!(state["modelDetails"][0]["sizeBytes"], 4);
         fs::remove_dir_all(root).unwrap();
     }
     #[test]
@@ -2320,13 +2343,20 @@ mod tests {
             logical_cores: 8,
             ram_gb: Some(8.0),
         };
-        assert_eq!(recommended_id(&hardware, &catalog), Some("qwen-0.5b"));
+        assert_eq!(
+            recommended_id(&hardware, &catalog),
+            Some("llama-3.2-3b-iq3m")
+        );
         hardware.ram_gb = Some(16.0);
         assert_eq!(recommended_id(&hardware, &catalog), Some("qwen-7b"));
         hardware.ram_gb = Some(24.0);
         assert_eq!(recommended_id(&hardware, &catalog), Some("gemma-9b"));
         hardware.ram_gb = None;
         assert_eq!(recommended_id(&hardware, &catalog), None);
+        hardware.ram_gb = Some(24.0);
+        hardware.logical_cores = 2;
+        assert_eq!(recommended_id(&hardware, &catalog), Some("qwen-0.5b"));
+        assert_eq!(model_fit(&hardware, 16, 24, 5.76), "slow");
     }
     #[test]
     fn state_exposes_hardware_and_model_choices() {
