@@ -181,3 +181,11 @@ const desktopQuantizeStrings = {
   es: {desktopQuantizeNote:'La cuantización requiere la aplicación para Mac o Windows y llama-quantize.',desktopDownloadLink:'Descargar versiones locales'}
 };
 for (const language of Object.keys(desktopQuantizeStrings)) Object.assign(translations[language], desktopQuantizeStrings[language]);
+const splitLimitStrings = {
+  en: {splitRequired:'Split required',modelNeedsSplit:'A single GGUF over 2 GB cannot load in the Web app. Split it into shards of at most 512 MB with llama-gguf-split and select all shards together, or use a smaller model. Splitting does not reduce the total RAM needed.'},
+  it: {splitRequired:'Dividi il file',modelNeedsSplit:'Un singolo GGUF oltre 2 GB non può essere caricato nella Web. Dividilo in parti da massimo 512 MB con llama-gguf-split e selezionale tutte insieme, oppure usa un modello più piccolo. La divisione non riduce la RAM totale necessaria.'},
+  de: {splitRequired:'Datei aufteilen',modelNeedsSplit:'Eine einzelne GGUF-Datei über 2 GB kann in der Web-App nicht geladen werden. Teile sie mit llama-gguf-split in Stücke von höchstens 512 MB und wähle alle zusammen aus, oder nutze ein kleineres Modell. Das Aufteilen senkt den gesamten RAM-Bedarf nicht.'},
+  fr: {splitRequired:'Diviser le fichier',modelNeedsSplit:'Un seul GGUF de plus de 2 Go ne peut pas être chargé dans la version Web. Divisez-le en parties de 512 Mo maximum avec llama-gguf-split et sélectionnez-les toutes, ou utilisez un modèle plus petit. La division ne réduit pas la RAM totale nécessaire.'},
+  es: {splitRequired:'Dividir archivo',modelNeedsSplit:'Un único GGUF de más de 2 GB no se puede cargar en la Web. Divídelo en partes de 512 MB como máximo con llama-gguf-split y selecciónalas todas, o usa un modelo más pequeño. Dividirlo no reduce la RAM total necesaria.'}
+};
+for (const language of Object.keys(splitLimitStrings)) Object.assign(translations[language], splitLimitStrings[language]);

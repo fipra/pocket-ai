@@ -3,7 +3,7 @@ import { CATALOG } from './catalog.js';
 import * as db from './storage.js';
 import { isSmartphone } from './phone-gate.js';
 import { canSaveToFolder, existingModelsFolder, saveVerifiedFile } from './folder-models.js';
-import { isAuxiliaryGguf } from './hub.js';
+import { isAuxiliaryGguf, WEB_FILE_LIMIT } from './hub.js';
 import { modelOptions, usesSafariCpu } from './browser-capability.js';
 
 const paths = { default: `${import.meta.env.BASE_URL}wasm/wllama.wasm` };
@@ -96,6 +96,7 @@ export async function addLocalModel(files) {
   const parts = [...files];
   if (!parts.length || parts.some(file => !/\.gguf$/i.test(file.name))) throw Error('Select GGUF files');
   if (parts.some(file => isAuxiliaryGguf(file.name))) throw Error('AUXILIARY_GGUF');
+  if (parts.some(file => file.size > WEB_FILE_LIMIT)) throw Error('MODEL_NEEDS_SPLIT');
   const id = crypto.randomUUID();
   const name = parts.length === 1 ? parts[0].name : parts[0].name.replace(/-\d{5}-of-\d{5}/, '');
   // IndexedDB can store Blobs, but browser quotas vary. Keep selected File objects
@@ -149,6 +150,7 @@ export async function loadModel(id) {
     }
   }
   if (!record && !files) throw Error('Model unavailable');
+  if (files?.some(file => file.size > WEB_FILE_LIMIT)) throw Error('MODEL_NEEDS_SPLIT');
   await unload();
   const next = await instance();
   const options = modelOptions();
