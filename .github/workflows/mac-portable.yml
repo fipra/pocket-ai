@@ -66,7 +66,10 @@ jobs:
           PY
           "$folder/bin/llama-cli" --help >/dev/null 2>&1
           "$folder/bin/llama-server" --help >/dev/null 2>&1
-          "$folder/bin/llama-quantize" --help >/dev/null 2>&1
+          quantize_help="$("$folder/bin/llama-quantize" --help 2>&1 || true)"
+          for kind in Q8_0 Q4_K_M Q3_K_M Q2_K; do
+            [[ "$quantize_help" == *"$kind"* ]] || { echo "Packaged llama-quantize lacks $kind" >&2; exit 1; }
+          done
           python3 - "$folder" <<'PY'
           from pathlib import Path
           import subprocess, sys

@@ -1849,12 +1849,20 @@ fn tool_path(override_name: &str, name: &str) -> PathBuf {
 fn quantize_available() -> bool {
     static AVAILABLE: OnceLock<bool> = OnceLock::new();
     *AVAILABLE.get_or_init(|| {
-        Command::new(tool_path("LLAMA_QUANTIZE", "llama-quantize"))
+        let Ok(output) = Command::new(tool_path("LLAMA_QUANTIZE", "llama-quantize"))
             .arg("--help")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_ok()
+            .output()
+        else {
+            return false;
+        };
+        let help = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        ["Q8_0", "Q4_K_M", "Q3_K_M", "Q2_K"]
+            .iter()
+            .all(|kind| help.contains(kind))
     })
 }
 

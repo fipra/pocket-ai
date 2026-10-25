@@ -71,8 +71,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Packaged llama-cli cannot start' }
           & (Join-Path $folder 'bin/llama-server.exe') --help *> $null
           if ($LASTEXITCODE -ne 0) { throw 'Packaged llama-server cannot start' }
-          & (Join-Path $folder 'bin/llama-quantize.exe') --help *> $null
-          if ($LASTEXITCODE -ne 0) { throw 'Packaged llama-quantize cannot start' }
+          $quantizeHelp = (& (Join-Path $folder 'bin/llama-quantize.exe') --help 2>&1 | Out-String)
+          foreach ($kind in @('Q8_0','Q4_K_M','Q3_K_M','Q2_K')) {
+            if (-not $quantizeHelp.Contains($kind)) { throw "Packaged llama-quantize lacks $kind" }
+          }
           & (Join-Path $folder 'bin/pdftotext.exe') -v 2>$null
           if ($LASTEXITCODE -ne 0) { throw 'Packaged pdftotext cannot start' }
           Compress-Archive -Path $folder -DestinationPath 'USB-AI-Rust-Windows-x64.zip' -Force
