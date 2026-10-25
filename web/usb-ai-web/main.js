@@ -163,7 +163,8 @@ async function send() {
   if (!chat) { await newChat(); chat = chats.find(item => item.id === activeId); }
   const chatDocuments = documentsForChat(documents, chat.id);
   const sources = chatDocuments.length ? retrieve(text, chatDocuments, 3) : [];
-  const contexts = ragContexts(chat.messages, text, sources);
+  const hasNewDocument = chatDocuments.some(doc => (doc.updated || 0) >= (chat.updated || 0));
+  const contexts = ragContexts(hasNewDocument ? [] : chat.messages, text, sources);
   const remembered = memoryContext(text, memories);
   if (remembered) for (const context of contexts) context.unshift({ role:'system', content:remembered });
   const answer = { role:'assistant', text:'', sources: sources.map(({name,text}) => ({name,text})) };

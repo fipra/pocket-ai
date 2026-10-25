@@ -742,7 +742,35 @@ fn decode_name(s: &str) -> Result<String, String> {
     String::from_utf8(out).map_err(|_| "Nome file non valido".into())
 }
 fn retrieve<'a>(query: &str, docs: impl IntoIterator<Item = &'a Document>) -> Vec<Source> {
-    let docs = docs.into_iter().collect::<Vec<_>>();
+    let all_docs = docs.into_iter().collect::<Vec<_>>();
+    let query_lower = query.to_lowercase();
+    let named = all_docs
+        .iter()
+        .copied()
+        .filter(|doc| {
+            let name = doc.name.to_lowercase();
+            let stem = name.rsplit_once('.').map(|(stem, _)| stem).unwrap_or(&name);
+            query_lower.contains(&name)
+                || (stem.chars().count() >= 4
+                    && !matches!(
+                        stem,
+                        "analisi"
+                            | "analizza"
+                            | "riassunto"
+                            | "documento"
+                            | "secondo"
+                            | "nuovo"
+                            | "ultimo"
+                            | "summary"
+                            | "analysis"
+                            | "document"
+                            | "resumen"
+                            | "dokument"
+                    )
+                    && query_lower.contains(stem))
+        })
+        .collect::<Vec<_>>();
+    let docs = if named.is_empty() { all_docs } else { named };
     let q: Vec<String> = words(query)
         .into_iter()
         .filter(|w| {
@@ -756,25 +784,52 @@ fn retrieve<'a>(query: &str, docs: impl IntoIterator<Item = &'a Document>) -> Ve
                     | "what"
                     | "with"
                     | "per"
+                    | "di"
+                    | "un"
+                    | "uno"
                     | "una"
                     | "del"
+                    | "della"
+                    | "delle"
+                    | "degli"
                     | "il"
+                    | "lo"
+                    | "la"
+                    | "con"
+                    | "sul"
+                    | "sulla"
                     | "riassumi"
                     | "riassunto"
+                    | "analisi"
+                    | "analizza"
+                    | "analizzare"
+                    | "fai"
+                    | "fammi"
+                    | "puoi"
+                    | "nuovo"
+                    | "secondo"
+                    | "ultimo"
                     | "sintesi"
                     | "documento"
                     | "documenti"
                     | "testo"
                     | "summarize"
                     | "summary"
+                    | "analysis"
+                    | "analyze"
+                    | "analyse"
                     | "document"
                     | "documents"
                     | "text"
                     | "please"
                     | "résume"
                     | "résumé"
+                    | "analyser"
                     | "resumen"
+                    | "analiza"
+                    | "analisis"
                     | "zusammenfassung"
+                    | "analysiere"
                     | "dokument"
             )
         })
@@ -804,7 +859,7 @@ fn retrieve<'a>(query: &str, docs: impl IntoIterator<Item = &'a Document>) -> Ve
         return sources;
     }
     let mut rows = Vec::new();
-    for doc in &docs {
+    for (doc_index, doc) in docs.iter().enumerate() {
         for chunk in &doc.chunks {
             let all = words(&format!("{} {}", doc.name, chunk.text));
             let score: usize = q
@@ -814,6 +869,7 @@ fn retrieve<'a>(query: &str, docs: impl IntoIterator<Item = &'a Document>) -> Ve
             if score > 0 {
                 rows.push((
                     score,
+                    doc_index,
                     Source {
                         page: chunk.page,
                         text: chunk.text.clone(),
@@ -824,9 +880,9 @@ fn retrieve<'a>(query: &str, docs: impl IntoIterator<Item = &'a Document>) -> Ve
             }
         }
     }
-    rows.sort_by(|a, b| b.0.cmp(&a.0));
-    let matches: Vec<Source> = rows.into_iter().take(4).map(|(_, s)| s).collect();
-    if matches.is_empty() && docs.len() == 1 {
+    rows.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.cmp(&a.1)));
+    let matches: Vec<Source> = rows.into_iter().take(4).map(|(_, _, s)| s).collect();
+    if matches.is_empty() && !docs.is_empty() && (q.len() <= 2 || docs.len() == 1) {
         retrieve("riassumi il documento", docs.iter().copied())
     } else {
         matches
@@ -1211,13 +1267,30 @@ impl App {
         } else {
             vec![]
         };
-        let history = self.db.chats[idx]
+        let previous_sources = self.db.chats[idx]
             .messages
             .iter()
             .rev()
-            .take(8)
-            .cloned()
-            .collect::<Vec<_>>();
+            .find(|message| message.role == "assistant")
+            .map(|message| message.sources.as_slice())
+            .unwrap_or(&[]);
+        let has_new_document = use_docs
+            && sources.iter().any(|source| {
+                !previous_sources
+                    .iter()
+                    .any(|old| old.doc_id == source.doc_id)
+            });
+        let history = if has_new_document {
+            Vec::new()
+        } else {
+            self.db.chats[idx]
+                .messages
+                .iter()
+                .rev()
+                .take(8)
+                .cloned()
+                .collect::<Vec<_>>()
+        };
         let prompt = if use_docs {
             document_prompt(self.language(), &history, text, &sources, false)
         } else {
@@ -2487,6 +2560,29 @@ mod tests {
         assert!(prompt.contains("[4] report.txt"));
         let retry = document_prompt("it", &[], "riassumi il documento", &sources, true);
         assert!(retry.len() < 1000);
+    }
+    #[test]
+    fn analysis_after_second_attachment_uses_new_document() {
+        let docs = [
+            Document {
+                id: "first".into(),
+                name: "primo.txt".into(),
+                chat_id: Some("chat".into()),
+                chunks: chunks("The first project concerns invoices."),
+            },
+            Document {
+                id: "second".into(),
+                name: "secondo.txt".into(),
+                chat_id: Some("chat".into()),
+                chunks: chunks("The second project concerns contracts."),
+            },
+        ];
+        let latest = retrieve("Fammi un'analisi del secondo documento", &docs);
+        assert_eq!(latest[0].doc_id, "second");
+        let named = retrieve("Analizza primo.txt", &docs);
+        assert_eq!(named[0].doc_id, "first");
+        let tied = retrieve("project", &docs);
+        assert_eq!(tied[0].doc_id, "second");
     }
     #[test]
     fn app_request_guidance_targets_generated_browser_apps() {

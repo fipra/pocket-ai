@@ -38,6 +38,16 @@ test('generic summary request includes recent document excerpts within context b
   assert.equal(context.at(-1).content, question);
   assert.ok(context.slice(0,-1).reduce((sum,message)=>sum+message.content.length,0) <= 2400);
 });
+test('analysis after a second attachment uses the new document unless an older one is named', () => {
+  const docs = [
+    {name:'primo.txt',updated:1,chunks:['The first project concerns invoices.']},
+    {name:'secondo.txt',updated:2,chunks:['The second project concerns contracts.']}
+  ];
+  assert.equal(retrieve('Fammi un’analisi del secondo documento', docs, 3)[0].name, 'secondo.txt');
+  assert.equal(retrieve('Analizza primo.txt', docs, 3)[0].name, 'primo.txt');
+  assert.equal(retrieve('project', docs, 3)[0].name, 'secondo.txt');
+  assert.equal(retrieve('analisi del nuovo documento', [{...docs[0],name:'analisi.txt'},docs[1]], 3)[0].name, 'secondo.txt');
+});
 test('a long document summary samples its beginning, middle, and end', () => {
   const docs = [{name:'long.txt',updated:1,chunks:Array.from({length:21},(_,i)=>`Section ${i}`)}];
   assert.deepEqual(retrieve('Riassumi il documento', docs, 3).map(source=>source.index), [0,10,20]);
