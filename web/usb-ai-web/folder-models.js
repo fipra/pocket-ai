@@ -1,10 +1,30 @@
 import { createSHA256 } from 'hash-wasm';
+import { isAuxiliaryGguf } from './hub.js';
 
 let folder;
 let folderLabel;
 
 export function canSaveToFolder() {
   return typeof window.showDirectoryPicker === 'function';
+}
+
+export async function existingModelsFolder() {
+  if (!canSaveToFolder()) throw Error('FOLDER_UNAVAILABLE');
+  const parent = await window.showDirectoryPicker({ id: 'usb-ai-models-import', mode: 'read', startIn: 'downloads' });
+  let directory = parent;
+  if (parent.name !== 'usb-ai-models') {
+    try { directory = await parent.getDirectoryHandle('usb-ai-models'); }
+    catch (error) { if (error.name !== 'NotFoundError') throw error; }
+  }
+  const files = [];
+  for await (const [name, handle] of directory.entries()) {
+    if (handle.kind !== 'file' || !/^[^/\\]+\.gguf$/i.test(name) || isAuxiliaryGguf(name)) continue;
+    const file = await handle.getFile();
+    if (file.size < 32_000_000) continue;
+    files.push({ filename:name, size:file.size, fileHandle:handle, folderHandle:directory,
+      folderLabel:parent === directory ? parent.name : `${parent.name}/usb-ai-models` });
+  }
+  return files;
 }
 
 async function modelsFolder() {

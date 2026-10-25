@@ -6,7 +6,7 @@ import { CATALOG } from './catalog.js';
 import { searchModels, estimateMemory, isAuxiliaryGguf } from './hub.js';
 import { readDocument, chunks, retrieve, documentsForChat } from './retrieval.js';
 import { ragContexts, completeWithRetry } from './rag.js';
-import { savedModels, downloadCurated, downloadVerified, moveCachedToFolder, addLocalModel, deleteModel, loadModel, loadedModelId, streamChat } from './runtime.js';
+import { savedModels, downloadCurated, downloadVerified, moveCachedToFolder, addLocalModel, addModelsFromFolder, deleteModel, loadModel, loadedModelId, streamChat } from './runtime.js';
 import { canSaveToFolder, showModelFolder } from './folder-models.js';
 import { usesSafariCpu, needsSafariFallback, largeModelWarningBrowser } from './browser-capability.js';
 import { browserHardware, modelGuidance, recommendedModel } from './model-guidance.js';
@@ -16,6 +16,7 @@ const $ = id => document.getElementById(id);
 let language = preferredLanguage();
 let chats = [], documents = [], models = [], memories = [], activeId, selectedId, busy = false, controller, installing;
 let hubResults = [], hubNext = null, hubSearching = false;
+let pendingFirstPrompt = false;
 const STARTER_ID = 'llama-3.2-3b-iq3m';
 const STARTER_FILE = 'Llama-3.2-3B-Instruct-IQ3_M.gguf';
 const isStarterModel = model => model?.id === STARTER_ID || [model?.filename, model?.name, model?.url].some(value => typeof value === 'string' && value.endsWith(STARTER_FILE));
@@ -103,14 +104,14 @@ async function searchHub(skip = 0) {
   } catch (error) { $('hub-status').textContent = `${tr('error')}: ${error.message}`; }
   finally { hubSearching = false; renderSearch(); }
 }
-function render() { translate(); renderBrowserModelWarning(); renderChats(); renderMessages(); if ($('models-dialog').open) { renderModels(); renderSearch(); } if ($('docs-dialog').open) renderDocs(); if ($('memory-dialog').open) renderMemory(); $('model-trigger').textContent = `${models.find(model => model.id === selectedId)?.name || tr('chooseModel')} ⌄`; $('send').disabled = busy; $('stop').hidden = !controller; $('attach-files').ariaLabel = tr('attachFiles'); $('attach-files').title = tr('attachFiles'); renderAttachments(); $('capability').textContent = `${navigator.gpu ? tr('capabilityGpu') : tr('capabilityWasm')} · ${navigator.onLine ? tr('private') : tr('offline')}`; $('folder-hint').textContent = tr(canSaveToFolder() ? 'folderHint' : 'folderFallbackHint'); }
+function render() { translate(); renderBrowserModelWarning(); renderChats(); renderMessages(); if ($('models-dialog').open) { renderModels(); renderSearch(); } if ($('docs-dialog').open) renderDocs(); if ($('memory-dialog').open) renderMemory(); $('model-trigger').textContent = `${models.find(model => model.id === selectedId)?.name || tr('chooseModel')} ⌄`; $('send').disabled = busy; $('stop').hidden = !controller; $('attach-files').ariaLabel = tr('attachFiles'); $('attach-files').title = tr('attachFiles'); renderAttachments(); $('capability').textContent = `${navigator.gpu ? tr('capabilityGpu') : tr('capabilityWasm')} · ${navigator.onLine ? tr('private') : tr('offline')}`; $('folder-hint').textContent = tr(canSaveToFolder() ? 'folderHint' : 'folderFallbackHint'); $('choose-folder').hidden = !canSaveToFolder(); $('first-model-choice').hidden = !pendingFirstPrompt; $('download-starter-model').disabled = busy || !navigator.onLine; }
 function setBusy(value) {
   busy = value;
   $('send').disabled = value;
   $('stop').hidden = !controller;
   if ($('models-dialog').open) { renderModels(); renderSearch(); }
 }
-async function run(callback) { try { await callback(); } catch (error) { if (error.name === 'AbortError') { $('model-progress').classList.remove('loading'); $('model-progress').textContent = ''; setStatus(); return; } console.error(error); const message = error.message === 'SMARTPHONE_DISABLED' ? tr('phoneUnavailable') : error.message === 'MODEL_FILE_PERMISSION' ? tr('folderPermission') : error.message === 'AUXILIARY_GGUF' ? tr('auxiliaryFile') : error.message === 'LOAD_TIMEOUT' ? tr('loadTimeout') : error.message === 'DOCUMENT_NO_TEXT' ? tr('documentNoText') : /QuotaExceeded|storage|no space/i.test(error.name + ' ' + error.message) ? tr('storageError') : error.message; setStatus(`${tr('error')}: ${message}`, true); $('model-progress').classList.remove('loading'); $('model-progress').textContent = `${tr('error')}: ${message}`; } finally { if (busy && !controller) setBusy(false); } }
+async function run(callback) { try { await callback(); } catch (error) { if (error.name === 'AbortError') { $('model-progress').classList.remove('loading'); $('model-progress').textContent = ''; setStatus(); return; } console.error(error); const message = error.message === 'SMARTPHONE_DISABLED' ? tr('phoneUnavailable') : error.message === 'MODEL_FILE_PERMISSION' ? tr('folderPermission') : error.message === 'NO_GGUF_IN_FOLDER' ? tr('noModelsInFolder') : error.message === 'AUXILIARY_GGUF' ? tr('auxiliaryFile') : error.message === 'LOAD_TIMEOUT' ? tr('loadTimeout') : error.message === 'DOCUMENT_NO_TEXT' ? tr('documentNoText') : /QuotaExceeded|storage|no space/i.test(error.name + ' ' + error.message) ? tr('storageError') : error.message; setStatus(`${tr('error')}: ${message}`, true); $('model-progress').classList.remove('loading'); $('model-progress').textContent = `${tr('error')}: ${message}`; } finally { if (busy && !controller) setBusy(false); } }
 async function chooseModel(id) {
   if (busy && controller) return;
   setBusy(true);
@@ -124,9 +125,11 @@ async function chooseModel(id) {
     progress.textContent = `${tr('loading')} ${seconds} s${seconds >= 60 ? ` · ${tr('loadSlow')}` : ''}`;
     setStatus(progress.textContent, false, true);
   }, 1000);
+  let loaded = false;
   try {
     await loadModel(id);
     selectedId = id;
+    loaded = true;
     await saveSettings();
     setStatus(tr('ready'));
     progress.textContent = '';
@@ -137,6 +140,7 @@ async function chooseModel(id) {
     setBusy(false);
     render();
   }
+  if (loaded && pendingFirstPrompt) { pendingFirstPrompt = false; await send(); }
 }
 async function newChat() { const chat = { id: crypto.randomUUID(), title: tr('newChat').replace('＋ ',''), messages: [], updated: Date.now() }; chats.unshift(chat); activeId = chat.id; await db.put('chats', chat); await saveSettings(); render(); closeSidebar(); $('prompt').focus(); }
 async function send() {
@@ -146,21 +150,12 @@ async function send() {
     const starter = usesSafariCpu() ? models.find(model => model.id === 'qwen-0.5b') : models.find(isStarterModel);
     if (starter) {
       await chooseModel(starter.id);
-    } else if (navigator.onLine) {
-      const id = usesSafariCpu() || navigator.deviceMemory && navigator.deviceMemory < 4 ? 'qwen-0.5b' : STARTER_ID;
-      setBusy(true);
-      setStatus(tr(usesSafariCpu() ? 'safariSwitchingModel' : 'starterDownloading'), false, true);
-      $('model-progress').classList.add('loading');
-      await downloadCurated(id, ({ loaded, total }) => {
-        const progress = `${tr(usesSafariCpu() ? 'safariSwitchingModel' : 'starterDownloading')} ${Math.floor(loaded / total * 100)}%`;
-        $('model-progress').textContent = progress;
-        setStatus(progress, false, true);
-      });
-      models = await savedModels();
-      await chooseModel(id);
     } else {
+      pendingFirstPrompt = true;
+      render();
+      renderModels(); renderSearch();
       $('models-dialog').showModal();
-      setStatus(tr('noModel'), true);
+      setStatus(tr('firstModelTitle'));
       return;
     }
   }
@@ -224,6 +219,27 @@ document.querySelectorAll('[data-close]').forEach(button => button.onclick = () 
 $('language').onchange = () => { language = $('language').value; saveSettings(); render(); };
 $('attach-files').onclick = () => $('chat-files').click();
 $('model-file').onchange = event => run(async () => { const files = [...event.target.files]; event.target.value = ''; const result = await addLocalModel(files); models = await savedModels(); if (!result.persistent) models.push({ id:result.id, name:result.name, size:files.reduce((n,f) => n+f.size,0) }); renderModels(); setStatus(result.persistent ? tr('modelSaved') : tr('modelSession')); await chooseModel(result.id); });
+$('use-existing-model').onclick = () => { if (canSaveToFolder()) $('choose-folder').click(); else $('model-file').click(); };
+$('choose-folder').onclick = () => run(async () => {
+  const ids = await addModelsFromFolder();
+  models = await savedModels();
+  renderModels();
+  const selected = models.find(model => ids.includes(model.id) && isStarterModel(model)) || (ids.length === 1 ? models.find(model => model.id === ids[0]) : null);
+  if (selected) await chooseModel(selected.id);
+  else { const message = tr('folderModelsFound').replace('{count}', ids.length); setStatus(message); $('model-progress').textContent = message; }
+});
+$('download-starter-model').onclick = () => run(async () => {
+  const id = usesSafariCpu() || navigator.deviceMemory && navigator.deviceMemory < 4 ? 'qwen-0.5b' : STARTER_ID;
+  setBusy(true); setStatus(tr('starterDownloading'), false, true);
+  $('model-progress').classList.add('loading');
+  await downloadCurated(id, ({loaded,total}) => {
+    const progress = `${tr('starterDownloading')} ${Math.floor(loaded / total * 100)}%`;
+    $('model-progress').textContent = progress;
+    setStatus(progress, false, true);
+  });
+  models = await savedModels();
+  await chooseModel(id);
+});
 $('hub-search-form').onsubmit = event => { event.preventDefault(); searchHub(); };
 $('hub-more').onclick = () => searchHub(hubNext);
 async function uploadFiles(event) {

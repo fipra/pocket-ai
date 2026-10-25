@@ -1,7 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { saveVerifiedFile, showModelFolder } from '../folder-models.js';
+import { existingModelsFolder, saveVerifiedFile, showModelFolder } from '../folder-models.js';
+
+test('an existing GGUF is discovered in the selected folder without copying or downloading it', async () => {
+  const model = { kind:'file', getFile:async () => ({ size:1_599_668_768 }) };
+  const support = { kind:'file', getFile:async () => ({ size:100_000_000 }) };
+  const directory = { name:'usb-ai-models', async *entries() {
+    yield ['Llama-3.2-3B-Instruct-IQ3_M.gguf', model];
+    yield ['mmproj-Llama.gguf', support];
+  } };
+  globalThis.window = { showDirectoryPicker:async options => {
+    assert.equal(options.mode, 'read');
+    assert.equal(options.startIn, 'downloads');
+    return directory;
+  } };
+  const files = await existingModelsFolder();
+  assert.equal(files.length, 1);
+  assert.equal(files[0].filename, 'Llama-3.2-3B-Instruct-IQ3_M.gguf');
+  assert.equal(files[0].fileHandle, model);
+  assert.equal(files[0].folderHandle, directory);
+  delete globalThis.window;
+});
 
 test('verified GGUF streams into a usb-ai-models subfolder', async () => {
   const bytes = new TextEncoder().encode('GGUF test data');

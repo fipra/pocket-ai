@@ -2,7 +2,7 @@ import { createSHA256 } from 'hash-wasm';
 import { CATALOG } from './catalog.js';
 import * as db from './storage.js';
 import { isSmartphone } from './phone-gate.js';
-import { canSaveToFolder, saveVerifiedFile } from './folder-models.js';
+import { canSaveToFolder, existingModelsFolder, saveVerifiedFile } from './folder-models.js';
 import { isAuxiliaryGguf } from './hub.js';
 import { modelOptions, usesSafariCpu } from './browser-capability.js';
 
@@ -104,6 +104,21 @@ export async function addLocalModel(files) {
   try { await db.put('models', { id, name, source: 'file', files: parts, size: parts.reduce((n, f) => n + f.size, 0) }); }
   catch (error) { return { id, name, persistent: false, error }; }
   return { id, name, persistent: true };
+}
+export async function addModelsFromFolder() {
+  const files = await existingModelsFolder();
+  if (!files.length) throw Error('NO_GGUF_IN_FOLDER');
+  const current = await savedModels();
+  const ids = [];
+  for (const file of files) {
+    const previous = current.find(model => model.source === 'directory' && model.filename === file.filename && model.folderLabel === file.folderLabel);
+    const id = previous?.id || crypto.randomUUID();
+    await db.put('models', { id, name:file.filename, source:'directory', filename:file.filename,
+      size:file.size, fileHandle:file.fileHandle, fileHandles:[file.fileHandle],
+      folderHandle:file.folderHandle, folderLabel:file.folderLabel });
+    ids.push(id);
+  }
+  return ids;
 }
 const sessionFiles = new Map();
 export async function deleteModel(id) {
