@@ -3,10 +3,12 @@ let connection;
 export function openDB() {
   if (connection) return connection;
   connection = new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB, 1);
+    const request = indexedDB.open(DB, 2);
     request.onupgradeneeded = () => {
       const db = request.result;
-      for (const name of ['chats', 'documents', 'models', 'settings']) db.createObjectStore(name, { keyPath: 'id' });
+      for (const name of ['chats', 'documents', 'models', 'settings', 'memory']) {
+        if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath: 'id' });
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);

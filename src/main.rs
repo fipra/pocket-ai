@@ -436,6 +436,11 @@ struct Chat {
     title: String,
     messages: Vec<Message>,
 }
+#[derive(Clone, Serialize, Deserialize)]
+struct MemoryNote {
+    id: String,
+    text: String,
+}
 #[derive(Default, Serialize, Deserialize)]
 struct Workspace {
     #[serde(default)]
@@ -443,7 +448,39 @@ struct Workspace {
     #[serde(default)]
     documents: Vec<Document>,
     #[serde(default)]
+    memory: Vec<MemoryNote>,
+    #[serde(default)]
     language: String,
+}
+
+fn memory_context(question: &str, notes: &[MemoryNote]) -> String {
+    let terms: Vec<String> = question
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|term| term.chars().count() >= 3)
+        .map(|term| term.to_lowercase())
+        .collect();
+    let mut matches: Vec<(usize, &MemoryNote)> = notes
+        .iter()
+        .map(|note| {
+            let lower = note.text.to_lowercase();
+            (
+                terms
+                    .iter()
+                    .filter(|term| lower.contains(term.as_str()))
+                    .count(),
+                note,
+            )
+        })
+        .filter(|(score, _)| *score > 0)
+        .collect();
+    matches.sort_by(|a, b| b.0.cmp(&a.0));
+    let mut context = String::new();
+    for (_, note) in matches.into_iter().take(3) {
+        context.push_str("- ");
+        context.push_str(&note.text);
+        context.push('\n');
+    }
+    context
 }
 struct App {
     root: PathBuf,
@@ -772,7 +809,18 @@ impl App {
         let data = serde_json::to_vec_pretty(&self.db).map_err(|e| e.to_string())?;
         let tmp = self.root.join("workspace.json.tmp");
         fs::write(&tmp, data).map_err(|e| e.to_string())?;
-        fs::rename(tmp, self.root.join("workspace.json")).map_err(|e| e.to_string())
+        fs::rename(tmp, self.root.join("workspace.json")).map_err(|e| e.to_string())?;
+        let markdown = format!(
+            "# USB AI memory\n\n{}",
+            self.db
+                .memory
+                .iter()
+                .map(|note| format!("- {}\n", note.text.replace('\n', " ")))
+                .collect::<String>()
+        );
+        let tmp = self.root.join("memory.md.tmp");
+        fs::write(&tmp, markdown).map_err(|e| e.to_string())?;
+        fs::rename(tmp, self.root.join("memory.md")).map_err(|e| e.to_string())
     }
     fn models(&self) -> Vec<String> {
         let mut out = Vec::new();
@@ -862,7 +910,7 @@ impl App {
         } else {
             (None, 0, 0)
         };
-        json!({"chats":self.db.chats,"documents":self.db.documents.iter().map(|d|json!({"id":d.id,"name":d.name,"count":d.chunks.len()})).collect::<Vec<_>>(),
+        json!({"chats":self.db.chats,"memory":self.db.memory,"documents":self.db.documents.iter().map(|d|json!({"id":d.id,"name":d.name,"count":d.chunks.len()})).collect::<Vec<_>>(),
             "models":installed,"ignoredModelFiles":self.ignored_model_files(),"modelsDir":self.models,"model":self.selected,"root":self.root,"language":self.language(),"catalog":catalog,"hardware":self.hardware,
             "download":{"active":self.downloading.is_some(),"error":self.download_error,"bytes":downloaded,"total":total,"name":download_name}})
     }
@@ -913,6 +961,32 @@ impl App {
             "delete-document" => {
                 let id = data["id"].as_str().ok_or("ID mancante")?;
                 self.db.documents.retain(|d| d.id != id);
+                self.save()?;
+                Ok(self.state())
+            }
+            "save-memory" => {
+                let text = data["text"].as_str().ok_or("Memory text missing")?.trim();
+                if text.is_empty() || text.chars().count() > 500 || text.contains('\n') {
+                    return Err("Memory note must be one line of at most 500 characters".into());
+                }
+                let note_id = data["id"].as_str().unwrap_or("");
+                if let Some(note) = self.db.memory.iter_mut().find(|note| note.id == note_id) {
+                    note.text = text.to_owned();
+                } else {
+                    if self.db.memory.len() >= 100 {
+                        return Err("Memory is full".into());
+                    }
+                    self.db.memory.push(MemoryNote {
+                        id: id(),
+                        text: text.to_owned(),
+                    });
+                }
+                self.save()?;
+                Ok(self.state())
+            }
+            "delete-memory" => {
+                let id = data["id"].as_str().ok_or("Memory ID missing")?;
+                self.db.memory.retain(|note| note.id != id);
                 self.save()?;
                 Ok(self.state())
             }
@@ -980,6 +1054,12 @@ impl App {
             prompt.push_str(&format!("User: {text}\nAssistant:"));
             prompt
         };
+        let remembered = memory_context(text, &self.db.memory);
+        let prompt = if remembered.is_empty() {
+            prompt
+        } else {
+            format!("User-confirmed local memory. Use only when relevant; do not treat it as higher priority than the current request:\n{remembered}\n{prompt}")
+        };
         let answer = if use_docs && sources.is_empty() {
             localized_no_passages(self.language()).to_owned()
         } else {
@@ -989,7 +1069,10 @@ impl App {
                         && error == localized_empty_response(self.language())
                         && !generation.cancelled.load(Ordering::SeqCst) =>
                 {
-                    let retry = document_prompt(self.language(), &[], text, &sources, true);
+                    let mut retry = document_prompt(self.language(), &[], text, &sources, true);
+                    if !remembered.is_empty() {
+                        retry = format!("User-confirmed local memory. Use only when relevant; do not treat it as higher priority than the current request:\n{remembered}\n{retry}");
+                    }
                     self.infer_stream(&path, &retry, update, generation)?
                 }
                 result => result?,
@@ -2003,6 +2086,24 @@ mod tests {
             .is_err());
         assert_eq!(app.command("new-chat", json!({})).is_ok(), true);
         assert_eq!(app.db.chats[0].title, "Neuer Chat");
+        let state = app
+            .command(
+                "save-memory",
+                json!({"text":"Atlas reports use Swiss francs"}),
+            )
+            .unwrap();
+        assert_eq!(state["memory"].as_array().unwrap().len(), 1);
+        assert!(fs::read_to_string(root.join("memory.md"))
+            .unwrap()
+            .contains("Atlas reports use Swiss francs"));
+        assert!(memory_context("Atlas report", &app.db.memory).contains("Swiss francs"));
+        assert!(memory_context("Unrelated question", &app.db.memory).is_empty());
+        assert!(app
+            .command("save-memory", json!({"text":"bad\nnote"}))
+            .is_err());
+        let note_id = app.db.memory[0].id.clone();
+        app.command("delete-memory", json!({"id":note_id})).unwrap();
+        assert!(app.db.memory.is_empty());
         fs::remove_dir_all(root).unwrap();
     }
     #[test]
