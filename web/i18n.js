@@ -61,6 +61,14 @@ const attachmentStrings = {
   es: {'attachFiles': 'Adjuntar archivos', 'noChatDocs': 'Aún no hay archivos en este chat.', 'legacyDocs': 'Documentos importados antes de esta actualización', 'attachToChat': 'Adjuntar a este chat', 'docsHint': 'Los archivos de este chat se usan automáticamente. Datos locales:'}
 };
 for (const language of Object.keys(window.USB_AI_I18N)) Object.assign(window.USB_AI_I18N[language], attachmentStrings[language]);
+const labLinkStrings = {
+  en: { lab:'Laboratory · advanced' },
+  it: { lab:'Laboratorio · avanzato' },
+  de: { lab:'Labor · für Fortgeschrittene' },
+  fr: { lab:'Laboratoire · avancé' },
+  es: { lab:'Laboratorio · avanzado' }
+};
+for (const language of Object.keys(window.USB_AI_I18N)) Object.assign(window.USB_AI_I18N[language], labLinkStrings[language]);
 const hardwareGuidanceStrings = {
   "en": {
     "hardwareAdviceChoice": "Best estimated fit for this computer: {model}.",

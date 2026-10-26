@@ -13,6 +13,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tiny_http::{Header, Method, Response, Server, StatusCode};
+mod lab;
 mod quantize;
 
 const INDEX: &str = include_str!("../web/index.html");
@@ -22,6 +23,9 @@ const CODE_VIEW: &str = include_str!("../web/code-view.js");
 const RESPONSE_VIEW: &str = include_str!("../web/response-view.js");
 const RESPONSE_VIEW_CSS: &str = include_str!("../web/response-view.css");
 const MESSAGE_MARKDOWN_CSS: &str = include_str!("../web/message-markdown.css");
+const LAB_HTML: &str = include_str!("../web/lab.html");
+const LAB_JS: &str = include_str!("../web/lab.js");
+const LAB_I18N: &str = include_str!("../web/lab-i18n.js");
 const MAX_FILE: usize = 20 * 1024 * 1024;
 
 fn normalize_language(value: &str) -> &'static str {
@@ -821,6 +825,30 @@ fn model_prompt_with_thinking(prompt: &str, model: &Path, enabled: bool) -> Stri
         format!("{before}\n{directive}\nAssistant:{after}")
     } else {
         format!("{prompt}\n{directive}")
+    }
+}
+
+fn is_lab_qwen_model(model: &Path) -> bool {
+    model
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| {
+            name.starts_with("LlamaNest-Qwen2.5-0.5B-") && name.ends_with("-Q4_K_M.gguf")
+        })
+}
+
+fn lab_qwen_prompt(prompt: &str) -> String {
+    format!("<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n")
+}
+
+fn completion_request(prompt: &str, model: &Path, thinking: bool) -> Value {
+    let prompt = model_prompt_with_thinking(prompt, model, thinking);
+    if is_lab_qwen_model(model) {
+        json!({"prompt":lab_qwen_prompt(&prompt),"n_predict":512,"temperature":0.0,
+            "cache_prompt":true,"stream":true,"stop":["<|im_end|>"]})
+    } else {
+        json!({"prompt":prompt,"n_predict":3072,"temperature":0.3,
+            "cache_prompt":true,"stream":true,"stop":["\nUser:"]})
     }
 }
 
@@ -1780,8 +1808,7 @@ impl App {
         if generation.cancelled.load(Ordering::SeqCst) {
             return Ok((String::new(), None));
         }
-        let prompt = model_prompt_with_thinking(prompt, model, self.db.thinking);
-        let body = json!({"prompt":prompt,"n_predict":3072,"temperature":0.3,"cache_prompt":true,"stream":true,"stop":["\nUser:"]}).to_string();
+        let body = completion_request(prompt, model, self.db.thinking).to_string();
         let child = Command::new(if cfg!(windows) { "curl.exe" } else { "curl" })
             .args([
                 "--fail",
@@ -2239,6 +2266,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .or_else(|| preferred.filter(|name| installed.contains(name)))
         .or_else(|| installed.first().cloned());
     let app = Arc::new(Mutex::new(app_state));
+    let lab_service = Arc::new(Mutex::new(lab::Service::new(
+        app.lock().unwrap().root.join("lab"),
+    )));
     let active_generation: Arc<Mutex<Option<Arc<ActiveGeneration>>>> = Arc::new(Mutex::new(None));
     let (server, port) = bind_server()?;
     let origin = format!("http://127.0.0.1:{port}");
@@ -2369,6 +2399,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let (code, mime, body) = if method == Method::Get && url == "/" {
             (200, "text/html; charset=utf-8", INDEX.as_bytes().to_vec())
+        } else if method == Method::Get && url == "/lab" {
+            (
+                200,
+                "text/html; charset=utf-8",
+                LAB_HTML.as_bytes().to_vec(),
+            )
+        } else if method == Method::Get && url == "/lab.js" {
+            (
+                200,
+                "text/javascript; charset=utf-8",
+                LAB_JS.as_bytes().to_vec(),
+            )
+        } else if method == Method::Get && url == "/lab-i18n.js" {
+            (
+                200,
+                "text/javascript; charset=utf-8",
+                LAB_I18N.as_bytes().to_vec(),
+            )
         } else if method == Method::Get && url == "/i18n.js" {
             (
                 200,
@@ -2399,6 +2447,80 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "text/css; charset=utf-8",
                 MESSAGE_MARKDOWN_CSS.as_bytes().to_vec(),
             )
+        } else if method == Method::Post && url.starts_with("/lab/") {
+            let strict_origin = request
+                .headers()
+                .iter()
+                .any(|header| header.field.equiv("Origin") && header.value.as_str() == origin);
+            if !strict_origin {
+                (
+                    403,
+                    "application/json",
+                    b"{\"error\":\"Origin not authorized\"}".to_vec(),
+                )
+            } else {
+                let limit = 2 * 1024 * 1024;
+                let mut bytes = Vec::new();
+                let result = if request
+                    .as_reader()
+                    .take((limit + 1) as u64)
+                    .read_to_end(&mut bytes)
+                    .is_err()
+                    || bytes.len() > limit
+                {
+                    Err("Lab request too large".to_owned())
+                } else if url == "/lab/upload" {
+                    lab_service.lock().unwrap().upload(&bytes)
+                } else if url == "/lab/api" {
+                    serde_json::from_slice::<Value>(&bytes)
+                        .map_err(|e| e.to_string())
+                        .and_then(|data| match data["action"].as_str().unwrap_or("") {
+                            "status" => Ok(lab_service.lock().unwrap().status()),
+                            "examples" => {
+                                let kind = data["kind"].as_str().unwrap_or("training");
+                                lab_service.lock().unwrap().examples(kind)
+                            }
+                            "save" => {
+                                let kind = data["kind"].as_str().ok_or("Choose a dataset type")?;
+                                lab_service.lock().unwrap().save(kind, &data["examples"])
+                            }
+                            "reset" => {
+                                let kind = data["kind"].as_str().ok_or("Choose a dataset type")?;
+                                lab_service.lock().unwrap().reset(kind)
+                            }
+                            "use_distilled" => lab_service.lock().unwrap().use_distilled(),
+                            "cancel" => Ok(lab_service.lock().unwrap().cancel()),
+                            "distill" => {
+                                let teacher = data["teacher"]
+                                    .as_str()
+                                    .ok_or("Choose a local teacher model")?;
+                                lab::start_distill(lab_service.clone(), app.clone(), teacher)
+                            }
+                            "train" => {
+                                let iters = data["iterations"]
+                                    .as_u64()
+                                    .ok_or("Choose a valid iteration count")?;
+                                lab::start_train(lab_service.clone(), app.clone(), iters)
+                            }
+                            "export_model" => lab::start_export(lab_service.clone(), app.clone()),
+                            "preview" => {
+                                let prompt = data["prompt"].as_str().ok_or("Enter a prompt")?;
+                                lab::start_preview(lab_service.clone(), prompt)
+                            }
+                            _ => Err("Unknown lab action".into()),
+                        })
+                } else {
+                    Err("Unknown lab route".into())
+                };
+                match result {
+                    Ok(value) => (200, "application/json", serde_json::to_vec(&value).unwrap()),
+                    Err(error) => (
+                        400,
+                        "application/json",
+                        serde_json::to_vec(&json!({"error":error})).unwrap(),
+                    ),
+                }
+            }
         } else if method == Method::Post && !allowed_origin {
             (
                 403,
@@ -2913,6 +3035,25 @@ mod tests {
             .unwrap(),
             "Ciao!"
         );
+    }
+    #[test]
+    fn exported_qwen_uses_its_chat_template() {
+        assert!(is_lab_qwen_model(Path::new(
+            "LlamaNest-Qwen2.5-0.5B-run-Q4_K_M.gguf"
+        )));
+        assert!(!is_lab_qwen_model(Path::new("other-qwen.gguf")));
+        assert_eq!(
+            lab_qwen_prompt("User: ciao\nAssistant:"),
+            "<|im_start|>user\nUser: ciao\nAssistant:<|im_end|>\n<|im_start|>assistant\n"
+        );
+        let request = completion_request(
+            "User: ciao\nAssistant:",
+            Path::new("LlamaNest-Qwen2.5-0.5B-run-Q4_K_M.gguf"),
+            false,
+        );
+        assert_eq!(request["temperature"], 0.0);
+        assert_eq!(request["n_predict"], 512);
+        assert_eq!(request["stop"][0], "<|im_end|>");
     }
     #[test]
     fn language_defaults_to_english_and_persists_selection() {
