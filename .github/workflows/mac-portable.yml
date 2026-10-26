@@ -72,7 +72,7 @@ jobs:
           done
           python3 - "$folder" "${{ matrix.architecture }}" <<'PY'
           from pathlib import Path
-          import subprocess, sys
+          import re, subprocess, sys
           folder = Path(sys.argv[1])
           linked_cpu = (folder / 'lib/libggml-cpu.dylib').is_file()
           dynamic_cpu = any((folder / 'bin').glob('libggml-cpu*.so'))
@@ -83,7 +83,8 @@ jobs:
           server_devices = subprocess.run([str(folder / 'bin/llama-server'), '--list-devices'],
                                           text=True, capture_output=True, check=True)
           if sys.argv[2] == 'arm64':
-              assert 'Metal:' in server_devices.stdout + server_devices.stderr, server_devices.stdout + server_devices.stderr
+              output = server_devices.stdout + server_devices.stderr
+              assert re.search(r'\b(?:Metal|MTL\d+):', output), output
           PY
           "$folder/bin/pdftotext" -v >/dev/null 2>&1
           ditto -c -k --sequesterRsrc --keepParent "$folder" "USB-AI-Rust-mac-${{ matrix.architecture }}.zip"
