@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { relevantMemories, memoryContext, memoryMarkdown, parseMemoryMarkdown } from '../memory.js';
+import { relevantMemories, memoryContext, memoryMarkdown, parseMemoryMarkdown, rememberRequest, memoryCommand } from '../memory.js';
 
 test('memory uses only relevant confirmed notes and keeps the prompt short', () => {
   const notes = [
@@ -14,4 +14,22 @@ test('memory uses only relevant confirmed notes and keeps the prompt short', () 
   assert.equal(memoryContext('Unrelated question', notes), '');
   assert.match(memoryMarkdown(notes), /^# USB-AI memory/m);
   assert.deepEqual(parseMemoryMarkdown(memoryMarkdown(notes)), notes.map(note => note.text));
+});
+
+test('explicit remember requests open a note instead of reaching the model', () => {
+  assert.equal(rememberRequest('Il gatto si chiama Luna, ricorda questa cosa'), 'Il gatto si chiama Luna');
+  assert.equal(rememberRequest('Remember that the cat is called Luna.'), 'the cat is called Luna');
+  assert.equal(rememberRequest('Le chat s’appelle Luna, retiens ceci.'), 'Le chat s’appelle Luna');
+  assert.equal(rememberRequest('Die Katze heißt Luna, merke dir das.'), 'Die Katze heißt Luna');
+  assert.equal(rememberRequest('El gato se llama Luna, recuerda esto.'), 'El gato se llama Luna');
+  assert.equal(rememberRequest('Come si chiama il gatto?'), null);
+  assert.equal(rememberRequest('Ricorda questa cosa'), null);
+});
+
+test('slash memory command works in every interface language', () => {
+  assert.equal(memoryCommand('/salva Il gatto si chiama Luna'), 'Il gatto si chiama Luna');
+  assert.equal(memoryCommand('/salva'), '');
+  assert.equal(memoryCommand('/save The cat is called Luna'), 'The cat is called Luna');
+  assert.equal(memoryCommand('/salvare qualcosa'), null);
+  assert.equal(memoryCommand('Come salvo una nota?'), null);
 });

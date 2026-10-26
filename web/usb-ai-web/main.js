@@ -10,11 +10,12 @@ import { savedModels, downloadCurated, downloadVerified, moveCachedToFolder, add
 import { canSaveToFolder, showModelFolder } from './folder-models.js';
 import { usesSafariCpu, needsSafariFallback, largeModelWarningBrowser } from './browser-capability.js';
 import { browserHardware, modelGuidance, recommendedModel } from './model-guidance.js';
-import { memoryContext, memoryMarkdown, parseMemoryMarkdown } from './memory.js';
+import { memoryContext, memoryMarkdown, parseMemoryMarkdown, rememberRequest, memoryCommand } from './memory.js';
 
 const $ = id => document.getElementById(id);
 let language = preferredLanguage();
 let chats = [], documents = [], models = [], memories = [], activeId, selectedId, busy = false, controller, installing;
+let pendingMemoryPrompt = null;
 let hubResults = [], hubNext = null, hubSearching = false;
 let pendingFirstPrompt = false;
 const STARTER_ID = 'llama-3.2-3b-iq3m';
@@ -35,7 +36,7 @@ function translate() { document.documentElement.lang = language; document.queryS
 function closeSidebar() { $('sidebar').classList.remove('open'); }
 function saveSettings() { return db.put('settings', { id: 'main', language, selectedId, activeId }); }
 function renderChats() { const list = $('chat-list'); list.replaceChildren(); if (!chats.length) list.append(node('p', tr('noChats'), 'empty')); for (const chat of [...chats].sort((a,b) => b.updated - a.updated)) { const button = node('button', chat.title, `chat-item${chat.id === activeId ? ' active' : ''}`); button.onclick = () => { activeId = chat.id; saveSettings(); render(); closeSidebar(); }; list.append(button); } }
-function renderMessages() { const box = $('messages'); box.replaceChildren(); const chat = chats.find(item => item.id === activeId); if (!chat?.messages.length) { const welcome = node('div', undefined, 'welcome'); welcome.append(node('div', '✦', 'welcome-mark'), node('h1', tr('welcome')), node('p', models.length ? tr('welcomeNote') : tr(usesSafariCpu() ? 'safariStarterHint' : 'starterHint'))); box.append(welcome); return; } for (const message of chat.messages) { const row = node('article', undefined, `message ${message.role}`); row.append(node('div', message.role === 'user' ? 'U' : '✦', 'avatar')); const content = node('div'); const body = node('div', undefined, 'message-body'); window.USB_AI_CODE_VIEW.render(body, message.text, language); content.append(node('strong', message.role === 'user' ? tr('you') : tr('assistant')), body); if (message.role === 'assistant' && message.text) { const correction = node('button', tr('rememberCorrection'), 'memory-correction'); correction.onclick = () => { $('memory-id').value = ''; $('memory-text').value = ''; $('memory-dialog').showModal(); $('memory-text').focus(); }; content.append(correction); } if (message.sources?.length) { const details = node('details', undefined, 'source'); details.append(node('summary', `${tr('sources')} (${message.sources.length})`)); for (const source of message.sources) details.append(node('p', `${source.name}: ${source.text}`)); content.append(details); } row.append(content); box.append(row); } $('thread').scrollTop = $('thread').scrollHeight; }
+function renderMessages() { const box = $('messages'); box.replaceChildren(); const chat = chats.find(item => item.id === activeId); if (!chat?.messages.length) { const welcome = node('div', undefined, 'welcome'); welcome.append(node('div', '✦', 'welcome-mark'), node('h1', tr('welcome')), node('p', models.length ? tr('welcomeNote') : tr(usesSafariCpu() ? 'safariStarterHint' : 'starterHint'))); box.append(welcome); return; } for (const message of chat.messages) { const row = node('article', undefined, `message ${message.role}`); row.append(node('div', message.role === 'user' ? 'U' : '✦', 'avatar')); const content = node('div'); const body = node('div', undefined, 'message-body'); window.USB_AI_CODE_VIEW.render(body, message.text, language); content.append(node('strong', message.role === 'user' ? tr('you') : tr('assistant')), body); if (message.role === 'assistant' && message.text) { const correction = node('button', tr('rememberCorrection'), 'memory-correction'); correction.onclick = () => { pendingMemoryPrompt = null; $('memory-id').value = ''; $('memory-text').value = ''; $('memory-dialog').showModal(); $('memory-text').focus(); }; content.append(correction); } if (message.sources?.length) { const details = node('details', undefined, 'source'); details.append(node('summary', `${tr('sources')} (${message.sources.length})`)); for (const source of message.sources) details.append(node('p', `${source.name}: ${source.text}`)); content.append(details); } row.append(content); box.append(row); } $('thread').scrollTop = $('thread').scrollHeight; }
 function appendModelAdvice(info, model, hardware, recommended = false) {
   const advice = modelGuidance(model, hardware);
   const detail = tr(advice.reason).replace('{minimum}', advice.memory.minimum).replace('{recommended}', advice.memory.recommended);
@@ -146,6 +147,17 @@ async function newChat() { const chat = { id: crypto.randomUUID(), title: tr('ne
 async function send() {
   const text = $('prompt').value.trim();
   if (!text || busy) return;
+  const command = memoryCommand(text);
+  const note = command ?? rememberRequest(text);
+  if (note !== null) {
+    pendingMemoryPrompt = text;
+    $('memory-id').value = '';
+    $('memory-text').value = note;
+    renderMemory();
+    $('memory-dialog').showModal();
+    $('memory-text').focus();
+    return;
+  }
   if (!selectedId) {
     const starter = usesSafariCpu() ? models.find(model => model.id === 'qwen-0.5b') : models.find(isStarterModel);
     if (starter) {
@@ -212,8 +224,9 @@ $('new-chat').onclick = () => run(newChat);
 $('menu').onclick = () => $('sidebar').classList.toggle('open');
 for (const id of ['models-open','model-trigger']) $(id).onclick = () => { closeSidebar(); renderModels(); renderSearch(); $('models-dialog').showModal(); };
 $('docs-open').onclick = () => { closeSidebar(); renderDocs(); $('docs-dialog').showModal(); };
-$('memory-open').onclick = () => { closeSidebar(); renderMemory(); $('memory-dialog').showModal(); };
-$('memory-form').onsubmit = event => run(async () => { event.preventDefault(); const text = $('memory-text').value.replace(/\s+/g, ' ').trim(); if (!text || text.length > 500) return; if (!$('memory-id').value && memories.length >= 100) throw Error(tr('memoryFull')); const id = $('memory-id').value || crypto.randomUUID(); const note = { id, text, updated:Date.now() }; await db.put('memory', note); memories = memories.filter(item => item.id !== id); memories.push(note); $('memory-id').value = ''; $('memory-text').value = ''; renderMemory(); });
+$('memory-open').onclick = () => { pendingMemoryPrompt = null; closeSidebar(); renderMemory(); $('memory-dialog').showModal(); };
+$('memory-dialog').addEventListener('close', () => { pendingMemoryPrompt = null; });
+$('memory-form').onsubmit = event => run(async () => { event.preventDefault(); const text = $('memory-text').value.replace(/\s+/g, ' ').trim(); if (!text || text.length > 500) return; if (!$('memory-id').value && memories.length >= 100) throw Error(tr('memoryFull')); const id = $('memory-id').value || crypto.randomUUID(); const note = { id, text, updated:Date.now() }; await db.put('memory', note); memories = memories.filter(item => item.id !== id); memories.push(note); if (pendingMemoryPrompt === $('prompt').value.trim()) $('prompt').value = ''; pendingMemoryPrompt = null; $('memory-id').value = ''; $('memory-text').value = ''; renderMemory(); $('memory-dialog').close(); setStatus(tr('memorySaved')); });
 $('memory-export').onclick = () => { const url = URL.createObjectURL(new Blob([memoryMarkdown(memories)], {type:'text/markdown'})); const link = node('a'); link.href = url; link.download = 'usb-ai-memory.md'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); };
 $('memory-import').onchange = event => run(async () => { const file = event.target.files?.[0]; event.target.value = ''; if (!file || file.size > 100_000) return; for (const text of parseMemoryMarkdown(await file.text())) { if (memories.length >= 100) break; if (memories.some(note => note.text === text)) continue; const note = { id:crypto.randomUUID(), text, updated:Date.now() }; await db.put('memory', note); memories.push(note); } renderMemory(); });
 document.querySelectorAll('[data-close]').forEach(button => button.onclick = () => $(button.dataset.close).close());
