@@ -87,6 +87,32 @@ jobs:
           }
           & (Join-Path $folder 'bin/pdftotext.exe') -v 2>$null
           if ($LASTEXITCODE -ne 0) { throw 'Packaged pdftotext cannot start' }
+          $importHome = Join-Path $env:RUNNER_TEMP 'usb-ai-import-check'
+          New-Item $importHome -ItemType Directory -Force | Out-Null
+          $sample = Join-Path $env:RUNNER_TEMP 'sample-model.gguf'
+          [System.IO.File]::WriteAllBytes($sample, [System.Text.Encoding]::ASCII.GetBytes('GGUFtest'))
+          $env:USB_AI_DIR = $importHome
+          $app = Start-Process -FilePath (Resolve-Path (Join-Path $folder 'bin/usb-ai-rust.exe')) -PassThru -WindowStyle Hidden
+          try {
+            $base = 'http://127.0.0.1:48157'
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 30; $attempt++) {
+              try {
+                $null = Invoke-WebRequest $base -TimeoutSec 2
+                $ready = $true
+                break
+              } catch { Start-Sleep -Milliseconds 500 }
+            }
+            if (-not $ready) { throw 'Packaged app did not start its localhost server' }
+            $imported = Invoke-WebRequest "$base/import-model/CI-Local.GGUF" -Method Post -InFile $sample -ContentType 'application/octet-stream'
+            if ($imported.StatusCode -ne 200) { throw 'GGUF import failed' }
+            $state = $imported.Content | ConvertFrom-Json
+            if ($state.model -ne 'CI-Local.GGUF') { throw 'Imported GGUF was not selected' }
+            if (!(Test-Path (Join-Path $importHome 'models/CI-Local.GGUF'))) { throw 'Imported GGUF was not saved in models' }
+          } finally {
+            Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
+            Remove-Item Env:USB_AI_DIR -ErrorAction SilentlyContinue
+          }
           Compress-Archive -Path $folder -DestinationPath 'USB-AI-Rust-Windows-x64.zip' -Force
       - name: Upload build artifact
         uses: actions/upload-artifact@v4

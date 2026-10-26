@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     env, fs,
-    io::{BufRead, BufReader, Read, Write},
+    io::{self, BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{
@@ -1187,6 +1187,69 @@ impl App {
         self.save()?;
         Ok(self.state())
     }
+    fn import_model(
+        &mut self,
+        name: &str,
+        reader: &mut dyn Read,
+        expected: usize,
+    ) -> Result<Value, String> {
+        if name.is_empty()
+            || name.len() > 200
+            || name.starts_with("._")
+            || !name.to_ascii_lowercase().ends_with(".gguf")
+            || name.to_ascii_lowercase().contains("mmproj")
+            || name
+                .chars()
+                .any(|c| c.is_control() || "/\\:<>\"|?*".contains(c))
+        {
+            return Err("Invalid GGUF filename".into());
+        }
+        if expected < 4 {
+            return Err("Invalid GGUF file".into());
+        }
+        fs::create_dir_all(&self.models).map_err(|e| e.to_string())?;
+        let target = self.models.join(name);
+        if target.exists() || self.root.join("models").join(name).exists() {
+            return Err(
+                "A model with this filename already exists. Select it from the model list.".into(),
+            );
+        }
+        let temporary = self.models.join(format!(".{name}.{}.part", id()));
+        let result = (|| {
+            let mut output = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temporary)
+                .map_err(|e| e.to_string())?;
+            let written = io::copy(&mut reader.take(expected as u64), &mut output)
+                .map_err(|e| e.to_string())?;
+            if written != expected as u64 {
+                return Err("Incomplete GGUF upload".into());
+            }
+            output.flush().map_err(|e| e.to_string())?;
+            drop(output);
+            let mut input = fs::File::open(&temporary).map_err(|e| e.to_string())?;
+            let mut head = [0; 4];
+            input.read_exact(&mut head).map_err(|e| e.to_string())?;
+            if &head != b"GGUF" {
+                return Err("Invalid GGUF file".into());
+            }
+            drop(input);
+            if target.exists() {
+                return Err("A model with this filename already exists".into());
+            }
+            fs::rename(&temporary, &target).map_err(|e| e.to_string())?;
+            self.db.external_models.retain(|model| model.name != name);
+            self.inference = None;
+            self.selected = Some(name.to_owned());
+            self.save()?;
+            Ok(self.state())
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&temporary);
+        }
+        result
+    }
     fn state(&self) -> Value {
         let installed = self.models();
         let model_details = installed.iter().filter_map(|name| {
@@ -2221,6 +2284,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "application/json",
                 b"{\"error\":\"Origin non autorizzata\"}".to_vec(),
             )
+        } else if method == Method::Post && url.starts_with("/import-model/") {
+            let result = decode_name(&url[14..]).and_then(|name| {
+                let length = request
+                    .body_length()
+                    .ok_or_else(|| "Model upload size missing".to_owned())?;
+                app.lock()
+                    .unwrap()
+                    .import_model(&name, request.as_reader(), length)
+            });
+            match result {
+                Ok(v) => (200, "application/json", serde_json::to_vec(&v).unwrap()),
+                Err(e) => (
+                    400,
+                    "application/json",
+                    serde_json::to_vec(&json!({"error":e})).unwrap(),
+                ),
+            }
         } else if method == Method::Post && (url == "/api" || url.starts_with("/upload/")) {
             let mut body = Vec::new();
             let result = if request
@@ -2611,6 +2691,44 @@ mod tests {
             b"GGUFtest"
         );
         assert!(old_file.exists());
+        fs::remove_dir_all(base).unwrap();
+    }
+    #[test]
+    fn browser_import_streams_gguf_to_models_and_rejects_bad_uploads() {
+        let base = env::temp_dir().join(format!("usb-ai-browser-import-{}", id()));
+        let root = base.join("PocketAI-data");
+        let models = base.join("models");
+        fs::create_dir_all(&root).unwrap();
+        let mut app = App {
+            root,
+            models: models.clone(),
+            db: Workspace::default(),
+            selected: None,
+            catalog: model_catalog(),
+            hardware: detect_hardware(),
+            downloading: None,
+            download_error: None,
+            inference: None,
+            quantization: None,
+        };
+        let mut good = io::Cursor::new(b"GGUFtest");
+        let state = app.import_model("Local.GGUF", &mut good, 8).unwrap();
+        assert_eq!(state["model"], "Local.GGUF");
+        assert_eq!(fs::read(models.join("Local.GGUF")).unwrap(), b"GGUFtest");
+        assert!(app
+            .import_model("Local.GGUF", &mut io::Cursor::new(b"GGUFnew"), 7)
+            .is_err());
+        assert!(app
+            .import_model("../bad.gguf", &mut io::Cursor::new(b"GGUFtest"), 8)
+            .is_err());
+        assert!(app
+            .import_model("bad.gguf", &mut io::Cursor::new(b"wrong"), 5)
+            .is_err());
+        assert!(app
+            .import_model("short.gguf", &mut io::Cursor::new(b"GGUF"), 8)
+            .is_err());
+        assert!(!models.join("bad.gguf").exists());
+        assert!(!models.join("short.gguf").exists());
         fs::remove_dir_all(base).unwrap();
     }
     #[test]
