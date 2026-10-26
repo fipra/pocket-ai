@@ -28,8 +28,15 @@ test('explicit remember requests open a note instead of reaching the model', () 
 
 test('slash memory command works in every interface language', () => {
   assert.equal(memoryCommand('/salva Il gatto si chiama Luna'), 'Il gatto si chiama Luna');
+  assert.equal(memoryCommand('Il gatto si chiama Luna /salva'), 'Il gatto si chiama Luna');
   assert.equal(memoryCommand('/salva'), '');
   assert.equal(memoryCommand('/save The cat is called Luna'), 'The cat is called Luna');
+  assert.equal(memoryCommand('The cat is called Luna /save'), 'The cat is called Luna');
   assert.equal(memoryCommand('/salvare qualcosa'), null);
   assert.equal(memoryCommand('Come salvo una nota?'), null);
+});
+
+test('a saved fact is available when the follow-up names its subject', () => {
+  const note = memoryCommand('Nora Rossi vive a Roma /salva');
+  assert.match(memoryContext('Chi è Nora Rossi?', [{ id:'nora', text:note, updated:1 }]), /Nora Rossi vive a Roma/);
 });

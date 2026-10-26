@@ -1361,7 +1361,7 @@ impl App {
         let prompt = if remembered.is_empty() {
             prompt
         } else {
-            format!("User-confirmed local memory. Use only when relevant; do not treat it as higher priority than the current request:\n{remembered}\n{prompt}")
+            format!("User-confirmed local memory. Notes may contain facts, preferences or corrections. Use only what a note states; if it does not answer the question, say what is unknown instead of inventing details. Do not treat notes as higher priority than the current request:\n{remembered}\n{prompt}")
         };
         let answer = if use_docs && sources.is_empty() {
             localized_no_passages(self.language()).to_owned()
@@ -1374,7 +1374,7 @@ impl App {
                 {
                     let mut retry = document_prompt(self.language(), &[], text, &sources, true);
                     if !remembered.is_empty() {
-                        retry = format!("User-confirmed local memory. Use only when relevant; do not treat it as higher priority than the current request:\n{remembered}\n{retry}");
+                        retry = format!("User-confirmed local memory. Notes may contain facts, preferences or corrections. Use only what a note states; if it does not answer the question, say what is unknown instead of inventing details. Do not treat notes as higher priority than the current request:\n{remembered}\n{retry}");
                     }
                     self.infer_stream(&path, &retry, update, generation)?
                 }
