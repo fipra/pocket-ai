@@ -44,14 +44,16 @@ Open **Models → Quantize Model** in a build that includes `llama-quantize`. Ch
 
 1. Download [**USB-AI-Rust-Windows-x64.zip**](https://github.com/fipra/usb-ai/releases/download/rust-windows-stop-2026-10-24/USB-AI-Rust-Windows-x64.zip).
 2. Extract the complete folder to your USB drive or another location.
-3. Double-click `Avvia USB AI Rust.cmd`. Your browser opens automatically.
+3. Double-click `Avvia USB AI Rust GPU.cmd` to use a detected Vulkan GPU (including NVIDIA RTX), or `Avvia USB AI Rust.cmd` for CPU mode. The GPU launcher falls back to CPU when no Vulkan device is detected.
 4. Send your first prompt to download and prepare the default Llama 3.2 3B model, or choose another model. Chat and document search then work offline.
 
-The destination PC does **not** need Rust, Cargo, or a PowerShell setup. Keep the whole folder together; downloaded models and data stay inside it. This build is for Windows x64. The automated Windows build checks the package and included tools, but use on a physical Windows PC and USB drive still needs testing.
+The destination PC does **not** need Rust, Cargo, or a PowerShell setup. Keep the whole folder together; downloaded models and data stay inside it. GPU mode needs a working Vulkan graphics driver. Run `bin\gpu\llama-server.exe --list-devices` to check which GPU the bundled runtime detects. This build is for Windows x64. The automated Windows build checks the package and included tools, but GPU inference on a physical Windows PC still needs testing.
 
 ### macOS
 
 Download the ZIP that matches your Mac from the [macOS release](https://github.com/fipra/usb-ai/releases/tag/rust-mac-stop-2026-10-24): **arm64** for Apple Silicon or **x86_64** for Intel. Extract the complete folder to your USB drive and double-click `Avvia USB AI Rust.command`. Send your first prompt to download the default model, or choose another model. The ZIP includes the app, its license, `llama-server`, `llama-cli`, `pdftotext`, and their required libraries; it does not include model weights or personal data.
+
+On Mac, llama.cpp uses Metal automatically when its bundled backend detects a compatible GPU. Run `bin/llama-server --list-devices` inside the extracted folder to check for `Metal:`. The Apple Silicon package build checks that Metal is available.
 
 On first launch, the launcher verifies the bundled executables and libraries' local signatures and clears their quarantine attributes if present, before starting the app. This prevents a bundled `.dylib` from being blocked on the first prompt. The package is not Developer ID signed or notarized, so macOS may still ask you to allow the launcher itself. Developers can create the folder locally with `python3 scripts/package-mac.py` on a Mac of the same architecture.
 

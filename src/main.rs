@@ -1512,61 +1512,84 @@ impl App {
             self.inference = None;
         }
         if self.inference.is_none() {
-            let listener = std::net::TcpListener::bind("127.0.0.1:0")
-                .map_err(|e| format!("llama-server: {e}"))?;
-            let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-            drop(listener);
-            let child = Command::new(tool_path("LLAMA_SERVER", "llama-server"))
-                .args(["--host", "127.0.0.1", "--port", &port.to_string(), "-m"])
-                .arg(model)
-                .args(["-c", "8192", "--no-webui"])
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn()
-                .map_err(|e| format!("llama-server: {e}"))?;
-            self.inference = Some(InferenceServer {
-                model: model.to_path_buf(),
-                port,
-                child,
-            });
-            let deadline = Instant::now() + Duration::from_secs(180);
-            loop {
-                if generation.cancelled.load(Ordering::SeqCst) {
-                    return Ok(String::new());
+            let mut load_error = String::new();
+            for cpu_only in [false, true] {
+                let listener = std::net::TcpListener::bind("127.0.0.1:0")
+                    .map_err(|e| format!("llama-server: {e}"))?;
+                let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+                drop(listener);
+                let mut command = Command::new(tool_path("LLAMA_SERVER", "llama-server"));
+                command
+                    .args(["--host", "127.0.0.1", "--port", &port.to_string(), "-m"])
+                    .arg(model)
+                    .args(["-c", "8192", "--no-webui"]);
+                if cpu_only {
+                    command.args(["--device", "none", "-ngl", "0"]);
                 }
-                let server = self.inference.as_mut().unwrap();
-                if server
-                    .child
-                    .try_wait()
-                    .map_err(|e| e.to_string())?
-                    .is_some()
+                let child = match command
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
                 {
-                    self.inference = None;
-                    return Err("llama-server exited while loading the model".into());
+                    Ok(child) => child,
+                    Err(error) => {
+                        load_error = format!("llama-server: {error}");
+                        continue;
+                    }
+                };
+                self.inference = Some(InferenceServer {
+                    model: model.to_path_buf(),
+                    port,
+                    child,
+                });
+                let deadline = Instant::now() + Duration::from_secs(180);
+                loop {
+                    if generation.cancelled.load(Ordering::SeqCst) {
+                        return Ok(String::new());
+                    }
+                    let server = self.inference.as_mut().unwrap();
+                    if server
+                        .child
+                        .try_wait()
+                        .map_err(|e| e.to_string())?
+                        .is_some()
+                    {
+                        self.inference = None;
+                        load_error = "llama-server exited while loading the model".into();
+                        break;
+                    }
+                    let status = Command::new(if cfg!(windows) { "curl.exe" } else { "curl" })
+                        .args([
+                            "--silent",
+                            "--max-time",
+                            "2",
+                            "--noproxy",
+                            "127.0.0.1",
+                            "--output",
+                            if cfg!(windows) { "NUL" } else { "/dev/null" },
+                            "--write-out",
+                            "%{http_code}",
+                            &format!("http://127.0.0.1:{port}/health"),
+                        ])
+                        .output();
+                    if status.is_ok_and(|output| output.status.success() && output.stdout == b"200")
+                    {
+                        break;
+                    }
+                    if Instant::now() >= deadline {
+                        self.inference = None;
+                        load_error = "llama-server timed out while loading the model".into();
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(300));
                 }
-                let status = Command::new(if cfg!(windows) { "curl.exe" } else { "curl" })
-                    .args([
-                        "--silent",
-                        "--max-time",
-                        "2",
-                        "--noproxy",
-                        "127.0.0.1",
-                        "--output",
-                        if cfg!(windows) { "NUL" } else { "/dev/null" },
-                        "--write-out",
-                        "%{http_code}",
-                        &format!("http://127.0.0.1:{port}/health"),
-                    ])
-                    .output();
-                if status.is_ok_and(|output| output.status.success() && output.stdout == b"200") {
+                if self.inference.is_some() {
                     break;
                 }
-                if Instant::now() >= deadline {
-                    self.inference = None;
-                    return Err("llama-server timed out while loading the model".into());
-                }
-                thread::sleep(Duration::from_millis(300));
+            }
+            if self.inference.is_none() {
+                return Err(load_error);
             }
         }
         let port = self.inference.as_ref().unwrap().port;

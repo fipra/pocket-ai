@@ -70,7 +70,7 @@ jobs:
           for kind in Q8_0 Q4_K_M Q3_K_M Q2_K; do
             [[ "$quantize_help" == *"$kind"* ]] || { echo "Packaged llama-quantize lacks $kind" >&2; exit 1; }
           done
-          python3 - "$folder" <<'PY'
+          python3 - "$folder" "${{ matrix.architecture }}" <<'PY'
           from pathlib import Path
           import subprocess, sys
           folder = Path(sys.argv[1])
@@ -80,6 +80,10 @@ jobs:
           devices = subprocess.run([str(folder / 'bin/llama-cli'), '--list-devices'],
                                    text=True, capture_output=True, check=True)
           assert any(name in devices.stdout + devices.stderr for name in ('BLAS:', 'Metal:', 'CPU:')), devices.stdout + devices.stderr
+          server_devices = subprocess.run([str(folder / 'bin/llama-server'), '--list-devices'],
+                                          text=True, capture_output=True, check=True)
+          if sys.argv[2] == 'arm64':
+              assert 'Metal:' in server_devices.stdout + server_devices.stderr, server_devices.stdout + server_devices.stderr
           PY
           "$folder/bin/pdftotext" -v >/dev/null 2>&1
           ditto -c -k --sequesterRsrc --keepParent "$folder" "USB-AI-Rust-mac-${{ matrix.architecture }}.zip"
