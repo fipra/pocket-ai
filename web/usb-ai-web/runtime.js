@@ -1,4 +1,5 @@
 import { createSHA256 } from 'hash-wasm';
+import { normalizeChatMessages } from './chat-messages.js';
 import { CATALOG } from './catalog.js';
 import * as db from './storage.js';
 import { isSmartphone } from './phone-gate.js';
@@ -207,7 +208,7 @@ export async function streamChat(messages, onToken, signal, thinking = false) {
   // starts streaming, slow local generation can finish normally.
   if (safariCpu && !settled) timer = setTimeout(() => interrupt('GENERATION_TIMEOUT'), 90_000);
   const generation = current.createChatCompletion({
-    messages,
+    messages: normalizeChatMessages(messages),
     max_tokens: safariCpu ? 768 : 3072,
     temperature: 0.7,
     stream: true,
