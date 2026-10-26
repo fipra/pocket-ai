@@ -12,8 +12,9 @@ providing a paid service with it. Fees and other terms are negotiated for each
 agreement. This document is information only: it does **not** grant commercial
 rights or constitute an offer or signed agreement.
 
-To discuss a commercial agreement, contact the project through the official
-[USB AI GitHub repository](https://github.com/fipra/usb-ai).
+To discuss a commercial agreement, [open a commercial licensing inquiry](https://github.com/fipra/usb-ai/issues/new?title=Commercial%20licensing%20inquiry)
+on the official USB AI GitHub repository. Issues are public, so do not include
+confidential business details in the initial request.
 
 Copies of code published at or before commit
 `4cf59ef7709235092ef3ceba74aab680a3001d4e`, and historical releases,

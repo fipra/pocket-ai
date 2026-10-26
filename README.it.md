@@ -1,5 +1,10 @@
 # USB AI Rust
 
+> [!IMPORTANT]
+> **Per usare commercialmente le versioni attuali di USB AI serve prima una licenza scritta separata e a pagamento.** Questo vale anche per l'uso interno in azienda, i lavori per clienti, i servizi a pagamento, la rivendita e l'integrazione in un prodotto commerciale. [Contatta il titolare del progetto per un accordo](https://github.com/fipra/usb-ai/issues/new?title=Richiesta%20licenza%20commerciale) e leggi le [condizioni commerciali](COMMERCIAL_LICENSE.md).
+>
+> Le vecchie copie pubblicate sotto MIT conservano i diritti di uso commerciale: vedi la [cronologia delle licenze](LICENSING_HISTORY.md). Strumenti e modelli di terzi hanno licenze proprie.
+
 Assistente AI locale e portatile. L'applicazione è scritta in Rust, apre la propria interfaccia nel browser e usa `llama-server` per mantenere i modelli GGUF caricati sul computer. Non richiede account o API cloud. Conversazioni, documenti indicizzati e modelli possono restare sulla stessa chiavetta USB.
 
 ## Licenze

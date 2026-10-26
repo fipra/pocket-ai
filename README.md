@@ -1,5 +1,10 @@
 # USB AI Rust
 
+> [!IMPORTANT]
+> **Commercial use of current USB AI versions requires a separate paid written license before use.** This includes internal business use, client work, paid services, resale, and integration into a commercial product. [Contact the project owner about an agreement](https://github.com/fipra/usb-ai/issues/new?title=Commercial%20licensing%20inquiry) and read the [commercial licensing terms](COMMERCIAL_LICENSE.md).
+>
+> Earlier copies released under MIT retain their commercial-use rights; see the [licensing history](LICENSING_HISTORY.md). Third-party tools and models have their own licenses.
+
 A private, portable AI assistant that runs on your computer. The Rust app opens in your browser and uses `llama-server` to keep GGUF models loaded locally. It needs no account or cloud API. Keep the entire folder on a USB drive to carry your models and data with you.
 
 [**Download for Windows x64**](https://github.com/fipra/usb-ai/releases/tag/rust-windows-stop-2026-10-24) · [**Download for macOS**](https://github.com/fipra/usb-ai/releases/tag/rust-mac-stop-2026-10-24) · [Leggi in italiano](README.it.md)
