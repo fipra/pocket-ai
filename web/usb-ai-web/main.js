@@ -14,6 +14,7 @@ import { canSaveToFolder, showModelFolder } from './folder-models.js';
 import { usesSafariCpu, needsSafariFallback, largeModelWarningBrowser } from './browser-capability.js';
 import { browserHardware, modelGuidance, recommendedModel } from './model-guidance.js';
 import { memoryContext, memoryMarkdown, parseMemoryMarkdown, rememberRequest, memoryCommand, identityMemoryNotes } from './memory.js';
+import { splitGgufFile } from './gguf-split.js';
 
 const $ = id => document.getElementById(id);
 let language = preferredLanguage();
@@ -22,6 +23,7 @@ let pendingMemoryPrompt = null;
 let thinking = false;
 let hubResults = [], hubNext = null, hubSearching = false;
 let pendingFirstPrompt = false;
+let splitSourceFile, splitController;
 const STARTER_ID = 'llama-3.2-3b-iq3m';
 const STARTER_FILE = 'Llama-3.2-3B-Instruct-IQ3_M.gguf';
 const isStarterModel = model => model?.id === STARTER_ID || [model?.filename, model?.name, model?.url].some(value => typeof value === 'string' && value.endsWith(STARTER_FILE));
@@ -112,7 +114,7 @@ async function searchHub(skip = 0) {
   } catch (error) { $('hub-status').textContent = `${tr('error')}: ${error.message}`; }
   finally { hubSearching = false; renderSearch(); }
 }
-function render() { translate(); $('thinking-toggle').textContent = tr(thinking ? 'thinkingOn' : 'thinkingOff'); $('thinking-toggle').setAttribute('aria-pressed', String(thinking)); $('thinking-toggle').classList.toggle('on', thinking); renderBrowserModelWarning(); renderChats(); renderMessages(); if ($('models-dialog').open) { renderModels(); renderSearch(); } if ($('docs-dialog').open) renderDocs(); if ($('memory-dialog').open) renderMemory(); $('model-trigger').textContent = `${models.find(model => model.id === selectedId)?.name || tr('chooseModel')} ⌄`; $('send').disabled = busy; $('stop').hidden = !controller; $('attach-files').ariaLabel = tr('attachFiles'); $('attach-files').title = tr('attachFiles'); renderAttachments(); $('capability').textContent = `${navigator.gpu ? tr('capabilityGpu') : tr('capabilityWasm')} · ${navigator.onLine ? tr('private') : tr('offline')}`; $('folder-hint').textContent = tr(canSaveToFolder() ? 'folderHint' : 'folderFallbackHint'); $('choose-folder').hidden = !canSaveToFolder(); $('first-model-choice').hidden = !pendingFirstPrompt; $('download-starter-model').disabled = busy || !navigator.onLine; }
+function render() { translate(); $('thinking-toggle').textContent = tr(thinking ? 'thinkingOn' : 'thinkingOff'); $('thinking-toggle').setAttribute('aria-pressed', String(thinking)); $('thinking-toggle').classList.toggle('on', thinking); renderBrowserModelWarning(); renderChats(); renderMessages(); if ($('models-dialog').open) { renderModels(); renderSearch(); } if ($('docs-dialog').open) renderDocs(); if ($('memory-dialog').open) renderMemory(); $('model-trigger').textContent = `${models.find(model => model.id === selectedId)?.name || tr('chooseModel')} ⌄`; $('send').disabled = busy; $('stop').hidden = !controller; $('attach-files').ariaLabel = tr('attachFiles'); $('attach-files').title = tr('attachFiles'); renderAttachments(); $('capability').textContent = `${navigator.gpu ? tr('capabilityGpu') : tr('capabilityWasm')} · ${navigator.onLine ? tr('private') : tr('offline')}`; $('folder-hint').textContent = tr(canSaveToFolder() ? 'folderHint' : 'folderFallbackHint'); $('choose-folder').hidden = !canSaveToFolder(); $('first-model-choice').hidden = !pendingFirstPrompt; $('download-starter-model').disabled = busy || !navigator.onLine; $('split-start').disabled = !splitSourceFile || busy || !canSaveToFolder(); $('split-cancel').hidden = !splitController; if (!canSaveToFolder()) $('split-progress').textContent = tr('splitBrowserUnavailable'); }
 function setBusy(value) {
   busy = value;
   $('send').disabled = value;
@@ -256,6 +258,29 @@ document.querySelectorAll('[data-close]').forEach(button => button.onclick = () 
 $('language').onchange = () => { language = $('language').value; saveSettings(); render(); };
 $('attach-files').onclick = () => $('chat-files').click();
 $('model-file').onchange = event => run(async () => { const files = [...event.target.files]; event.target.value = ''; const result = await addLocalModel(files); models = await savedModels(); if (!result.persistent) models.push({ id:result.id, name:result.name, size:files.reduce((n,f) => n+f.size,0) }); renderModels(); setStatus(result.persistent ? tr('modelSaved') : tr('modelSession')); await chooseModel(result.id); });
+$('split-file').onchange = event => { splitSourceFile = event.target.files?.[0]; event.target.value = ''; $('split-progress').textContent = splitSourceFile ? `${splitSourceFile.name} · ${modelSize(splitSourceFile.size)}` : ''; $('split-start').disabled = !splitSourceFile || busy || !canSaveToFolder(); };
+$('split-cancel').onclick = () => splitController?.abort();
+$('split-start').onclick = () => run(async () => {
+  if (!splitSourceFile || !canSaveToFolder()) return;
+  const directory = await window.showDirectoryPicker({ id:'usb-ai-split-output', mode:'readwrite', startIn:'downloads' });
+  const file = splitSourceFile;
+  splitController = new AbortController();
+  setBusy(true); $('split-start').disabled = true; $('split-cancel').hidden = false;
+  try {
+    const result = await splitGgufFile(file, directory, { signal:splitController.signal, onProgress:({loaded,total,part,parts}) => {
+      $('split-progress').textContent = `${tr('splitWriting')} ${part}/${parts} · ${Math.round(loaded / total * 100)}%`;
+    } });
+    const id = crypto.randomUUID();
+    await db.put('models', { id, name:file.name, source:'directory', filename:result.names[0], size:result.size,
+      fileHandle:result.handles[0], fileHandles:result.handles, folderHandle:directory, folderLabel:directory.name });
+    models = await savedModels(); renderModels();
+    splitSourceFile = undefined; $('split-progress').textContent = tr('splitComplete').replace('{count}', result.names.length);
+    setStatus(tr('splitComplete').replace('{count}', result.names.length));
+  } catch (error) {
+    if (error.name === 'AbortError') $('split-progress').textContent = tr('splitCancelled');
+    else { $('split-progress').textContent = `${tr('error')}: ${tr(error.message)}`; throw error; }
+  } finally { splitController = undefined; $('split-cancel').hidden = true; setBusy(false); $('split-start').disabled = !splitSourceFile; }
+});
 $('use-existing-model').onclick = () => { if (canSaveToFolder()) $('choose-folder').click(); else $('model-file').click(); };
 $('choose-folder').onclick = () => run(async () => {
   const ids = await addModelsFromFolder();
