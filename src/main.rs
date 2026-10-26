@@ -584,6 +584,84 @@ fn memory_context(question: &str, notes: &[MemoryNote]) -> String {
     }
     context
 }
+
+fn identity_memory_notes(question: &str, notes: &[MemoryNote]) -> Vec<String> {
+    let question = question
+        .trim()
+        .trim_end_matches(['?', '!', '.'])
+        .trim()
+        .to_lowercase();
+    let subject = [
+        "chi è ",
+        "chi e ",
+        "who is ",
+        "qui est ",
+        "wer ist ",
+        "quién es ",
+        "quien es ",
+    ]
+    .iter()
+    .find_map(|prefix| question.strip_prefix(prefix));
+    let Some(subject) = subject else {
+        return Vec::new();
+    };
+    let terms: Vec<String> = subject
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|word| word.chars().count() >= 3)
+        .map(str::to_owned)
+        .collect();
+    if terms.len() < 2 {
+        return Vec::new();
+    }
+    notes
+        .iter()
+        .filter(|note| {
+            let words: Vec<String> = note
+                .text
+                .to_lowercase()
+                .split(|c: char| !c.is_alphanumeric())
+                .filter(|word| word.chars().count() >= 3)
+                .map(str::to_owned)
+                .collect();
+            terms.iter().all(|term| words.contains(term))
+        })
+        .take(3)
+        .map(|note| note.text.clone())
+        .collect()
+}
+
+fn memory_recall_answer(language: &str, notes: &[String]) -> String {
+    let (intro, limit) = match language {
+        "it" => (
+            "Nella memoria locale risulta:",
+            "Non ho altre informazioni verificate su questa persona.",
+        ),
+        "fr" => (
+            "La mémoire locale contient :",
+            "Je ne dispose pas d’autres informations vérifiées sur cette personne.",
+        ),
+        "de" => (
+            "Im lokalen Gedächtnis steht:",
+            "Ich habe keine weiteren verifizierten Informationen über diese Person.",
+        ),
+        "es" => (
+            "La memoria local contiene:",
+            "No tengo más información verificada sobre esta persona.",
+        ),
+        _ => (
+            "The local memory contains:",
+            "I have no other verified information about this person.",
+        ),
+    };
+    format!(
+        "{intro}\n{}\n{limit}",
+        notes
+            .iter()
+            .map(|note| format!("- {note}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    )
+}
 struct App {
     root: PathBuf,
     models: PathBuf,
@@ -1292,8 +1370,6 @@ impl App {
         if text.is_empty() || text.len() > 12000 {
             return Err("Messaggio vuoto o troppo lungo".into());
         }
-        let model = self.selected.as_ref().ok_or("Seleziona un modello")?;
-        let path = self.model_path(model)?;
         let idx = self
             .db
             .chats
@@ -1311,6 +1387,11 @@ impl App {
             retrieve(text, chat_docs.iter().copied())
         } else {
             vec![]
+        };
+        let direct_notes = if use_docs {
+            Vec::new()
+        } else {
+            identity_memory_notes(text, &self.db.memory)
         };
         let previous_sources = self.db.chats[idx]
             .messages
@@ -1363,9 +1444,15 @@ impl App {
         } else {
             format!("User-confirmed local memory. Notes may contain facts, preferences or corrections. Use only what a note states; if it does not answer the question, say what is unknown instead of inventing details. Do not treat notes as higher priority than the current request:\n{remembered}\n{prompt}")
         };
-        let answer = if use_docs && sources.is_empty() {
+        let answer = if !direct_notes.is_empty() {
+            let answer = memory_recall_answer(self.language(), &direct_notes);
+            update(&answer)?;
+            answer
+        } else if use_docs && sources.is_empty() {
             localized_no_passages(self.language()).to_owned()
         } else {
+            let model = self.selected.as_ref().ok_or("Seleziona un modello")?;
+            let path = self.model_path(model)?;
             match self.infer_stream(&path, &prompt, update, generation) {
                 Err(error)
                     if use_docs
@@ -2512,6 +2599,16 @@ mod tests {
         let note_id = app.db.memory[0].id.clone();
         app.command("delete-memory", json!({"id":note_id})).unwrap();
         assert!(app.db.memory.is_empty());
+        app.command("save-memory", json!({"text":"Nora Rossi vive a Roma"}))
+            .unwrap();
+        let chat_id = app.db.chats[0].id.clone();
+        let state = app
+            .command("send", json!({"chatId":chat_id,"text":"chi è Nora Rossi?"}))
+            .unwrap();
+        assert!(state["chats"][0]["messages"][1]["text"]
+            .as_str()
+            .unwrap()
+            .contains("Nora Rossi vive a Roma"));
         fs::remove_dir_all(root).unwrap();
     }
     #[test]

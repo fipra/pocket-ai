@@ -27,6 +27,17 @@ export function relevantMemories(question, notes, limit = 3) {
     .map(item => item.note);
 }
 
+export function identityMemoryNotes(question, notes) {
+  const match = /^(?:chi\s+(?:è|e)|who\s+is|qui\s+est|wer\s+ist|qui[eé]n\s+es)\s+(.+?)\s*[?.!]*$/iu.exec(question.trim());
+  if (!match) return [];
+  const subject = [...words(match[1])];
+  if (subject.length < 2) return [];
+  return notes.filter(note => {
+    const noteWords = words(note.text);
+    return subject.every(word => noteWords.has(word));
+  }).slice(0, 3);
+}
+
 export function memoryContext(question, notes) {
   const selected = relevantMemories(question, notes);
   if (!selected.length) return '';

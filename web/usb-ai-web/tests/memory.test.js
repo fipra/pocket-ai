@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { relevantMemories, memoryContext, memoryMarkdown, parseMemoryMarkdown, rememberRequest, memoryCommand } from '../memory.js';
+import { relevantMemories, memoryContext, memoryMarkdown, parseMemoryMarkdown, rememberRequest, memoryCommand, identityMemoryNotes } from '../memory.js';
 
 test('memory uses only relevant confirmed notes and keeps the prompt short', () => {
   const notes = [
@@ -39,4 +39,7 @@ test('slash memory command works in every interface language', () => {
 test('a saved fact is available when the follow-up names its subject', () => {
   const note = memoryCommand('Nora Rossi vive a Roma /salva');
   assert.match(memoryContext('Chi è Nora Rossi?', [{ id:'nora', text:note, updated:1 }]), /Nora Rossi vive a Roma/);
+  assert.deepEqual(identityMemoryNotes('Chi è Nora Rossi?', [{ id:'nora', text:note, updated:1 }]).map(item => item.text), [note]);
+  assert.deepEqual(identityMemoryNotes('Chi è Nora?', [{ id:'nora', text:note, updated:1 }]), []);
+  assert.deepEqual(identityMemoryNotes('Chi è Luca Bianchi?', [{ id:'nora', text:note, updated:1 }]), []);
 });

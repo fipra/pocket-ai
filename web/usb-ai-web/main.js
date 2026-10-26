@@ -10,7 +10,7 @@ import { savedModels, downloadCurated, downloadVerified, moveCachedToFolder, add
 import { canSaveToFolder, showModelFolder } from './folder-models.js';
 import { usesSafariCpu, needsSafariFallback, largeModelWarningBrowser } from './browser-capability.js';
 import { browserHardware, modelGuidance, recommendedModel } from './model-guidance.js';
-import { memoryContext, memoryMarkdown, parseMemoryMarkdown, rememberRequest, memoryCommand } from './memory.js';
+import { memoryContext, memoryMarkdown, parseMemoryMarkdown, rememberRequest, memoryCommand, identityMemoryNotes } from './memory.js';
 
 const $ = id => document.getElementById(id);
 let language = preferredLanguage();
@@ -156,6 +156,20 @@ async function send() {
     renderMemory();
     $('memory-dialog').showModal();
     $('memory-text').focus();
+    return;
+  }
+  const directNotes = documentsForChat(documents, activeId).length ? [] : identityMemoryNotes(text, memories);
+  if (directNotes.length) {
+    let chat = chats.find(item => item.id === activeId);
+    if (!chat) { await newChat(); chat = chats.find(item => item.id === activeId); }
+    const reply = `${tr('memoryRecallIntro')}\n${directNotes.map(item => `- ${item.text}`).join('\n')}\n${tr('memoryRecallLimit')}`;
+    chat.messages.push({ role:'user', text }, { role:'assistant', text:reply });
+    chat.title = chat.messages.find(message => message.role === 'user')?.text.slice(0,55) || chat.title;
+    chat.updated = Date.now();
+    await db.put('chats', chat);
+    $('prompt').value = '';
+    setStatus(tr('ready'));
+    render();
     return;
   }
   if (!selectedId) {
