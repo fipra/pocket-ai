@@ -1340,6 +1340,7 @@ impl App {
                     data["allowRequantize"].as_bool() == Some(true),
                     self.hardware.ram_gb,
                     &tool,
+                    self.language(),
                 )?;
                 self.quantization = Some(job);
                 Ok(self.state())

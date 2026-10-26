@@ -127,3 +127,11 @@ const quantizeStrings = {
   es: {quantizeTitle:'Cuantizar modelo',quantizeIntro:'Convierte un GGUF local con llama-quantize. Se conserva el original y el resultado se añade a la biblioteca.',quantizeUnavailable:'llama-quantize no está disponible. Instálalo o usa un paquete portátil que lo incluya.',quantizeSource:'GGUF de origen',quantizeLevel:'Cuantización',requantizeConsent:'Entiendo que volver a cuantizar un modelo ya cuantizado reduce aún más su calidad.',requantizeWarning:'Este modelo parece estar cuantizado. Volver a cuantizarlo puede reducir notablemente su calidad.',quantizeQ2Warning:'Q2 crea el archivo más pequeño, pero puede reducir notablemente la calidad de las respuestas.',quantizeLossWarning:'La cuantización reduce la precisión. Usa una fuente F16/BF16/F32 para mejores resultados. Se comprueban RAM y disco.',quantizeStart:'Cuantizar modelo',quantizeCancel:'Cancelar conversión',quantizeWorking:'Conversión',quantizeWritten:'escritos',quantizeComplete:'Modelo listo:',quantizeCancelled:'Conversión cancelada.'}
 };
 for (const language of Object.keys(quantizeStrings)) Object.assign(window.USB_AI_I18N[language], quantizeStrings[language]);
+const quantizeStorageStrings = {
+  en: 'Output folder: {path}. Space is checked on that drive. The estimate is conservative; the Q2 result may be smaller.',
+  it: 'Cartella di destinazione: {path}. Lo spazio viene controllato su questa unità. La stima è prudente; il risultato Q2 può essere più piccolo.',
+  de: 'Zielordner: {path}. Der freie Speicher wird auf diesem Laufwerk geprüft. Die Schätzung ist vorsichtig; das Q2-Ergebnis kann kleiner sein.',
+  fr: 'Dossier de destination : {path}. L’espace est vérifié sur ce disque. L’estimation est prudente ; le résultat Q2 peut être plus petit.',
+  es: 'Carpeta de destino: {path}. Se comprueba el espacio en esa unidad. La estimación es prudente; el resultado Q2 puede ser más pequeño.'
+};
+for (const language of Object.keys(quantizeStorageStrings)) window.USB_AI_I18N[language].quantizeStorage = quantizeStorageStrings[language];

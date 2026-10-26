@@ -44,6 +44,8 @@ L'interfaccia si apre normalmente su `http://127.0.0.1:48157`. Se la porta è oc
 
 In **Modelli → Quantizza modello**, scegli un GGUF e il livello desiderato. L'app verifica una stima della RAM e lo spazio libero, mostra i byte scritti e permette di annullare. L'originale resta intatto; il risultato viene aggiunto alla libreria con un suffisso come `-Q3_K_M.gguf`. Una seconda quantizzazione può peggiorare molto la qualità e richiede una conferma esplicita. Per risultati migliori usa un originale F16/BF16/F32. I vecchi ZIP delle release potrebbero non includere ancora `llama-quantize`: crea il pacchetto dal sorgente aggiornato o scarica una nuova release che lo include. La Web autonoma offre un link alle versioni locali.
 
+Lo spazio per la quantizzazione viene misurato sull'unità della cartella `models/` dell'app, che può essere diversa dal disco di sistema. Il controllo usa una stima prudente basata sulla grandezza del GGUF originale più un margine; il risultato Q2 può occupare meno spazio. Su Windows, la verifica legge direttamente lo spazio dell'unità di destinazione.
+
 ## Avvio dal sorgente
 
 Servono Rust, `llama-server`, `llama-cli` e `llama-quantize` di llama.cpp e, per leggere i PDF, `pdftotext` di Poppler. Su macOS puoi installare llama.cpp e Poppler con `brew install llama.cpp poppler`. Poi esegui:

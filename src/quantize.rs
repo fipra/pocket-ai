@@ -100,31 +100,47 @@ pub fn looks_quantized(source: &str) -> bool {
     .any(|mark| upper.contains(mark))
 }
 
+#[cfg(windows)]
 fn free_disk_bytes(dir: &Path) -> Result<u64, String> {
-    #[cfg(windows)]
-    let output = {
-        let drive = dir
-            .canonicalize()
-            .map_err(|e| e.to_string())?
-            .components()
-            .next()
-            .ok_or("Invalid output drive")?
-            .as_os_str()
-            .to_string_lossy()
-            .to_string();
-        Command::new("powershell")
-            .args([
-                "-NoProfile",
-                "-Command",
-                &format!(
-                    "[int64](Get-PSDrive -Name '{}').Free",
-                    drive.trim_end_matches([':', '\\'])
-                ),
-            ])
-            .output()
-            .map_err(|e| format!("Cannot check disk space: {e}"))?
+    use std::os::windows::ffi::OsStrExt;
+
+    #[link(name = "Kernel32")]
+    extern "system" {
+        fn GetDiskFreeSpaceExW(
+            directory: *const u16,
+            free_bytes_available: *mut u64,
+            total_bytes: *mut u64,
+            total_free_bytes: *mut u64,
+        ) -> i32;
+    }
+
+    let path = dir.canonicalize().map_err(|e| e.to_string())?;
+    let wide = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let mut available = 0u64;
+    let ok = unsafe {
+        GetDiskFreeSpaceExW(
+            wide.as_ptr(),
+            &mut available,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
     };
-    #[cfg(not(windows))]
+    if ok == 0 {
+        return Err(format!(
+            "Cannot check free disk space in {}: {}",
+            path.display(),
+            std::io::Error::last_os_error()
+        ));
+    }
+    Ok(available)
+}
+
+#[cfg(not(windows))]
+fn free_disk_bytes(dir: &Path) -> Result<u64, String> {
     let output = Command::new("df")
         .arg("-Pk")
         .arg(dir)
@@ -134,12 +150,6 @@ fn free_disk_bytes(dir: &Path) -> Result<u64, String> {
         return Err("Cannot check disk space".into());
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
-    #[cfg(windows)]
-    let available = stdout
-        .trim()
-        .parse::<u64>()
-        .map_err(|_| "Cannot read free disk space")?;
-    #[cfg(not(windows))]
     let available = stdout
         .lines()
         .last()
@@ -150,6 +160,19 @@ fn free_disk_bytes(dir: &Path) -> Result<u64, String> {
     Ok(available)
 }
 
+fn disk_space_error(language: &str, dir: &Path, available: u64, required: u64) -> String {
+    let free = available as f64 / 1_073_741_824.0;
+    let needed = required as f64 / 1_073_741_824.0;
+    let path = dir.display();
+    match language {
+        "it" => format!("Spazio insufficiente nella cartella {path}: {free:.1} GB liberi, circa {needed:.1} GB richiesti per la conversione. Il modello originale viene conservato."),
+        "de" => format!("Nicht genug Speicherplatz im Ordner {path}: {free:.1} GB frei, etwa {needed:.1} GB für die Konvertierung benötigt. Das Originalmodell bleibt erhalten."),
+        "fr" => format!("Espace insuffisant dans le dossier {path} : {free:.1} Go libres, environ {needed:.1} Go nécessaires pour la conversion. Le modèle original est conservé."),
+        "es" => format!("Espacio insuficiente en la carpeta {path}: {free:.1} GB libres, se necesitan unos {needed:.1} GB para la conversión. Se conserva el modelo original."),
+        _ => format!("Not enough free space in {path}: {free:.1} GB available, about {needed:.1} GB required for conversion. The original model is kept."),
+    }
+}
+
 pub fn start(
     source_name: &str,
     source: &Path,
@@ -158,6 +181,7 @@ pub fn start(
     allow_requantize: bool,
     ram_gb: Option<f64>,
     tool: &Path,
+    language: &str,
 ) -> Result<Arc<Mutex<Job>>, String> {
     let name = target_name(source_name, kind)?;
     if looks_quantized(source_name) && !allow_requantize {
@@ -184,10 +208,13 @@ pub fn start(
     let required_disk = source_bytes
         .saturating_add(source_bytes / 10)
         .saturating_add(128 * 1024 * 1024);
-    if free_disk_bytes(models)? < required_disk {
-        return Err(format!(
-            "Insufficient free disk space: approximately {:.1} GB required for a safe conversion.",
-            required_disk as f64 / 1_073_741_824.0
+    let available_disk = free_disk_bytes(models)?;
+    if available_disk < required_disk {
+        return Err(disk_space_error(
+            language,
+            models,
+            available_disk,
+            required_disk,
         ));
     }
     let output = models.join(&name);
@@ -309,6 +336,25 @@ pub fn start(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn windows_disk_check_reads_available_bytes_from_real_folder() {
+        let available = free_disk_bytes(&std::env::temp_dir()).unwrap();
+        assert!(available > 128 * 1024 * 1024);
+    }
+
+    #[test]
+    fn disk_error_names_the_destination_and_measured_space() {
+        let message = disk_space_error(
+            "it",
+            Path::new("models"),
+            8 * 1_073_741_824,
+            17 * 1_073_741_824,
+        );
+        assert!(message.contains("models"));
+        assert!(message.contains("8.0 GB liberi"));
+        assert!(message.contains("17.0 GB richiesti"));
+    }
     #[test]
     fn target_names_and_safety() {
         assert_eq!(
@@ -337,6 +383,7 @@ mod tests {
             false,
             Some(16.0),
             Path::new("missing-tool"),
+            "en",
         )
         .err()
         .unwrap();
@@ -376,6 +423,7 @@ mod tests {
             false,
             Some(16.0),
             &tool,
+            "en",
         )
         .unwrap();
         for _ in 0..40 {
@@ -419,6 +467,7 @@ mod tests {
             false,
             Some(16.0),
             &tool,
+            "en",
         )
         .unwrap();
         for _ in 0..80 {

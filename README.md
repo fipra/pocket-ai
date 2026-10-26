@@ -44,6 +44,8 @@ The app normally opens at `http://127.0.0.1:48157`. If that port is busy, it pic
 
 Open **Models → Quantize Model** in a build that includes `llama-quantize`. Choose a local GGUF and a target precision. The app estimates RAM and free disk space before starting, writes progress in the background, and lets you cancel. It keeps the source file and adds the completed result to the model library with a suffix such as `-Q3_K_M.gguf`. Quantizing an already quantized model can significantly reduce quality; it requires explicit confirmation. Prefer an F16/BF16/F32 source. Older release ZIPs may not yet contain `llama-quantize`; build the current source or use a newly published package that includes it. The standalone Web app links to the desktop releases for this feature.
 
+Free space for quantization is checked on the drive containing the app's `models/` output folder. The preflight estimate reserves approximately the source GGUF size plus a margin, so a Q2 result may use less space than the estimate. On Windows, the check uses the output folder's volume directly.
+
 ## Portable USB packages
 
 ### Windows x64
