@@ -230,3 +230,12 @@ const storageLowStrings = {
   es:'No hay suficiente almacenamiento del navegador. Libera espacio o usa Chrome/Edge para guardarlo en una carpeta elegida.'
 };
 for (const language of Object.keys(storageLowStrings)) translations[language].modelStorageLow = storageLowStrings[language];
+
+const largeDownloadStrings = {
+  en: { downloadForSplit:'Download GGUF to split', downloadThenSplit:'Split required: this file exceeds 2 GB. Download it to your device, then use “Split a large local GGUF” below in Chrome or Edge. Splitting does not reduce the RAM required; some models may still exceed browser or hardware limits.' },
+  it: { downloadForSplit:'Scarica GGUF da dividere', downloadThenSplit:'Split necessario: questo file supera 2 GB. Scaricalo sul dispositivo, poi usa “Dividi un GGUF locale grande” qui sotto in Chrome o Edge. La divisione non riduce la RAM richiesta; alcuni modelli possono comunque superare i limiti del browser o del computer.' },
+  fr: { downloadForSplit:'Télécharger le GGUF à diviser', downloadThenSplit:'Division nécessaire : ce fichier dépasse 2 Go. Téléchargez-le, puis utilisez « Diviser un grand GGUF local » ci-dessous dans Chrome ou Edge. La division ne réduit pas la RAM nécessaire ; certains modèles peuvent dépasser les limites du navigateur ou du matériel.' },
+  de: { downloadForSplit:'GGUF zum Teilen herunterladen', downloadThenSplit:'Aufteilung nötig: Diese Datei ist größer als 2 GB. Lade sie herunter und nutze unten „Große lokale GGUF teilen“ in Chrome oder Edge. Der RAM-Bedarf sinkt nicht; manche Modelle überschreiten weiterhin Browser- oder Hardwaregrenzen.' },
+  es: { downloadForSplit:'Descargar GGUF para dividir', downloadThenSplit:'División necesaria: este archivo supera 2 GB. Descárgalo y usa « Dividir un GGUF local grande » abajo en Chrome o Edge. Dividirlo no reduce la RAM necesaria; algunos modelos pueden superar los límites del navegador o del equipo.' }
+};
+for (const language of Object.keys(largeDownloadStrings)) Object.assign(translations[language], largeDownloadStrings[language]);

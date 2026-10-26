@@ -86,6 +86,14 @@ function renderSearch() {
     appendModelAdvice(info, item, browserHardware());
     const link = node('a', tr('source')); link.href = item.source; link.target = '_blank'; link.rel = 'noopener noreferrer'; info.append(link); card.append(info);
     const installed = models.some(model => model.id === item.id);
+    if (item.tooLargeForWeb) {
+      info.append(node('small', tr('downloadThenSplit'), 'model-advice'));
+      const download = node('a', tr('downloadForSplit'), 'action');
+      download.href = item.url;
+      download.target = '_blank'; download.rel = 'noopener noreferrer';
+      card.append(download); box.append(card);
+      continue;
+    }
     const button = node('button', installed ? tr('load') : tr('download'), 'action');
     button.disabled = busy || (!installed && !navigator.onLine);
     button.onclick = () => run(async () => {

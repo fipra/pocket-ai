@@ -129,7 +129,8 @@ test('search includes split repositories before single files above 2 GB', async 
       ? [{id:'owner/split',tags:[]}]
       : [{id:'owner/single',tags:[]}]});
   const result = await searchModels('Qwen 3.5 9B', 0, fetcher);
-  assert.equal(result.models.length, 1);
+  assert.equal(result.models.length, 2);
+  assert.equal(result.models[1].tooLargeForWeb, true);
   assert.equal(result.models[0].shards.length, 2);
   assert.equal(result.models[0].tooLargeForWeb, false);
 });
@@ -164,7 +165,7 @@ test('generic model search also checks for already split GGUF releases', async (
   assert.equal(result.models[0].shards.length, 2);
   assert.ok(urls.some(url => url.includes('search=gemma-split')));
 });
-test('Web search hides a single GGUF too large for the browser to load', async () => {
+test('Web search includes a large single GGUF marked for splitting', async () => {
   const urls = [];
   const fetcher = async url => {
     urls.push(url);
@@ -174,7 +175,9 @@ test('Web search hides a single GGUF too large for the browser to load', async (
   };
   const result = await searchModels('Qwen_Qwen3.5-9B-Q4_K_M.gguf', 0, fetcher);
   assert.match(urls[0], /search=Qwen3\.5-9B/);
-  assert.equal(result.models.length, 0);
+  assert.equal(result.models.length, 1);
+  assert.equal(result.models[0].tooLargeForWeb, true);
+  assert.equal(result.models[0].size, 5_627_044_256);
 });
 test('exact GGUF filename takes priority over similar quantizations', async () => {
   const fetcher = async url => ({ ok:true, json:async () => url.includes('/tree/')
@@ -200,6 +203,7 @@ test('search hides Qwen auxiliary weights and speech models while retaining a sm
       : [{path:'Qwen3.5-4B-Q4_K_M.gguf',size:1_949_000_000,lfs:{sha256:'c'.repeat(64)}}]
     : repos});
   const result = await searchModels('qwen', 0, fetcher);
-  assert.deepEqual(result.models.map(model => model.name), ['Qwen3.5 4B']);
+  assert.deepEqual(result.models.map(model => model.name), ['Qwen3.5 4B', 'Qwen3.8 27B']);
+  assert.equal(result.models[1].tooLargeForWeb, true);
   assert.equal(result.models[0].filename, 'Qwen3.5-4B-Q4_K_M.gguf');
 });

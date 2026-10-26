@@ -119,17 +119,18 @@ function quantizationRank(model) {
 }
 
 function bestCompleteModels(candidates) {
+  // Prefer ready-to-load releases, but retain large single files for local splitting.
+  const rank = (a, b) => Number(a.tooLargeForWeb) - Number(b.tooLargeForWeb) || quantizationRank(a) - quantizationRank(b) || a.size - b.size;
   const chosen = new Map();
   for (const { repo, files } of candidates) {
     const family = familyName(repo);
     const key = family.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const usable = files.filter(file => !file.tooLargeForWeb);
-    usable.sort((a, b) => quantizationRank(a) - quantizationRank(b) || a.size - b.size);
+    const usable = [...files];
+    usable.sort(rank);
     const candidate = usable[0];
     if (!candidate) continue;
     const previous = chosen.get(key);
-    if (!previous || quantizationRank(candidate) < quantizationRank(previous) ||
-      (quantizationRank(candidate) === quantizationRank(previous) && candidate.size < previous.size)) {
+    if (!previous || rank(candidate, previous) < 0) {
       chosen.set(key, { ...candidate, name: family });
     }
   }
