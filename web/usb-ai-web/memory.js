@@ -45,7 +45,7 @@ export function memoryContext(question, notes) {
 }
 
 export function memoryMarkdown(notes) {
-  return `# USB-AI memory\n\n${notes.map(note => `- ${note.text.replace(/\s+/g, ' ').trim()}`).join('\n')}\n`;
+  return `# Offllama memory\n\n${notes.map(note => `- ${note.text.replace(/\s+/g, ' ').trim()}`).join('\n')}\n`;
 }
 
 export function parseMemoryMarkdown(markdown) {

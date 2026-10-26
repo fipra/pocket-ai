@@ -1,7 +1,7 @@
 (() => {
   const translations = {
     it: {
-      open: 'Guarda la demo', title: 'Prova USB AI in anteprima', intro: 'Dal modello alla prima risposta, in due passaggi.',
+      open: 'Guarda la demo', title: 'Prova Offllama in anteprima', intro: 'Dal modello alla prima risposta, in due passaggi.',
       notice: 'Demo illustrativa: non scarica modelli e non invia domande.', stepModel: '01 / MODELLO',
       chooseModel: 'Scegli un modello', modelInfo: 'GGUF · circa 2,1 GB · RAM consigliata 8 GB',
       loadModel: 'Scarica modello', modelPrompt: 'Premi il pulsante per vedere il caricamento.',
@@ -13,7 +13,7 @@
       privacyQuestion: 'Dove restano le mie chat?', privacyAnswer: 'Le conversazioni restano nella cartella PocketAI-data sul tuo computer o sulla chiavetta USB.',
     },
     en: {
-      open: 'Watch the demo', title: 'Preview USB AI', intro: 'From model selection to your first answer in two steps.',
+      open: 'Watch the demo', title: 'Preview Offllama', intro: 'From model selection to your first answer in two steps.',
       notice: 'Illustrative demo: no model is downloaded and no question is sent.', stepModel: '01 / MODEL',
       chooseModel: 'Choose a model', modelInfo: 'GGUF · about 2.1 GB · 8 GB RAM recommended',
       loadModel: 'Download model', modelPrompt: 'Press the button to see model setup.',
@@ -25,7 +25,7 @@
       privacyQuestion: 'Where are my chats stored?', privacyAnswer: 'Conversations stay in the PocketAI-data folder on your computer or USB drive.',
     },
     fr: {
-      open: 'Voir la démo', title: 'Découvrez USB AI', intro: 'Du choix du modèle à la première réponse en deux étapes.',
+      open: 'Voir la démo', title: 'Découvrez Offllama', intro: 'Du choix du modèle à la première réponse en deux étapes.',
       notice: 'Démo illustrative : aucun modèle n’est téléchargé et aucune question n’est envoyée.', stepModel: '01 / MODÈLE',
       chooseModel: 'Choisissez un modèle', modelInfo: 'GGUF · environ 2,1 Go · 8 Go de RAM recommandés',
       loadModel: 'Télécharger le modèle', modelPrompt: 'Appuyez sur le bouton pour voir la préparation du modèle.',
@@ -37,7 +37,7 @@
       privacyQuestion: 'Où sont stockées mes discussions ?', privacyAnswer: 'Les conversations restent dans le dossier PocketAI-data sur votre ordinateur ou votre clé USB.',
     },
     de: {
-      open: 'Demo ansehen', title: 'USB AI in der Vorschau', intro: 'In zwei Schritten vom Modell zur ersten Antwort.',
+      open: 'Demo ansehen', title: 'Offllama in der Vorschau', intro: 'In zwei Schritten vom Modell zur ersten Antwort.',
       notice: 'Beispiel-Demo: Es wird kein Modell heruntergeladen und keine Frage gesendet.', stepModel: '01 / MODELL',
       chooseModel: 'Modell auswählen', modelInfo: 'GGUF · etwa 2,1 GB · 8 GB RAM empfohlen',
       loadModel: 'Modell herunterladen', modelPrompt: 'Drücke die Taste, um die Einrichtung zu sehen.',
@@ -49,7 +49,7 @@
       privacyQuestion: 'Wo bleiben meine Chats?', privacyAnswer: 'Unterhaltungen bleiben im Ordner PocketAI-data auf deinem Computer oder USB-Stick.',
     },
     es: {
-      open: 'Ver la demo', title: 'Descubre USB AI', intro: 'Del modelo a la primera respuesta en dos pasos.',
+      open: 'Ver la demo', title: 'Descubre Offllama', intro: 'Del modelo a la primera respuesta en dos pasos.',
       notice: 'Demo ilustrativa: no se descarga ningún modelo ni se envía ninguna pregunta.', stepModel: '01 / MODELO',
       chooseModel: 'Elige un modelo', modelInfo: 'GGUF · unos 2,1 GB · se recomiendan 8 GB de RAM',
       loadModel: 'Descargar modelo', modelPrompt: 'Pulsa el botón para ver la preparación del modelo.',

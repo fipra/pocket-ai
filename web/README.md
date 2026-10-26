@@ -1,6 +1,6 @@
-# USB-AI Web
+# Offllama Web
 
-**Temporary phone restriction:** USB-AI Web does not start on iPhone or Android smartphones while model loading is too slow and unreliable. The landing page shows a short “PC and Mac only” note and an alert when phone users tap the Mac, Windows, or Web actions. Mac, Windows, and tablet browsers remain available. The illustrative landing page demo remains accessible on phones. This is a browser UI restriction, not an access-control boundary.
+**Temporary phone restriction:** Offllama Web does not start on iPhone or Android smartphones while model loading is too slow and unreliable. The landing page shows a short “PC and Mac only” note and an alert when phone users tap the Mac, Windows, or Web actions. Mac, Windows, and tablet browsers remain available. The illustrative landing page demo remains accessible on phones. This is a browser UI restriction, not an access-control boundary.
 
 This directory contains two separate interfaces. `index.html` and `i18n.js` are embedded by the existing Rust desktop application; keep them unchanged. `usb-ai-web/` is the independent browser app. Its Vite build outputs to `web/dist/` and never uses the desktop localhost API.
 
@@ -15,11 +15,11 @@ npm test
 npm run build
 ```
 
-For a local double-click launch, use `usb-ai-web/Open USB-AI Web.command` on macOS or `usb-ai-web/Open USB-AI Web.bat` on Windows. Node.js and internet access are needed for the first dependency installation. Keep the terminal window open while using the app. Opening the source `index.html` directly as a `file://` page cannot run the app: browser modules, model cache, and PWA storage need an HTTP or HTTPS origin. The source page displays launcher instructions in this case.
+For a local double-click launch, use `usb-ai-web/Open Offllama Web.command` on macOS or `usb-ai-web/Open Offllama Web.bat` on Windows. Node.js and internet access are needed for the first dependency installation. Keep the terminal window open while using the app. Opening the source `index.html` directly as a `file://` page cannot run the app: browser modules, model cache, and PWA storage need an HTTP or HTTPS origin. The source page displays launcher instructions in this case.
 
-The repository's main Vercel project builds the landing page and publishes USB-AI Web at `/app/`. The root `vercel.json` runs the web build with `USB_AI_WEB_BASE=/app/` and copies it into the static site output. Smartphone visitors see a temporary availability notice instead of the app.
+The repository's main Vercel project builds the landing page and publishes Offllama Web at `/app/`. The root `vercel.json` runs the web build with `USB_AI_WEB_BASE=/app/` and copies it into the static site output. Smartphone visitors see a temporary availability notice instead of the app.
 
-USB-AI Web can also be deployed as an independent Vercel project: import the repository again with **Root Directory** set to `web`. Use `npm run build` and output directory `dist`. The `web/vercel.json` supplies cross-origin isolation headers for browser inference. The default build base is `/` in this separate project.
+Offllama Web can also be deployed as an independent Vercel project: import the repository again with **Root Directory** set to `web`. Use `npm run build` and output directory `dist`. The `web/vercel.json` supplies cross-origin isolation headers for browser inference. The default build base is `/` in this separate project.
 
 ## What runs locally
 
@@ -41,7 +41,7 @@ USB-AI Web can also be deployed as an independent Vercel project: import the rep
 
 Browser memory, GPU support, IndexedDB quota, and persistent storage vary by device and browser. Large models can fail to load, even when the file picker accepts them. Wllama notes a 2 GB per-file ArrayBuffer limit; larger models need GGUF splits. WebGPU is not guaranteed, so WebAssembly is the fallback. A local model that cannot be saved to IndexedDB remains available only during the current page session. Clearing site data deletes chats, documents, and cached models. Private data is stored locally but is not encrypted by this app.
 
-Safari needs Wllama's compatibility WASM and worker. These assets are bundled and served from the same site. When Safari has no WebGPU, USB-AI avoids automatically loading a saved model over 700 MB at startup and warns about its memory use. A model the user explicitly selected remains selected and is attempted at the next prompt; the app never silently substitutes Qwen. With no selected model, the first prompt prepares Qwen 0.5B. Safari also uses a smaller CPU context and a 90-second first-token deadline, then terminates a stalled worker and shows a clear error. A 3B or larger model can still be impractical in Safari's CPU mode. The Stop button also terminates a stalled worker; the next prompt reloads the selected model. Smartphone use is currently disabled because even small models can take too long to load. Tablets are still allowed, subject to browser memory limits.
+Safari needs Wllama's compatibility WASM and worker. These assets are bundled and served from the same site. When Safari has no WebGPU, Offllama avoids automatically loading a saved model over 700 MB at startup and warns about its memory use. A model the user explicitly selected remains selected and is attempted at the next prompt; the app never silently substitutes Qwen. With no selected model, the first prompt prepares Qwen 0.5B. Safari also uses a smaller CPU context and a 90-second first-token deadline, then terminates a stalled worker and shows a clear error. A 3B or larger model can still be impractical in Safari's CPU mode. The Stop button also terminates a stalled worker; the next prompt reloads the selected model. Smartphone use is currently disabled because even small models can take too long to load. Tablets are still allowed, subject to browser memory limits.
 
 The model dialog displays a spinner and loading text while downloading or opening a model. A load has a five-minute safety limit. After a timeout, reopen the page before trying another model because the browser worker may still hold memory.
 

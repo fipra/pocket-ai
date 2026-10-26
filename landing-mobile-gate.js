@@ -3,7 +3,7 @@
   if (!phone) return;
 
   const copy = {
-    it: ['Solo per PC e Mac', 'USB AI non è per smartphone al momento, ma ci stiamo lavorando.'],
+    it: ['Solo per PC e Mac', 'Offllama non è per smartphone al momento, ma ci stiamo lavorando.'],
     en: ['PC and Mac only', 'Not available for smartphones yet, but we are working on it.'],
     fr: ['Uniquement sur PC et Mac', 'Pas encore disponible sur smartphone, mais nous y travaillons.'],
     de: ['Nur für PC und Mac', 'Für Smartphones derzeit nicht verfügbar, aber wir arbeiten daran.'],

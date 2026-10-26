@@ -53,7 +53,8 @@ if errorlevel 1 (
   echo Vulkan GPU detected. Starting with GPU acceleration.
 )
 "%~dp0bin\usb-ai-rust.exe"
-'@ | Set-Content (Join-Path $out 'Avvia USB AI Rust GPU.cmd')
+'@ | Set-Content (Join-Path $out 'Avvia Offllama GPU.cmd')
+    Copy-Item (Join-Path $out 'Avvia Offllama GPU.cmd') (Join-Path $out 'Avvia USB AI Rust GPU.cmd') -Force
   }
   Get-ChildItem (Join-Path $root 'models') -Filter '*.gguf' | ForEach-Object {
     $destination = Join-Path (Join-Path $out 'models') $_.Name
@@ -66,10 +67,11 @@ if errorlevel 1 (
   foreach ($name in @('LICENSE','LICENSE-MIT-LEGACY','COMMERCIAL_LICENSE.md','LICENSING_HISTORY.md')) {
     Copy-Item (Join-Path $root $name) (Join-Path $out $name)
   }
-  '@echo off' + "`r`n" + '"%~dp0bin\usb-ai-rust.exe"' | Set-Content (Join-Path $out 'Avvia USB AI Rust.cmd')
+  '@echo off' + "`r`n" + '"%~dp0bin\usb-ai-rust.exe"' | Set-Content (Join-Path $out 'Avvia Offllama.cmd')
+  Copy-Item (Join-Path $out 'Avvia Offllama.cmd') (Join-Path $out 'Avvia USB AI Rust.cmd') -Force
   @'
-Double-click Avvia USB AI Rust.cmd. The browser opens at 127.0.0.1.
-If Avvia USB AI Rust GPU.cmd is present, use it to try Vulkan GPU acceleration.
+Double-click Avvia Offllama.cmd. The browser opens at 127.0.0.1.
+If Avvia Offllama GPU.cmd is present, use it to try Vulkan GPU acceleration.
 The GPU launcher uses the CPU runtime when no Vulkan GPU is detected.
 Keep the whole folder on the USB drive. Models and data stay here.
 Use Models > Import GGUF into models to copy an existing model, or copy GGUF files into the models folder and refresh the list.

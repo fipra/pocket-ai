@@ -49,7 +49,7 @@ jobs:
           cargo test --locked
           python3 scripts/package-mac.py
           folder="release/USB-AI-Rust-mac-${{ matrix.architecture }}"
-          test -f "$folder/Avvia USB AI Rust.command"
+          test -f "$folder/Avvia Offllama.command"
           test -x "$folder/bin/usb-ai-rust"
           test -x "$folder/bin/llama-cli"
           test -x "$folder/bin/llama-server"
@@ -111,7 +111,7 @@ jobs:
         run: |
           tag='rust-mac-stop-2026-10-24'
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --target '${{ github.sha }}' --title 'USB AI Rust for macOS — streaming' --notes 'Mac builds with live response streaming, a Stop button, and a persistent loaded model. Download the ZIP matching your Mac, extract the complete folder and launch Avvia USB AI Rust.command. The bundled LICENSE applies to this release.'
+            gh release create "$tag" --target '${{ github.sha }}' --title 'Offllama Rust for macOS — streaming' --notes 'Mac builds with live response streaming, a Stop button, and a persistent loaded model. Download the ZIP matching your Mac, extract the complete folder and launch Avvia Offllama.command. The bundled LICENSE applies to this release.'
           fi
           gh release upload "$tag" USB-AI-Rust-mac-*.zip --clobber
           gh release edit "$tag" --prerelease=false

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a relocatable macOS USB AI Rust folder on the current Mac."""
+"""Build a relocatable macOS Offllama Rust folder on the current Mac."""
 import os
 import pathlib
 import json
@@ -139,11 +139,12 @@ def main():
             shutil.copy2(source, OUT / "models" / name)
     for name in ["LICENSE", "LICENSE-MIT-LEGACY", "COMMERCIAL_LICENSE.md", "LICENSING_HISTORY.md"]:
         shutil.copy2(ROOT / name, OUT / name)
-    launcher = OUT / "Avvia USB AI Rust.command"
+    launcher = OUT / "Avvia Offllama.command"
     shutil.copy2(ROOT / "scripts/mac-launcher.command", launcher)
     launcher.chmod(0o755)
+    shutil.copy2(launcher, OUT / "Avvia USB AI Rust.command")
     (OUT / "LEGGIMI.txt").write_text(
-        "Doppio clic su Avvia USB AI Rust.command. Il browser si apre su 127.0.0.1.\n"
+        "Doppio clic su Avvia Offllama.command. Il browser si apre su 127.0.0.1.\n"
         "Al primo avvio il launcher verifica i binari inclusi e rimuove la loro quarantena.\n"
         "Tieni la cartella sulla chiavetta USB; dati e modelli restano qui.\n"
         "Questa build funziona solo su macOS con la stessa architettura indicata nel nome.\n"
