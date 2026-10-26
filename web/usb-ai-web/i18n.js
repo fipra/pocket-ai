@@ -197,3 +197,27 @@ const splitLimitStrings = {
   es: {splitRequired:'Dividir archivo',modelNeedsSplit:'Un único GGUF de más de 2 GB no se puede cargar en la Web. Divídelo en partes de 512 MB como máximo con llama-gguf-split y selecciónalas todas, o usa un modelo más pequeño. Dividirlo no reduce la RAM total necesaria.'}
 };
 for (const language of Object.keys(splitLimitStrings)) Object.assign(translations[language], splitLimitStrings[language]);
+const largeSplitStrings = {
+  en: {searchHint:'Search by model name. For large models, USB-AI looks for complete split GGUF releases and downloads every verified part.',largeModelFolder:'All parts will be saved in the selected models folder. Splitting does not lower the RAM needed.',largeModelCache:'All parts will use browser storage; check available space. Splitting does not lower the RAM needed.',noSplitRelease:'Only single GGUF files above 2 GB were found. No complete split release is available in these results.'},
+  it: {searchHint:'Cerca per nome. Per i modelli grandi USB-AI cerca GGUF già divisi e scarica tutte le parti verificate.',largeModelFolder:'Tutte le parti saranno salvate nella cartella dei modelli scelta. La divisione non riduce la RAM necessaria.',largeModelCache:'Tutte le parti useranno lo spazio del browser: verifica che sia sufficiente. La divisione non riduce la RAM necessaria.',noSplitRelease:'Sono stati trovati solo GGUF singoli oltre 2 GB. In questi risultati non c’è una versione divisa completa.'},
+  fr: {searchHint:'Recherchez par nom. Pour les grands modèles, USB-AI cherche des GGUF divisés complets et télécharge chaque partie vérifiée.',largeModelFolder:'Toutes les parties seront enregistrées dans le dossier choisi. La division ne réduit pas la RAM nécessaire.',largeModelCache:'Toutes les parties utiliseront le stockage du navigateur ; vérifiez l’espace disponible. La division ne réduit pas la RAM nécessaire.',noSplitRelease:'Seuls des GGUF uniques de plus de 2 Go ont été trouvés. Aucune version divisée complète dans ces résultats.'},
+  de: {searchHint:'Suche nach Modellnamen. Bei großen Modellen sucht USB-AI vollständige aufgeteilte GGUFs und lädt alle geprüften Teile.',largeModelFolder:'Alle Teile werden im gewählten Modellordner gespeichert. Das Aufteilen senkt den RAM-Bedarf nicht.',largeModelCache:'Alle Teile belegen Browserspeicher; prüfe den freien Platz. Das Aufteilen senkt den RAM-Bedarf nicht.',noSplitRelease:'Nur einzelne GGUF-Dateien über 2 GB gefunden. Diese Ergebnisse enthalten keine vollständige aufgeteilte Version.'},
+  es: {searchHint:'Busca por nombre. Para modelos grandes, USB-AI busca GGUF divididos completos y descarga todas las partes verificadas.',largeModelFolder:'Todas las partes se guardarán en la carpeta elegida. Dividir no reduce la RAM necesaria.',largeModelCache:'Todas las partes usarán el almacenamiento del navegador; comprueba el espacio. Dividir no reduce la RAM necesaria.',noSplitRelease:'Solo se encontraron GGUF únicos de más de 2 GB. No hay una versión dividida completa en estos resultados.'}
+};
+for (const language of Object.keys(largeSplitStrings)) Object.assign(translations[language], largeSplitStrings[language]);
+const shardImportStrings = {
+  en:'Select every numbered GGUF part of one model together. In a folder, incomplete sets are skipped.',
+  it:'Seleziona insieme tutte le parti GGUF numerate di un solo modello. Nelle cartelle, le serie incomplete vengono ignorate.',
+  fr:'Sélectionnez ensemble toutes les parties GGUF numérotées d’un même modèle. Les séries incomplètes sont ignorées dans les dossiers.',
+  de:'Wähle alle nummerierten GGUF-Teile eines Modells zusammen. Unvollständige Sätze im Ordner werden ignoriert.',
+  es:'Selecciona juntas todas las partes GGUF numeradas de un solo modelo. Se omiten los conjuntos incompletos de la carpeta.'
+};
+for (const language of Object.keys(shardImportStrings)) translations[language].incompleteShards = shardImportStrings[language];
+const storageLowStrings = {
+  en:'Not enough available browser storage for this model. Free space or use Chrome/Edge to save it in a chosen folder.',
+  it:'Spazio del browser insufficiente per questo modello. Libera spazio oppure usa Chrome/Edge per salvarlo in una cartella scelta.',
+  fr:'Stockage du navigateur insuffisant pour ce modèle. Libérez de l’espace ou utilisez Chrome/Edge pour choisir un dossier.',
+  de:'Nicht genug Browserspeicher für dieses Modell. Schaffe Platz oder speichere es mit Chrome/Edge in einem gewählten Ordner.',
+  es:'No hay suficiente almacenamiento del navegador. Libera espacio o usa Chrome/Edge para guardarlo en una carpeta elegida.'
+};
+for (const language of Object.keys(storageLowStrings)) translations[language].modelStorageLow = storageLowStrings[language];

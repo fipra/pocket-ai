@@ -20,7 +20,7 @@ export async function existingModelsFolder() {
   for await (const [name, handle] of directory.entries()) {
     if (handle.kind !== 'file' || !/^[^/\\]+\.gguf$/i.test(name) || isAuxiliaryGguf(name)) continue;
     const file = await handle.getFile();
-    if (file.size < 32_000_000) continue;
+    if (file.size < (/-\d{5}-of-\d{5}\.gguf$/i.test(name) ? 1024 : 32_000_000)) continue;
     files.push({ filename:name, size:file.size, fileHandle:handle, folderHandle:directory,
       folderLabel:parent === directory ? parent.name : `${parent.name}/usb-ai-models` });
   }
@@ -57,6 +57,24 @@ export async function saveVerifiedFile(item, onProgress = () => {}, fetcher = fe
   try { await directory.getFileHandle(filename); }
   catch (error) { if (error.name !== 'NotFoundError') throw error; existed = false; }
   const handle = await directory.getFileHandle(filename, { create: true });
+  if (existed) {
+    const existing = await handle.getFile();
+    if (existing.size === item.size) {
+      const hasher = await createSHA256();
+      const reader = existing.stream().getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          hasher.update(value);
+        }
+      } finally { reader.releaseLock(); }
+      if (hasher.digest('hex') === item.sha256) {
+        onProgress({ loaded:item.size, total:item.size });
+        return { handle, filename, size:item.size, folderHandle:directory, folderLabel };
+      }
+    }
+  }
   let writable;
   try {
     const response = await fetcher(item.url);

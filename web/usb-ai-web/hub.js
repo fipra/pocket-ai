@@ -40,7 +40,7 @@ export function searchTerm(query) {
 }
 
 export function splitSearchTerm(query) {
-  return searchTerm(query).replace(/([A-Za-z])\s+(?=\d)/g, '$1').replace(/\s+/g, '-').replace(/-GGUF$/i, '') + '-split';
+  return searchTerm(query).replace(/([A-Za-z])\s+(?=\d+\.\d+)/g, '$1').replace(/\s+/g, '-').replace(/-GGUF$/i, '') + '-split';
 }
 
 export function modelFromEntry(repo, entry, license = 'see source', allowShard = false) {
@@ -50,7 +50,7 @@ export function modelFromEntry(repo, entry, license = 'see source', allowShard =
   if (!parts.every(part => PART.test(part) && part !== '.' && part !== '..') || !/\.gguf$/i.test(name) || isAuxiliaryGguf(entry.path) || (!allowShard && /-of-\d+\.gguf$/i.test(name))) return null;
   const size = entry.size;
   const sha256 = String(entry.lfs?.sha256 || entry.lfs?.oid || '').toLowerCase();
-  if (!Number.isSafeInteger(size) || size < MIN_MODEL_SIZE || !HASH.test(sha256) || (!allowShard && !plausibleModelSize(repo, name, size))) return null;
+  if (!Number.isSafeInteger(size) || size < (allowShard ? 1024 : MIN_MODEL_SIZE) || !HASH.test(sha256) || (!allowShard && !plausibleModelSize(repo, name, size))) return null;
   const url = `https://huggingface.co/${repo}/resolve/main/${parts.map(encodeURIComponent).join('/')}`;
   return { id: `hf:${sha256}`, name: `${repo} / ${name}`, filename: name, size, sha256, url, tooLargeForWeb: size > WEB_FILE_LIMIT,
     source: `https://huggingface.co/${repo}/blob/main/${parts.map(encodeURIComponent).join('/')}`, license };
@@ -80,9 +80,35 @@ export function modelsFromEntries(repo, entries, license = 'see source') {
   return models;
 }
 
+export function groupLocalGgufs(files) {
+  const groups = new Map();
+  const models = [];
+  for (const file of files) {
+    const name = file.filename || file.name;
+    const match = /^(.+)-(\d{5})-of-(\d{5})\.gguf$/i.exec(name);
+    if (!match) {
+      models.push({ name, filename:name, size:file.size, members:[file] });
+      continue;
+    }
+    const number = Number(match[2]), count = Number(match[3]);
+    if (count < 2 || count > 1000 || number < 1 || number > count || file.size > WEB_FILE_LIMIT) continue;
+    const key = `${match[1].toLowerCase()}:${count}`;
+    if (!groups.has(key)) groups.set(key, { name:`${match[1]}.gguf`, count, members:new Map() });
+    groups.get(key).members.set(number, file);
+  }
+  for (const group of groups.values()) {
+    if (group.members.size !== group.count) continue;
+    const members = Array.from({length:group.count}, (_,index) => group.members.get(index+1));
+    if (members.some(member => !member)) continue;
+    models.push({ name:group.name, filename:members[0].filename || members[0].name,
+      size:members.reduce((sum,member) => sum+member.size,0), members });
+  }
+  return models;
+}
+
 function familyName(repo) {
   const base = repo.tags?.find(tag => tag.startsWith('base_model:') && !tag.startsWith('base_model:quantized:'))?.slice(11);
-  return (base || repo.id).split('/').at(-1).replace(/[-_.]?GGUF$/i, '').replace(/[-_]/g, ' ').trim();
+  return (base || repo.id).split('/').at(-1).replace(/(?:[-_.]?(?:GGUF|split))+$/i, '').replace(/[-_]/g, ' ').trim();
 }
 
 function quantizationRank(model) {
@@ -121,7 +147,7 @@ export async function searchModels(query, skip = 0, fetcher = fetch) {
   const primaryRepos = await response.json();
   if (!Array.isArray(primaryRepos)) throw Error('Invalid search results');
   let repos = primaryRepos;
-  if (skip === 0 && /\d/.test(term)) {
+  if (skip === 0) {
     const splitTerm = splitSearchTerm(query);
     if (splitTerm !== term) {
       const splitResponse = await fetcher(`https://huggingface.co/api/models?filter=gguf&search=${encodeURIComponent(splitTerm)}&sort=downloads&direction=-1&limit=8`);
@@ -157,5 +183,6 @@ export async function searchModels(query, skip = 0, fetcher = fetch) {
   const selected = filenameSearch && (exact.length || alternate.length)
     ? bestCompleteModels(candidates.map(item => ({...item, files:item.files.filter(file => (exact.length ? exact : alternate).includes(file))})))
     : bestCompleteModels(candidates);
-  return { models: selected, nextSkip: primaryRepos.length === SEARCH_PAGE_SIZE ? skip + SEARCH_PAGE_SIZE : null };
+  const oversizedCount = candidates.flatMap(item => item.files).filter(item => item.tooLargeForWeb).length;
+  return { models: selected, oversizedCount, nextSkip: primaryRepos.length === SEARCH_PAGE_SIZE ? skip + SEARCH_PAGE_SIZE : null };
 }

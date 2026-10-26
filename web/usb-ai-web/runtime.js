@@ -3,7 +3,7 @@ import { CATALOG } from './catalog.js';
 import * as db from './storage.js';
 import { isSmartphone } from './phone-gate.js';
 import { canSaveToFolder, existingModelsFolder, saveVerifiedFile } from './folder-models.js';
-import { isAuxiliaryGguf, WEB_FILE_LIMIT } from './hub.js';
+import { groupLocalGgufs, isAuxiliaryGguf, WEB_FILE_LIMIT } from './hub.js';
 import { modelOptions, usesSafariCpu } from './browser-capability.js';
 
 const paths = { default: `${import.meta.env.BASE_URL}wasm/wllama.wasm` };
@@ -46,10 +46,16 @@ export async function downloadVerified(item, onProgress) {
   if (!item || !/^https:\/\/huggingface\.co\//.test(item.url) || !/^[a-f0-9]{64}$/.test(item.sha256) || !Number.isSafeInteger(item.size)) throw Error('Invalid model metadata');
   if (isAuxiliaryGguf(item.url) || item.shards?.some(part => isAuxiliaryGguf(part.url))) throw Error('AUXILIARY_GGUF');
   const parts = item.shards || [item];
+  if (parts.some(part => part.size > WEB_FILE_LIMIT || !Number.isSafeInteger(part.size) || !/^[a-f0-9]{64}$/.test(part.sha256))) throw Error('MODEL_NEEDS_SPLIT');
+  if (parts.reduce((total, part) => total + part.size, 0) !== item.size) throw Error('Invalid model metadata');
+  if (!canSaveToFolder() && navigator.storage?.estimate) {
+    const { quota, usage } = await navigator.storage.estimate();
+    if (Number.isFinite(quota) && Number.isFinite(usage) && quota - usage < item.size) throw Error('MODEL_STORAGE_LOW');
+  }
   if (canSaveToFolder()) {
     const files = []; let completed = 0;
-    for (const part of parts) {
-      const file = await saveVerifiedFile(part, ({loaded}) => onProgress?.({loaded:completed+loaded,total:item.size}));
+    for (const [index, part] of parts.entries()) {
+      const file = await saveVerifiedFile(part, ({loaded}) => onProgress?.({loaded:completed+loaded,total:item.size,part:index+1,parts:parts.length}));
       files.push(file); completed += file.size;
     }
     await db.put('models', { id:item.id, name:item.name, source:'directory', fileHandle:files[0].handle, fileHandles:files.map(file=>file.handle), folderHandle:files[0].folderHandle, folderLabel:files[0].folderLabel, filename:files[0].filename, url:item.url, size:item.size, shards:parts });
@@ -97,12 +103,14 @@ export async function addLocalModel(files) {
   if (!parts.length || parts.some(file => !/\.gguf$/i.test(file.name))) throw Error('Select GGUF files');
   if (parts.some(file => isAuxiliaryGguf(file.name))) throw Error('AUXILIARY_GGUF');
   if (parts.some(file => file.size > WEB_FILE_LIMIT)) throw Error('MODEL_NEEDS_SPLIT');
+  const groups = groupLocalGgufs(parts);
+  if (groups.length !== 1 || groups[0].members.length !== parts.length) throw Error('INCOMPLETE_SHARDS');
   const id = crypto.randomUUID();
-  const name = parts.length === 1 ? parts[0].name : parts[0].name.replace(/-\d{5}-of-\d{5}/, '');
+  const {name, members} = groups[0];
   // IndexedDB can store Blobs, but browser quotas vary. Keep selected File objects
   // available during this session even when persistent storage is denied.
-  sessionFiles.set(id, parts);
-  try { await db.put('models', { id, name, source: 'file', files: parts, size: parts.reduce((n, f) => n + f.size, 0) }); }
+  sessionFiles.set(id, members);
+  try { await db.put('models', { id, name, source: 'file', files: members, size: groups[0].size }); }
   catch (error) { return { id, name, persistent: false, error }; }
   return { id, name, persistent: true };
 }
@@ -111,14 +119,16 @@ export async function addModelsFromFolder() {
   if (!files.length) throw Error('NO_GGUF_IN_FOLDER');
   const current = await savedModels();
   const ids = [];
-  for (const file of files) {
+  for (const group of groupLocalGgufs(files)) {
+    const file = group.members[0];
     const previous = current.find(model => model.source === 'directory' && model.filename === file.filename && model.folderLabel === file.folderLabel);
     const id = previous?.id || crypto.randomUUID();
-    await db.put('models', { id, name:file.filename, source:'directory', filename:file.filename,
-      size:file.size, fileHandle:file.fileHandle, fileHandles:[file.fileHandle],
+    await db.put('models', { id, name:group.name, source:'directory', filename:file.filename,
+      size:group.size, fileHandle:file.fileHandle, fileHandles:group.members.map(member=>member.fileHandle),
       folderHandle:file.folderHandle, folderLabel:file.folderLabel });
     ids.push(id);
   }
+  if (!ids.length) throw Error('INCOMPLETE_SHARDS');
   return ids;
 }
 const sessionFiles = new Map();

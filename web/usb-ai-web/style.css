@@ -14,3 +14,4 @@
 
 .chat-attachments{display:flex;flex-wrap:wrap;gap:6px}.chat-attachments:empty{display:none}.attachment-chip{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid #ddd;background:#f6f7f6;border-radius:8px;padding:6px 9px;color:#444;font-size:12px}.attach-button{font-size:21px;line-height:19px;padding:5px 10px}#legacy-doc-list:not(:empty){margin-top:18px}
 .hardware-advice{background:#eef6f0;border:1px solid #d6e7da;border-radius:11px;padding:12px 14px;font-size:13px;line-height:1.5;color:#315b42}.hardware-advice strong{display:block;margin-bottom:2px}.model-advice{display:block;line-height:1.4}.model-advice.good{color:#267049}.model-advice.possible,.model-advice.slow,.model-advice.unknown{color:#886923}.model-advice.low,.model-advice.unsupported{color:#a34d38}
+.model-card .split-parts{display:inline-block;width:max-content;border-radius:999px;background:#e8f4ed;color:#286449;padding:3px 8px;font-weight:600}

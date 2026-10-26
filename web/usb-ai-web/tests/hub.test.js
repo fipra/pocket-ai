@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { estimateMemory, isAuxiliaryGguf, isNonChatRepo, plausibleModelSize, modelFromEntry, modelsFromEntries, searchModels, searchTerm, splitSearchTerm } from '../hub.js';
+import { estimateMemory, groupLocalGgufs, isAuxiliaryGguf, isNonChatRepo, plausibleModelSize, modelFromEntry, modelsFromEntries, searchModels, searchTerm, splitSearchTerm } from '../hub.js';
 
 const hash = 'a'.repeat(64);
 test('only verified standalone GGUF files become results', () => {
@@ -105,6 +105,20 @@ test('complete GGUF shard sets can exceed 2 GB in total', () => {
   assert.equal(models[0].shards.length, 3);
   assert.match(models[0].shards[1].url, /large-00002-of-00003\.gguf$/);
   assert.equal(modelsFromEntries('owner/repo', entries.slice(0,2)).length, 0);
+  const smallLast = [
+    {path:'large-00001-of-00002.gguf',size:1_900_000_000,lfs:{sha256:hash}},
+    {path:'large-00002-of-00002.gguf',size:8_000_000,lfs:{sha256:'b'.repeat(64)}}
+  ];
+  assert.equal(modelsFromEntries('owner/repo', smallLast)[0].shards.length, 2);
+});
+test('existing local shard files reload as one model in numeric order', () => {
+  const files = [4,1,3,2].map(i => ({filename:`Gemma-9B-Q4-0000${i}-of-00004.gguf`,size:1_875_000_000,fileHandle:{id:i}}));
+  const groups = groupLocalGgufs(files);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].name, 'Gemma-9B-Q4.gguf');
+  assert.equal(groups[0].size, 7_500_000_000);
+  assert.deepEqual(groups[0].members.map(file => file.fileHandle.id), [1,2,3,4]);
+  assert.equal(groupLocalGgufs(files.slice(0,3)).length, 0);
 });
 test('search includes split repositories before single files above 2 GB', async () => {
   const fetcher = async url => ({ok:true,json:async () => url.includes('/tree/')
@@ -118,6 +132,37 @@ test('search includes split repositories before single files above 2 GB', async 
   assert.equal(result.models.length, 1);
   assert.equal(result.models[0].shards.length, 2);
   assert.equal(result.models[0].tooLargeForWeb, false);
+});
+test('Gemma 9B search chooses complete verified shards over an oversized single file', async () => {
+  const urls = [];
+  const fetcher = async url => {
+    urls.push(url);
+    if (url.includes('/tree/')) return {ok:true,json:async () => url.includes('split')
+      ? [1,2,3,4].map(i => ({path:`gemma-2-9b-it-Q4_K_M-0000${i}-of-00004.gguf`,size:1_875_000_000,lfs:{sha256:String(i).repeat(64)}}))
+      : [{path:'gemma-2-9b-it-Q4_K_M.gguf',size:7_500_000_000,lfs:{sha256:hash}}]};
+    return {ok:true,json:async () => url.includes('search=gemma-9b-split')
+      ? [{id:'owner/gemma-2-9b-it-GGUF-split',tags:['base_model:google/gemma-2-9b-it']}]
+      : [{id:'owner/gemma-2-9b-it-GGUF',tags:['base_model:google/gemma-2-9b-it']}]};
+  };
+  const result = await searchModels('gemma 9b', 0, fetcher);
+  assert.equal(result.models.length, 1);
+  assert.equal(result.models[0].shards.length, 4);
+  assert.equal(result.models[0].size, 7_500_000_000);
+  assert.equal(result.models[0].tooLargeForWeb, false);
+  assert.equal(result.oversizedCount, 1);
+  assert.ok(urls.some(url => url.includes('search=gemma-9b-split')));
+});
+test('generic model search also checks for already split GGUF releases', async () => {
+  const urls = [];
+  const fetcher = async url => {
+    urls.push(url);
+    return {ok:true,json:async () => url.includes('/tree/')
+      ? [1,2].map(i => ({path:`gemma-0000${i}-of-00002.gguf`,size:1_500_000_000,lfs:{sha256:String(i).repeat(64)}}))
+      : url.includes('search=gemma-split') ? [{id:'owner/gemma-GGUF-split',tags:[]}] : []};
+  };
+  const result = await searchModels('gemma', 0, fetcher);
+  assert.equal(result.models[0].shards.length, 2);
+  assert.ok(urls.some(url => url.includes('search=gemma-split')));
 });
 test('Web search hides a single GGUF too large for the browser to load', async () => {
   const urls = [];

@@ -67,3 +67,18 @@ test('verified GGUF streams into a usb-ai-models subfolder', async () => {
   assert.deepEqual(calls.slice(-3), [['write', bytes.byteLength], ['abort'], ['remove', 'example.gguf']]);
   delete globalThis.window;
 });
+test('a verified shard already in the selected folder is reused after retry', async () => {
+  const bytes = new TextEncoder().encode('GGUF shard');
+  const handle = { getFile:async () => new Blob([bytes]), createWritable:async () => { throw Error('should not overwrite'); } };
+  const directory = { name:'usb-ai-models', getFileHandle:async () => handle };
+  globalThis.window = { showDirectoryPicker:async () => directory };
+  const progress = [];
+  try {
+    const saved = await saveVerifiedFile({
+      url:'https://huggingface.co/owner/repo/resolve/main/model-00001-of-00004.gguf',
+      size:bytes.length, sha256:createHash('sha256').update(bytes).digest('hex')
+    }, value => progress.push(value), async () => { throw Error('should not download'); });
+    assert.equal(saved.filename, 'model-00001-of-00004.gguf');
+    assert.deepEqual(progress, [{loaded:bytes.length,total:bytes.length}]);
+  } finally { delete globalThis.window; }
+});
