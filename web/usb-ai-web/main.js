@@ -1,6 +1,8 @@
 import './style.css';
 import '../code-view.js';
 import '../message-markdown.css';
+import '../response-view.css';
+import '../response-view.js';
 import * as db from './storage.js';
 import { translations, preferredLanguage } from './i18n.js';
 import { CATALOG } from './catalog.js';
@@ -17,6 +19,7 @@ const $ = id => document.getElementById(id);
 let language = preferredLanguage();
 let chats = [], documents = [], models = [], memories = [], activeId, selectedId, busy = false, controller, installing;
 let pendingMemoryPrompt = null;
+let thinking = false;
 let hubResults = [], hubNext = null, hubSearching = false;
 let pendingFirstPrompt = false;
 const STARTER_ID = 'llama-3.2-3b-iq3m';
@@ -35,9 +38,9 @@ const node = (tag, text, className) => { const value = document.createElement(ta
 function setStatus(text = '', error = false, loading = false) { $('status').textContent = text; $('status').classList.toggle('error', error); $('status').classList.toggle('loading', loading); }
 function translate() { document.documentElement.lang = language; document.querySelectorAll('[data-i18n]').forEach(element => { element.textContent = tr(element.dataset.i18n); }); document.querySelectorAll('[data-placeholder]').forEach(element => { element.placeholder = tr(element.dataset.placeholder); }); $('language').value = language; $('stop').ariaLabel = tr('stop'); $('send').ariaLabel = tr('send'); }
 function closeSidebar() { $('sidebar').classList.remove('open'); }
-function saveSettings() { return db.put('settings', { id: 'main', language, selectedId, activeId }); }
+function saveSettings() { return db.put('settings', { id: 'main', language, selectedId, activeId, thinking }); }
 function renderChats() { const list = $('chat-list'); list.replaceChildren(); if (!chats.length) list.append(node('p', tr('noChats'), 'empty')); for (const chat of [...chats].sort((a,b) => b.updated - a.updated)) { const button = node('button', chat.title, `chat-item${chat.id === activeId ? ' active' : ''}`); button.onclick = () => { activeId = chat.id; saveSettings(); render(); closeSidebar(); }; list.append(button); } }
-function renderMessages() { const box = $('messages'); box.replaceChildren(); const chat = chats.find(item => item.id === activeId); if (!chat?.messages.length) { const welcome = node('div', undefined, 'welcome'); welcome.append(node('div', '✦', 'welcome-mark'), node('h1', tr('welcome')), node('p', models.length ? tr('welcomeNote') : tr(usesSafariCpu() ? 'safariStarterHint' : 'starterHint'))); box.append(welcome); return; } for (const message of chat.messages) { const row = node('article', undefined, `message ${message.role}`); row.append(node('div', message.role === 'user' ? 'U' : '✦', 'avatar')); const content = node('div'); const body = node('div', undefined, 'message-body'); window.USB_AI_CODE_VIEW.render(body, message.text, language); content.append(node('strong', message.role === 'user' ? tr('you') : tr('assistant')), body); if (message.role === 'assistant' && message.text) { const correction = node('button', tr('rememberCorrection'), 'memory-correction'); correction.onclick = () => { pendingMemoryPrompt = null; $('memory-id').value = ''; $('memory-text').value = ''; $('memory-dialog').showModal(); $('memory-text').focus(); }; content.append(correction); } if (message.sources?.length) { const details = node('details', undefined, 'source'); details.append(node('summary', `${tr('sources')} (${message.sources.length})`)); for (const source of message.sources) details.append(node('p', `${source.name}: ${source.text}`)); content.append(details); } row.append(content); box.append(row); } $('thread').scrollTop = $('thread').scrollHeight; }
+function renderMessages() { const box = $('messages'); box.replaceChildren(); const chat = chats.find(item => item.id === activeId); if (!chat?.messages.length) { const welcome = node('div', undefined, 'welcome'); welcome.append(node('div', '✦', 'welcome-mark'), node('h1', tr('welcome')), node('p', models.length ? tr('welcomeNote') : tr(usesSafariCpu() ? 'safariStarterHint' : 'starterHint'))); box.append(welcome); return; } for (const message of chat.messages) { const row = node('article', undefined, `message ${message.role}`); row.append(node('div', message.role === 'user' ? 'U' : '✦', 'avatar')); const content = node('div'); const body = node('div', undefined, 'message-body'); if (message.role === 'assistant') window.USB_AI_RESPONSE_VIEW.render(body, message, language, thinking); else window.USB_AI_CODE_VIEW.render(body, message.text, language); content.append(node('strong', message.role === 'user' ? tr('you') : tr('assistant')), body); if (message.role === 'assistant' && message.text) { const correction = node('button', tr('rememberCorrection'), 'memory-correction'); correction.onclick = () => { pendingMemoryPrompt = null; $('memory-id').value = ''; $('memory-text').value = ''; $('memory-dialog').showModal(); $('memory-text').focus(); }; content.append(correction); } if (message.sources?.length) { const details = node('details', undefined, 'source'); details.append(node('summary', `${tr('sources')} (${message.sources.length})`)); for (const source of message.sources) details.append(node('p', `${source.name}: ${source.text}`)); content.append(details); } row.append(content); box.append(row); } $('thread').scrollTop = $('thread').scrollHeight; }
 function appendModelAdvice(info, model, hardware, recommended = false) {
   const advice = modelGuidance(model, hardware);
   const detail = tr(advice.reason).replace('{minimum}', advice.memory.minimum).replace('{recommended}', advice.memory.recommended);
@@ -106,7 +109,7 @@ async function searchHub(skip = 0) {
   } catch (error) { $('hub-status').textContent = `${tr('error')}: ${error.message}`; }
   finally { hubSearching = false; renderSearch(); }
 }
-function render() { translate(); renderBrowserModelWarning(); renderChats(); renderMessages(); if ($('models-dialog').open) { renderModels(); renderSearch(); } if ($('docs-dialog').open) renderDocs(); if ($('memory-dialog').open) renderMemory(); $('model-trigger').textContent = `${models.find(model => model.id === selectedId)?.name || tr('chooseModel')} ⌄`; $('send').disabled = busy; $('stop').hidden = !controller; $('attach-files').ariaLabel = tr('attachFiles'); $('attach-files').title = tr('attachFiles'); renderAttachments(); $('capability').textContent = `${navigator.gpu ? tr('capabilityGpu') : tr('capabilityWasm')} · ${navigator.onLine ? tr('private') : tr('offline')}`; $('folder-hint').textContent = tr(canSaveToFolder() ? 'folderHint' : 'folderFallbackHint'); $('choose-folder').hidden = !canSaveToFolder(); $('first-model-choice').hidden = !pendingFirstPrompt; $('download-starter-model').disabled = busy || !navigator.onLine; }
+function render() { translate(); $('thinking-toggle').textContent = tr(thinking ? 'thinkingOn' : 'thinkingOff'); $('thinking-toggle').setAttribute('aria-pressed', String(thinking)); $('thinking-toggle').classList.toggle('on', thinking); renderBrowserModelWarning(); renderChats(); renderMessages(); if ($('models-dialog').open) { renderModels(); renderSearch(); } if ($('docs-dialog').open) renderDocs(); if ($('memory-dialog').open) renderMemory(); $('model-trigger').textContent = `${models.find(model => model.id === selectedId)?.name || tr('chooseModel')} ⌄`; $('send').disabled = busy; $('stop').hidden = !controller; $('attach-files').ariaLabel = tr('attachFiles'); $('attach-files').title = tr('attachFiles'); renderAttachments(); $('capability').textContent = `${navigator.gpu ? tr('capabilityGpu') : tr('capabilityWasm')} · ${navigator.onLine ? tr('private') : tr('offline')}`; $('folder-hint').textContent = tr(canSaveToFolder() ? 'folderHint' : 'folderFallbackHint'); $('choose-folder').hidden = !canSaveToFolder(); $('first-model-choice').hidden = !pendingFirstPrompt; $('download-starter-model').disabled = busy || !navigator.onLine; }
 function setBusy(value) {
   busy = value;
   $('send').disabled = value;
@@ -192,6 +195,7 @@ async function send() {
   const sources = chatDocuments.length ? retrieve(text, chatDocuments, 3) : [];
   const hasNewDocument = chatDocuments.some(doc => (doc.updated || 0) >= (chat.updated || 0));
   const contexts = ragContexts(hasNewDocument ? [] : chat.messages, text, sources);
+  for (const context of contexts) context.unshift({ role:'system', content: thinking ? 'If the model supports reasoning, put intermediate thinking in <think>...</think> and then give a clear final answer.' : 'Answer directly. Do not show intermediate reasoning or <think> content.' });
   const remembered = memoryContext(text, memories);
   if (remembered) for (const context of contexts) context.unshift({ role:'system', content:remembered });
   const answer = { role:'assistant', text:'', sources: sources.map(({name,text}) => ({name,text})) };
@@ -202,14 +206,14 @@ async function send() {
   controller = new AbortController();
   setBusy(true); setStatus(tr('generating'), false, true); renderMessages();
   const body = $('messages').lastElementChild?.querySelector('.message-body');
-  const streamView = body && window.USB_AI_CODE_VIEW.streamRenderer(body, () => answer.text, language, $('thread'));
+  const streamView = body && window.USB_AI_RESPONSE_VIEW.streamRenderer(body, answer, language, thinking, $('thread'));
   try {
     if (loadedModelId() !== selectedId) {
       setStatus(tr('loading'), false, true);
       await loadModel(selectedId);
       setStatus(tr('generating'), false, true);
     }
-    await completeWithRetry(contexts, streamChat, token => {
+    answer.usage = await completeWithRetry(contexts, (messages, onToken, signal) => streamChat(messages, onToken, signal, thinking), token => {
       answer.text += token;
       streamView?.update();
     }, controller.signal, () => {
@@ -231,10 +235,11 @@ async function send() {
     setBusy(false); render();
   }
 }
-async function init() { try { const settings = await db.get('settings','main'); language = settings?.language || preferredLanguage(); selectedId = settings?.selectedId; activeId = settings?.activeId; [chats, documents, models, memories] = await Promise.all([db.all('chats'), db.all('documents'), savedModels(), db.all('memory')]); if (isAuxiliaryGguf(models.find(model => model.id === selectedId)?.filename || models.find(model => model.id === selectedId)?.url || '')) { selectedId = undefined; await saveSettings(); } if (!chats.some(chat => chat.id === activeId)) activeId = chats[0]?.id; if (!models.some(model => model.id === selectedId)) selectedId = usesSafariCpu() ? undefined : models.find(isStarterModel)?.id; render(); if (needsSafariFallback(models.find(model => model.id === selectedId))) setStatus(tr('safariLargeModelWarning')); else if (isStarterModel(models.find(model => model.id === selectedId))) await run(() => chooseModel(selectedId)); } catch (error) { setStatus(`${tr('error')}: ${error.message}`, true); } }
+async function init() { try { const settings = await db.get('settings','main'); language = settings?.language || preferredLanguage(); selectedId = settings?.selectedId; activeId = settings?.activeId; thinking = !!settings?.thinking; [chats, documents, models, memories] = await Promise.all([db.all('chats'), db.all('documents'), savedModels(), db.all('memory')]); if (isAuxiliaryGguf(models.find(model => model.id === selectedId)?.filename || models.find(model => model.id === selectedId)?.url || '')) { selectedId = undefined; await saveSettings(); } if (!chats.some(chat => chat.id === activeId)) activeId = chats[0]?.id; if (!models.some(model => model.id === selectedId)) selectedId = usesSafariCpu() ? undefined : models.find(isStarterModel)?.id; render(); if (needsSafariFallback(models.find(model => model.id === selectedId))) setStatus(tr('safariLargeModelWarning')); else if (isStarterModel(models.find(model => model.id === selectedId))) await run(() => chooseModel(selectedId)); } catch (error) { setStatus(`${tr('error')}: ${error.message}`, true); } }
 $('prompt-form').onsubmit = event => { event.preventDefault(); run(send); };
 $('prompt').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('prompt-form').requestSubmit(); } };
 $('stop').onclick = () => controller?.abort();
+$('thinking-toggle').onclick = () => { thinking = !thinking; saveSettings(); render(); };
 $('new-chat').onclick = () => run(newChat);
 $('menu').onclick = () => $('sidebar').classList.toggle('open');
 for (const id of ['models-open','model-trigger']) $(id).onclick = () => { closeSidebar(); renderModels(); renderSearch(); $('models-dialog').showModal(); };

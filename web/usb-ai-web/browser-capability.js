@@ -17,9 +17,9 @@ export function usesSafariCpu(userAgent = navigator.userAgent, gpu = navigator.g
 }
 
 export function modelOptions({ safariCpu = usesSafariCpu(), deviceMemory = navigator.deviceMemory } = {}) {
-  if (safariCpu) return { n_ctx: 2048, n_batch: 64, n_threads: 1, n_gpu_layers: 0, jinja: true, reasoning: false };
+  if (safariCpu) return { n_ctx: 2048, n_batch: 64, n_threads: 1, n_gpu_layers: 0, jinja: true, reasoning: true };
   const contextSize = deviceMemory && deviceMemory <= 4 ? 4096 : 8192;
-  return { n_ctx: contextSize, n_threads: 1, jinja: true, reasoning: false };
+  return { n_ctx: contextSize, n_threads: 1, jinja: true, reasoning: true };
 }
 
 export function needsSafariFallback(model, safariCpu = usesSafariCpu()) {

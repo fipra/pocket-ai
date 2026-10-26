@@ -24,11 +24,11 @@ export async function completeWithRetry(contexts, stream, onToken, signal, onRet
     if (signal.aborted) return;
     let visible = '';
     try {
-      await stream(contexts[i], token => {
+      const usage = await stream(contexts[i], token => {
         visible += token;
         onToken(token);
       }, signal);
-      if (visible.trim()) return;
+      if (visible.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()) return usage;
     } catch (error) {
       if (signal.aborted) return;
       lastError = error;

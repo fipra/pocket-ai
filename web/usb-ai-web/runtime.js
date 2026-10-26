@@ -170,13 +170,15 @@ export async function loadModel(id) {
   } catch (error) { void next.exit().catch(() => {}); throw error; }
   finally { clearTimeout(timer); }
 }
-export async function streamChat(messages, onToken, signal) {
+export async function streamChat(messages, onToken, signal, thinking = false) {
   if (!engine) throw Error('Select a model first');
   if (signal.aborted) return;
   const current = engine;
   const safariCpu = usesSafariCpu();
   let settled = false;
   let timer;
+  let usage;
+  let firstTokenAt;
   let rejectWait;
   const interrupt = reason => {
     if (settled) return;
@@ -199,16 +201,31 @@ export async function streamChat(messages, onToken, signal) {
     max_tokens: safariCpu ? 768 : 3072,
     temperature: 0.7,
     stream: true,
+    chat_template_kwargs: { enable_thinking: thinking },
     abortSignal: signal,
     onData: chunk => {
       if (settled || signal.aborted) return;
-    const choice = chunk.choices?.[0];
-    const token = choice?.delta?.content ?? choice?.message?.content;
-      if (token) { clearTimeout(timer); onToken(token); }
+      if (chunk.usage || chunk.timings) {
+        const inputTokens = chunk.usage?.prompt_tokens ?? chunk.timings?.prompt_n;
+        const outputTokens = chunk.usage?.completion_tokens ?? chunk.timings?.predicted_n;
+        const tokensPerSecond = chunk.timings?.predicted_per_second;
+        if (Number.isFinite(inputTokens) && Number.isFinite(outputTokens)) {
+          usage = { inputTokens, outputTokens, tokensPerSecond: Number.isFinite(tokensPerSecond) ? tokensPerSecond : null };
+        }
+      }
+      const choice = chunk.choices?.[0];
+      const token = choice?.delta?.content ?? choice?.message?.content;
+      const reasoning = choice?.delta?.reasoning_content;
+      if (reasoning && thinking) { clearTimeout(timer); firstTokenAt ??= performance.now(); onToken(`<think>${reasoning}</think>`); }
+      if (token) { clearTimeout(timer); firstTokenAt ??= performance.now(); onToken(token); }
     }
   });
   try {
     await Promise.race([generation, interrupted]);
+    if (usage && !Number.isFinite(usage.tokensPerSecond) && firstTokenAt) {
+      usage.tokensPerSecond = usage.outputTokens / Math.max((performance.now() - firstTokenAt) / 1000, 0.001);
+    }
+    return usage;
   } finally {
     settled = true;
     clearTimeout(timer);

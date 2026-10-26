@@ -135,3 +135,11 @@ const quantizeStorageStrings = {
   es: 'Carpeta de destino: {path}. Se comprueba el espacio en esa unidad. La estimación es prudente; el resultado Q2 puede ser más pequeño.'
 };
 for (const language of Object.keys(quantizeStorageStrings)) window.USB_AI_I18N[language].quantizeStorage = quantizeStorageStrings[language];
+const thinkingStrings = {
+  en: { thinkingOn: 'Thinking on', thinkingOff: 'Thinking off' },
+  it: { thinkingOn: 'Thinking attivo', thinkingOff: 'Thinking spento' },
+  de: { thinkingOn: 'Denken an', thinkingOff: 'Denken aus' },
+  fr: { thinkingOn: 'Réflexion activée', thinkingOff: 'Réflexion désactivée' },
+  es: { thinkingOn: 'Razonamiento activado', thinkingOff: 'Razonamiento desactivado' }
+};
+for (const language of Object.keys(thinkingStrings)) Object.assign(window.USB_AI_I18N[language], thinkingStrings[language]);

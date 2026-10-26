@@ -49,7 +49,8 @@ export function recentContext(messages, question, maxHistoryChars = 2400) {
   const history = [];
   for (const message of [...messages].reverse()) {
     if (remaining <= 0) break;
-    const content = message.text.slice(-remaining);
+    const clean = message.role === 'assistant' ? message.text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim() : message.text;
+    const content = clean.slice(-remaining);
     history.push({role:message.role,content});
     remaining -= content.length;
   }

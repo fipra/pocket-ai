@@ -16,7 +16,7 @@ test('large model notice appears only in Safari and Firefox', () => {
 test('Safari without WebGPU uses a smaller CPU context', () => {
   assert.equal(isSafari(safari), true);
   assert.equal(usesSafariCpu(safari, undefined), true);
-  assert.deepEqual(modelOptions({ safariCpu: true }), { n_ctx: 2048, n_batch: 64, n_threads: 1, n_gpu_layers: 0, jinja: true, reasoning: false });
+  assert.deepEqual(modelOptions({ safariCpu: true }), { n_ctx: 2048, n_batch: 64, n_threads: 1, n_gpu_layers: 0, jinja: true, reasoning: true });
 });
 
 test('Chrome and Safari with WebGPU retain the standard context', () => {

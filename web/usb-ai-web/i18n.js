@@ -86,6 +86,14 @@ const browserModelWarnings = {
   es: { safariLargeModelsUnsupported:'Safari: los modelos grandes como Llama 3.2 (1,6 GB) no son compatibles con USB-AI Web. Safari puede recargar la página por el uso de memoria. Prueba Qwen 0.5B o usa Chrome, Edge o la aplicación de escritorio para modelos grandes.', firefoxLargeModelsUnsupported:'Firefox: los modelos grandes como Llama 3.2 (1,6 GB) no son compatibles con USB-AI Web. La generación puede ser muy lenta o fallar. Prueba Qwen 0.5B o usa Chrome, Edge o la aplicación de escritorio para modelos grandes.' }
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], browserModelWarnings[language]);
+const thinkingStrings = {
+  en: { thinkingOn:'Thinking on', thinkingOff:'Thinking off' },
+  it: { thinkingOn:'Thinking attivo', thinkingOff:'Thinking spento' },
+  fr: { thinkingOn:'Réflexion activée', thinkingOff:'Réflexion désactivée' },
+  de: { thinkingOn:'Denken an', thinkingOff:'Denken aus' },
+  es: { thinkingOn:'Razonamiento activado', thinkingOff:'Razonamiento desactivado' }
+};
+for (const language of Object.keys(translations)) Object.assign(translations[language], thinkingStrings[language]);
 const memoryStrings = {
   en: { rememberCorrection:'Correct and remember', memory:'Memory', memoryIntro:'Save only corrections and preferences you approve. Put /salva before or after a note in chat, then confirm here. Relevant notes are used in future chats on this browser.', memoryPlaceholder:'For this project, remember that…', memorySave:'Save note', memorySaved:'Memory note saved.', memoryRecallIntro:'The local memory contains:', memoryRecallLimit:'I have no other verified information about this person.', memoryEdit:'Edit', memoryEmpty:'No saved notes yet.', memoryExport:'Export memory as Markdown', memoryFull:'Memory is full (100 notes).' , memoryImport:'Import Markdown'},
   it: { rememberCorrection:'Correggi e ricorda', memory:'Memoria', memoryIntro:'Salva solo correzioni e preferenze che approvi. Scrivi /salva prima o dopo la nota nella chat, poi conferma qui. Le note pertinenti saranno usate nelle chat future di questo browser.', memoryPlaceholder:'Per questo progetto, ricorda che…', memorySave:'Salva nota', memorySaved:'Nota salvata in memoria.', memoryRecallIntro:'Nella memoria locale risulta:', memoryRecallLimit:'Non ho altre informazioni verificate su questa persona.', memoryEdit:'Modifica', memoryEmpty:'Nessuna nota salvata.', memoryExport:'Esporta memoria in Markdown', memoryFull:'Memoria piena (100 note).' , memoryImport:'Importa Markdown'},
