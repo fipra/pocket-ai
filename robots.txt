@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://usb-ai-hazel.vercel.app/sitemap.xml
+Sitemap: https://llamanest.vercel.app/sitemap.xml
