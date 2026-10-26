@@ -1066,7 +1066,11 @@ impl App {
             if let Ok(entries) = fs::read_dir(dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
-                    if path.extension().and_then(|e| e.to_str()) == Some("gguf") {
+                    if path
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .is_some_and(|e| e.eq_ignore_ascii_case("gguf"))
+                    {
                         if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
                             if !name.starts_with("._")
                                 && !name.to_ascii_lowercase().contains("mmproj")
@@ -1146,20 +1150,38 @@ impl App {
         {
             return Err("Select a GGUF chat model".into());
         }
-        if self.models.join(&name).is_file() || self.root.join("models").join(&name).is_file() {
-            return Err("A model with this filename is already in the app models folder".into());
-        }
         let mut file = fs::File::open(&path).map_err(|e| e.to_string())?;
         let mut head = [0; 4];
         file.read_exact(&mut head).map_err(|e| e.to_string())?;
         if &head != b"GGUF" {
             return Err("Invalid GGUF file".into());
         }
+        let target = self.models.join(&name);
+        let already_in_models =
+            target.is_file() && fs::canonicalize(&target).map_err(|e| e.to_string())? == path;
+        if !already_in_models {
+            let legacy = self.root.join("models").join(&name);
+            let selected_legacy =
+                legacy.is_file() && fs::canonicalize(&legacy).map_err(|e| e.to_string())? == path;
+            if target.exists() || (legacy.exists() && !selected_legacy) {
+                return Err(
+                    "A model with this filename is already in the app models folder".into(),
+                );
+            }
+            fs::create_dir_all(&self.models).map_err(|e| e.to_string())?;
+            let temporary = self.models.join(format!(".{name}.{}.part", id()));
+            let copied = fs::copy(&path, &temporary).and_then(|bytes| {
+                if bytes != file.metadata()?.len() {
+                    return Err(std::io::Error::other("Incomplete model copy"));
+                }
+                fs::rename(&temporary, &target)
+            });
+            if let Err(error) = copied {
+                let _ = fs::remove_file(&temporary);
+                return Err(format!("Could not import GGUF into models folder: {error}"));
+            }
+        }
         self.db.external_models.retain(|model| model.name != name);
-        self.db.external_models.push(ExternalModel {
-            name: name.clone(),
-            path,
-        });
         self.inference = None;
         self.selected = Some(name);
         self.save()?;
@@ -1189,10 +1211,7 @@ impl App {
     }
     fn download_status(&self) -> Value {
         let (download_name, downloaded, total) = if let Some(model) = &self.downloading {
-            let part = self
-                .root
-                .join("models")
-                .join(format!("{}.part", model.file));
+            let part = self.models.join(format!("{}.part", model.file));
             (
                 Some(model.name.as_str()),
                 fs::metadata(part).map(|m| m.len()).unwrap_or(0),
@@ -1819,8 +1838,7 @@ fn verify_model(path: &Path, manifest: &ModelDownload) -> Result<(), String> {
     Ok(())
 }
 
-fn run_download(root: &Path, manifest: &ModelDownload) -> Result<String, String> {
-    let dir = root.join("models");
+fn run_download(dir: &Path, manifest: &ModelDownload) -> Result<String, String> {
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let target = dir.join(&manifest.file);
     if target.exists() {
@@ -1862,7 +1880,7 @@ fn run_download(root: &Path, manifest: &ModelDownload) -> Result<String, String>
 }
 
 fn start_download(app: Arc<Mutex<App>>, model_id: &str) -> Result<Value, String> {
-    let (root, model) = {
+    let (models_dir, model) = {
         let mut guard = app.lock().unwrap();
         if guard.downloading.is_some() {
             return Ok(guard.state());
@@ -1879,11 +1897,11 @@ fn start_download(app: Arc<Mutex<App>>, model_id: &str) -> Result<Value, String>
         }
         guard.downloading = Some(model.clone());
         guard.download_error = None;
-        (guard.root.clone(), model)
+        (guard.models.clone(), model)
     };
     let state = app.lock().unwrap().state();
     std::thread::spawn(move || {
-        let result = run_download(&root, &model);
+        let result = run_download(&models_dir, &model);
         let mut guard = app.lock().unwrap();
         match result {
             Ok(name) => {
@@ -1908,7 +1926,7 @@ fn start_hub_download(app: Arc<Mutex<App>>, model_id: &str) -> Result<Value, Str
         .into_iter()
         .find(|model| model.id == model_id)
         .ok_or("Modello non disponibile")?;
-    let root = {
+    let models_dir = {
         let mut guard = app.lock().unwrap();
         if guard.downloading.is_some() {
             return Err("Download già in corso".into());
@@ -1919,11 +1937,11 @@ fn start_hub_download(app: Arc<Mutex<App>>, model_id: &str) -> Result<Value, Str
         }
         guard.downloading = Some(model.clone());
         guard.download_error = None;
-        guard.root.clone()
+        guard.models.clone()
     };
     let state = app.lock().unwrap().state();
     std::thread::spawn(move || {
-        let result = run_download(&root, &model);
+        let result = run_download(&models_dir, &model);
         let mut guard = app.lock().unwrap();
         match result {
             Ok(name) => {
@@ -2449,6 +2467,7 @@ mod tests {
         let models = root.join("models");
         fs::create_dir_all(&models).unwrap();
         fs::write(models.join("Bonsai-Q2_0.gguf"), b"GGUF").unwrap();
+        fs::write(models.join("Uppercase.GGUF"), b"GGUF").unwrap();
         fs::write(models.join("Bonsai-mmproj-Q8_0.gguf"), b"GGUF").unwrap();
         let app = App {
             root: root.clone(),
@@ -2467,6 +2486,10 @@ mod tests {
             .as_array()
             .unwrap()
             .contains(&json!("Bonsai-Q2_0.gguf")));
+        assert!(state["models"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("Uppercase.GGUF")));
         assert!(!state["models"]
             .as_array()
             .unwrap()
@@ -2481,7 +2504,30 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
     #[test]
-    fn existing_external_model_is_validated_and_persists_without_copying() {
+    fn download_progress_reads_the_visible_models_folder() {
+        let root = env::temp_dir().join(format!("usb-ai-download-path-{}", id()));
+        let models = root.join("models");
+        fs::create_dir_all(&models).unwrap();
+        let catalog = model_catalog();
+        let download = catalog[0].clone();
+        fs::write(models.join(format!("{}.part", download.file)), b"12345").unwrap();
+        let app = App {
+            root: root.join("PocketAI-data"),
+            models,
+            db: Workspace::default(),
+            selected: None,
+            catalog,
+            hardware: detect_hardware(),
+            downloading: Some(download),
+            download_error: None,
+            inference: None,
+            quantization: None,
+        };
+        assert_eq!(app.download_status()["bytes"], 5);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn existing_model_is_imported_to_models_and_persists() {
         let root = env::temp_dir().join(format!("usb-ai-external-model-{}", id()));
         let models = root.join("models");
         let elsewhere = root.join("elsewhere");
@@ -2509,9 +2555,22 @@ mod tests {
         assert_eq!(state["model"], "Llama-3.2-3B-Instruct-IQ3_M.gguf");
         assert_eq!(
             app.model_path("Llama-3.2-3B-Instruct-IQ3_M.gguf").unwrap(),
-            fs::canonicalize(&model).unwrap()
+            models.join("Llama-3.2-3B-Instruct-IQ3_M.gguf")
         );
-        assert!(!models.join("Llama-3.2-3B-Instruct-IQ3_M.gguf").exists());
+        assert_eq!(
+            fs::read(models.join("Llama-3.2-3B-Instruct-IQ3_M.gguf")).unwrap(),
+            b"GGUFtest"
+        );
+        assert_eq!(fs::read(&model).unwrap(), b"GGUFtest");
+        assert!(app.db.external_models.is_empty());
+        app.register_external_model(&models.join("Llama-3.2-3B-Instruct-IQ3_M.gguf"))
+            .unwrap();
+        fs::write(&model, b"GGUFother").unwrap();
+        assert!(app.register_external_model(&model).is_err());
+        assert_eq!(
+            fs::read(models.join("Llama-3.2-3B-Instruct-IQ3_M.gguf")).unwrap(),
+            b"GGUFtest"
+        );
         let restored: Workspace =
             serde_json::from_slice(&fs::read(root.join("workspace.json")).unwrap()).unwrap();
         app.db = restored;
@@ -2520,9 +2579,39 @@ mod tests {
             .contains(&"Llama-3.2-3B-Instruct-IQ3_M.gguf".to_owned()));
         assert_eq!(
             app.model_path("Llama-3.2-3B-Instruct-IQ3_M.gguf").unwrap(),
-            fs::canonicalize(&model).unwrap()
+            models.join("Llama-3.2-3B-Instruct-IQ3_M.gguf")
         );
         fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn legacy_download_can_be_copied_into_visible_models_folder() {
+        let base = env::temp_dir().join(format!("usb-ai-legacy-model-{}", id()));
+        let models = base.join("models");
+        let root = base.join("PocketAI-data");
+        let legacy = root.join("models");
+        fs::create_dir_all(&models).unwrap();
+        fs::create_dir_all(&legacy).unwrap();
+        let old_file = legacy.join("Legacy-Q4_K_M.gguf");
+        fs::write(&old_file, b"GGUFtest").unwrap();
+        let mut app = App {
+            root,
+            models: models.clone(),
+            db: Workspace::default(),
+            selected: None,
+            catalog: model_catalog(),
+            hardware: detect_hardware(),
+            downloading: None,
+            download_error: None,
+            inference: None,
+            quantization: None,
+        };
+        app.register_external_model(&old_file).unwrap();
+        assert_eq!(
+            fs::read(models.join("Legacy-Q4_K_M.gguf")).unwrap(),
+            b"GGUFtest"
+        );
+        assert!(old_file.exists());
+        fs::remove_dir_all(base).unwrap();
     }
     #[test]
     fn llama_output_keeps_only_answer() {

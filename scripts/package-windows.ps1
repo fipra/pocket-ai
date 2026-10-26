@@ -12,9 +12,7 @@ try {
   $bin = Join-Path $out 'bin'
   $gpuRuntime = $env:USB_AI_VULKAN_RUNTIME_DIR
   $data = Join-Path $out 'PocketAI-data'
-  foreach ($refreshed in @($bin, (Join-Path $out 'models'))) {
-    if (Test-Path $refreshed) { Remove-Item $refreshed -Recurse -Force }
-  }
+  if (Test-Path $bin) { Remove-Item $bin -Recurse -Force }
   New-Item $bin -ItemType Directory -Force | Out-Null
   New-Item (Join-Path $out 'models') -ItemType Directory -Force | Out-Null
   New-Item $data -ItemType Directory -Force | Out-Null
@@ -57,7 +55,10 @@ if errorlevel 1 (
 "%~dp0bin\usb-ai-rust.exe"
 '@ | Set-Content (Join-Path $out 'Avvia USB AI Rust GPU.cmd')
   }
-  Get-ChildItem (Join-Path $root 'models') -Filter '*.gguf' | Copy-Item -Destination (Join-Path $out 'models')
+  Get-ChildItem (Join-Path $root 'models') -Filter '*.gguf' | ForEach-Object {
+    $destination = Join-Path (Join-Path $out 'models') $_.Name
+    if (-not (Test-Path $destination)) { Copy-Item $_.FullName $destination }
+  }
   foreach ($name in @('QWEN-LICENSE.txt','catalog.json')) {
     $file = Join-Path (Join-Path $root 'models') $name
     if (Test-Path $file) { Copy-Item $file (Join-Path $out 'models') }
@@ -71,6 +72,8 @@ Double-click Avvia USB AI Rust.cmd. The browser opens at 127.0.0.1.
 If Avvia USB AI Rust GPU.cmd is present, use it to try Vulkan GPU acceleration.
 The GPU launcher uses the CPU runtime when no Vulkan GPU is detected.
 Keep the whole folder on the USB drive. Models and data stay here.
+Use Models > Import GGUF into models to copy an existing model, or copy GGUF files into the models folder and refresh the list.
+New downloads and imported models are stored in this models folder; PocketAI-data contains chats and older downloads.
 Build this package on a Windows x64 computer with Rust, llama-server, llama-cli, llama-quantize and pdftotext.
 '@ | Set-Content (Join-Path $out 'README.txt')
   Write-Host "Portable folder ready: $out"

@@ -45,9 +45,9 @@ Open **Models → Quantize Model** in a build that includes `llama-quantize`. Ch
 1. Download [**USB-AI-Rust-Windows-x64.zip**](https://github.com/fipra/usb-ai/releases/download/rust-windows-stop-2026-10-24/USB-AI-Rust-Windows-x64.zip).
 2. Extract the complete folder to your USB drive or another location.
 3. Double-click `Avvia USB AI Rust GPU.cmd` to use a detected Vulkan GPU (including NVIDIA RTX), or `Avvia USB AI Rust.cmd` for CPU mode. The GPU launcher falls back to CPU when no Vulkan device is detected.
-4. Send your first prompt to download and prepare the default Llama 3.2 3B model, or choose another model. Chat and document search then work offline.
+4. Open **Models → Import GGUF into models** to select a model already on the PC, or send your first prompt and choose a download. Chat and document search then work offline.
 
-The destination PC does **not** need Rust, Cargo, or a PowerShell setup. Keep the whole folder together; downloaded models and data stay inside it. GPU mode needs a working Vulkan graphics driver. Run `bin\gpu\llama-server.exe --list-devices` to check which GPU the bundled runtime detects. This build is for Windows x64. The automated Windows build checks the package and included tools, but GPU inference on a physical Windows PC still needs testing.
+The destination PC does **not** need Rust or Cargo. Keep the whole folder together. Imported and newly downloaded models are stored in `USB-AI-Rust-Windows-x64\models`; importing copies the GGUF and keeps the source file. Files downloaded by older versions in `PocketAI-data\models` remain discoverable. GPU mode needs a working Vulkan graphics driver. Run `bin\gpu\llama-server.exe --list-devices` to check which GPU the bundled runtime detects. This build is for Windows x64. The automated Windows build checks the package and included tools, but GPU inference on a physical Windows PC still needs testing.
 
 ### macOS
 
@@ -59,7 +59,7 @@ On first launch, the launcher verifies the bundled executables and libraries' lo
 
 ## Models and hardware guidance
 
-Open the model picker to see detected total RAM, logical CPU cores, and architecture. On an empty installation, sending the first prompt downloads Llama 3.2 3B automatically; computers with less than 4 GB RAM use Qwen 0.5B instead. You can also choose another model manually. The app shows progress and verifies the SHA-256 hash and GGUF format before use. Internet is needed for the initial download; afterward chat and document search run locally. You can also place a compatible instruct `.gguf` file in `models/`.
+Open the model picker to see detected total RAM, logical CPU cores, and architecture. On an empty installation, the first prompt lets you import an existing GGUF or download a suggested model. Computers with less than 4 GB RAM are offered Qwen 0.5B instead of Llama 3.2 3B. The app shows download progress and verifies the SHA-256 hash and GGUF format before use. Internet is needed for a download; afterward chat and document search run locally. You can also place a compatible instruct `.gguf` file in `models/` and press **Refresh local models**.
 
 | Model | Approximate download | Suggested minimum RAM | More comfortable RAM | License |
 |---|---:|---:|---:|---|

@@ -46,7 +46,7 @@ Servono Rust, `llama-server`, `llama-cli` e `llama-quantize` di llama.cpp e, per
 cargo run --release
 ```
 
-Il browser si apre automaticamente. Apri **Scegli un modello** per vedere RAM totale, core logici e architettura rilevati sul computer in uso. Puoi scaricare uno dei modelli del catalogo; il download parte solo dopo il clic, mostra l'avanzamento e verifica SHA-256 e formato GGUF prima dell'uso. Per scaricarlo serve Internet una volta; chat e documenti funzionano offline dopo il download. Puoi anche copiare un tuo modello `.gguf` in `models/`.
+Il browser si apre automaticamente. Apri **Scegli un modello** per vedere RAM totale, core logici e architettura rilevati sul computer in uso. Il pulsante **Importa GGUF in models** permette di scegliere un file già scaricato: l'app lo copia in `models/` e conserva l'originale. Su Windows, la cartella è `USB-AI-Rust-Windows-x64\models`, accanto a `bin` e `PocketAI-data`. Puoi anche copiare un `.gguf` direttamente in questa cartella e premere **Aggiorna modelli locali**. I nuovi download finiscono nella stessa cartella, mostrano l'avanzamento e sono verificati con SHA-256 e formato GGUF. I modelli scaricati con versioni precedenti in `PocketAI-data\models` restano utilizzabili. Per scaricare serve Internet una volta; chat e documenti funzionano offline dopo il download.
 
 | Modello | Download circa | RAM minima indicativa | RAM più comoda | Licenza |
 |---|---:|---:|---:|---|
