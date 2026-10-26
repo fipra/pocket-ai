@@ -1,7 +1,7 @@
-# Offllama Rust
+# LlamaNest by FipraAI
 
 > [!IMPORTANT]
-> **Per usare commercialmente le versioni attuali di Offllama serve prima una licenza scritta separata e a pagamento.** Questo vale anche per l'uso interno in azienda, i lavori per clienti, i servizi a pagamento, la rivendita e l'integrazione in un prodotto commerciale. [Contatta il titolare del progetto per un accordo](https://github.com/fipra/usb-ai/issues/new?title=Richiesta%20licenza%20commerciale) e leggi le [condizioni commerciali](COMMERCIAL_LICENSE.md).
+> **Per usare commercialmente le versioni attuali di LlamaNest serve prima una licenza scritta separata e a pagamento.** Questo vale anche per l'uso interno in azienda, i lavori per clienti, i servizi a pagamento, la rivendita e l'integrazione in un prodotto commerciale. [Contatta il titolare del progetto per un accordo](https://github.com/fipra/usb-ai/issues/new?title=Richiesta%20licenza%20commerciale) e leggi le [condizioni commerciali](COMMERCIAL_LICENSE.md).
 >
 > Le vecchie copie pubblicate sotto MIT conservano i diritti di uso commerciale: vedi la [cronologia delle licenze](LICENSING_HISTORY.md). Strumenti e modelli di terzi hanno licenze proprie.
 
@@ -17,9 +17,9 @@ vengono modificati da questo cambio di licenza. La
 [cronologia delle licenze](LICENSING_HISTORY.md) indica il commit di riferimento
 e le impronte SHA-256 dei pacchetti storici.
 
-Nelle distribuzioni future, tutto il codice Offllama di cui Fabrizio Casula
+Nelle distribuzioni future, tutto il codice LlamaNest di cui Fabrizio Casula
 detiene i diritti viene offerto sotto la
-[Offllama Personal Use License v1.0](LICENSE), compreso il codice già pubblicato
+[USB AI Personal Use License v1.0](LICENSE), compreso il codice già pubblicato
 in precedenza sotto MIT. L'uso personale, didattico e per ricerca non
 commerciale è gratuito. Uso commerciale, rivendita, ridistribuzione
 commerciale e integrazione in prodotti commerciali richiedono un accordo
@@ -71,11 +71,11 @@ Questa repo non contiene pesi GGUF nel controllo versione. Una copia locale del 
 
 ## Pacchetto per chiavetta USB
 
-**Mac:** scarica dalla [nuova release macOS](https://github.com/fipra/usb-ai/releases/tag/rust-mac-stop-2026-10-24) lo ZIP **arm64** per Apple Silicon oppure **x86_64** per Intel. Estrai l'intera cartella sulla chiavetta e fai doppio clic su `Avvia Offllama.command`. La cartella include eseguibile, licenza e strumenti necessari, ma non modelli o dati personali. Al primo avvio scegli e scarica un modello. La GPU viene usata tramite Metal se il backend è disponibile; controlla con `bin/llama-server --list-devices` nella cartella estratta. Per creare il pacchetto dal sorgente su un Mac della stessa architettura, esegui `python3 scripts/package-mac.py`.
+**Mac:** scarica dalla [nuova release macOS](https://github.com/fipra/usb-ai/releases/tag/rust-mac-stop-2026-10-24) lo ZIP **arm64** per Apple Silicon oppure **x86_64** per Intel. Estrai l'intera cartella sulla chiavetta e fai doppio clic su `Avvia LlamaNest.command`. La cartella include eseguibile, licenza e strumenti necessari, ma non modelli o dati personali. Al primo avvio scegli e scarica un modello. La GPU viene usata tramite Metal se il backend è disponibile; controlla con `bin/llama-server --list-devices` nella cartella estratta. Per creare il pacchetto dal sorgente su un Mac della stessa architettura, esegui `python3 scripts/package-mac.py`.
 
 **Primo avvio su macOS:** il launcher verifica la firma locale dei binari e delle librerie inclusi e, se presenti, rimuove i loro attributi di quarantena prima di aprire l'app. Questo evita il blocco di una `.dylib` al primo prompt. L'operazione riguarda solo `bin/` e `lib/` della cartella estratta. La build non ha firma Developer ID né notarizzazione Apple, quindi macOS potrebbe chiedere di autorizzare il launcher stesso. Non modificare i binari del pacchetto dopo l'estrazione.
 
-**Windows x64:** scarica lo ZIP **USB-AI-Rust-Windows-x64.zip** dalla [nuova release Windows portatile](https://github.com/fipra/usb-ai/releases/tag/rust-windows-stop-2026-10-24) ed estrai **tutta la cartella**. Usa `Avvia Offllama GPU.cmd` per provare l'accelerazione Vulkan con una GPU compatibile, inclusa NVIDIA RTX; senza GPU Vulkan, questo avvio usa la CPU. Usa `Avvia Offllama.cmd` per la modalità CPU. La modalità GPU richiede un driver grafico Vulkan funzionante; `bin\gpu\llama-server.exe --list-devices` mostra i dispositivi rilevati. Non servono Rust, Cargo o PowerShell sul PC di destinazione. I dati e i modelli restano nella cartella portatile. L'inferenza GPU va collaudata su un PC Windows reale.
+**Windows x64:** scarica lo ZIP **USB-AI-Rust-Windows-x64.zip** dalla [nuova release Windows portatile](https://github.com/fipra/usb-ai/releases/tag/rust-windows-stop-2026-10-24) ed estrai **tutta la cartella**. Usa `Avvia LlamaNest GPU.cmd` per provare l'accelerazione Vulkan con una GPU compatibile, inclusa NVIDIA RTX; senza GPU Vulkan, questo avvio usa la CPU. Usa `Avvia LlamaNest.cmd` per la modalità CPU. La modalità GPU richiede un driver grafico Vulkan funzionante; `bin\gpu\llama-server.exe --list-devices` mostra i dispositivi rilevati. Non servono Rust, Cargo o PowerShell sul PC di destinazione. I dati e i modelli restano nella cartella portatile. L'inferenza GPU va collaudata su un PC Windows reale.
 
 Per ricreare il pacchetto da sorgente su Windows, lo script `scripts/package-windows.ps1` richiede Rust, `llama-server.exe`, `llama-cli.exe`, `llama-quantize.exe` e `pdftotext.exe`; la release sopra è generata automaticamente da GitHub Actions.
 
@@ -84,7 +84,7 @@ Per ricreare il pacchetto da sorgente su Windows, lo script `scripts/package-win
 - `POCKET_AI_HOME` sceglie una cartella dati alternativa.
 - `USB_AI_DIR` sceglie la cartella base che contiene `models/` e, per impostazione predefinita, `PocketAI-data/`.
 - `LLAMA_SERVER`, `LLAMA_QUANTIZE` e `PDFTOTEXT` indicano eseguibili esterni alternativi.
-- Alla prima risposta l'app avvia `llama-server`; le risposte successive riutilizzano il modello caricato fino al cambio GGUF o alla chiusura di Offllama. La risposta appare mentre viene generata. Il pulsante Stop interrompe la risposta corrente e conserva il testo già prodotto, così puoi inviare un altro prompt.
+- Alla prima risposta l'app avvia `llama-server`; le risposte successive riutilizzano il modello caricato fino al cambio GGUF o alla chiusura di LlamaNest. La risposta appare mentre viene generata. Il pulsante Stop interrompe la risposta corrente e conserva il testo già prodotto, così puoi inviare un altro prompt.
 - I PDF scansionati richiedono OCR esterno; la ricerca nei documenti è lessicale, non semantica.
 
 ## Sviluppo e verifica

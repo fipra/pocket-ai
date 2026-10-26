@@ -25,5 +25,5 @@ test('phone download and Web links show the short alert without navigating', () 
   let prevented = false;
   handlers[0]({ preventDefault: () => { prevented = true; } });
   assert.equal(prevented, true);
-  assert.equal(alerts[0], 'Offllama non è per smartphone al momento, ma ci stiamo lavorando.');
+  assert.equal(alerts[0], 'LlamaNest non è per smartphone al momento, ma ci stiamo lavorando.');
 });

@@ -2,9 +2,9 @@
 set -e
 cd "${0:A:h}/.."
 if [[ ! -d node_modules ]]; then
-  echo "Installing Offllama Web dependencies…"
+  echo "Installing LlamaNest Web dependencies…"
   npm install
 fi
-echo "Starting Offllama Web at http://127.0.0.1:5173/"
+echo "Starting LlamaNest Web at http://127.0.0.1:5173/"
 (sleep 2; open "http://127.0.0.1:5173/") &
 npm run dev -- --host 127.0.0.1

@@ -1,22 +1,22 @@
 (() => {
   // The Italian HTML is the readable fallback when JavaScript is unavailable.
   const rows = [
-    ["Perché Offllama", "Why Offllama", "Pourquoi Offllama", "Warum Offllama", "Por qué Offllama"],
+    ["Perché LlamaNest", "Why LlamaNest", "Pourquoi LlamaNest", "Warum LlamaNest", "Por qué LlamaNest"],
     ["Come funziona", "How it works", "Comment ça marche", "So funktioniert es", "Cómo funciona"],
     ["Scarica gratis ↓", "Download free ↓", "Télécharger gratuitement ↓", "Kostenlos herunterladen ↓", "Descargar gratis ↓"],
     ["Un progetto FipraAI", "A FipraAI project", "Un projet FipraAI", "Ein Projekt von FipraAI", "Un proyecto de FipraAI"],
     ["La tua AI.", "Your AI.", "Votre IA.", "Deine KI.", "Tu IA."],
     ["Ovunque vai.", "Wherever you go.", "Où que vous soyez.", "Überall dabei.", "Donde vayas."],
     ["Un assistente AI gratuito da tenere sul computer o su una chiavetta USB. Scegli un modello, conversa e lavora con i tuoi documenti, in locale.", "A free AI assistant for your computer or USB drive. Choose a model, chat, and work with your documents locally.", "Un assistant IA gratuit à conserver sur votre ordinateur ou une clé USB. Choisissez un modèle, discutez et travaillez avec vos documents en local.", "Ein kostenloser KI-Assistent für deinen Computer oder USB-Stick. Wähle ein Modell, chatte und arbeite lokal mit deinen Dokumenten.", "Un asistente de IA gratuito para tu ordenador o memoria USB. Elige un modelo, conversa y trabaja con tus documentos de forma local."],
-    ["Scarica Offllama", "Download Offllama", "Télécharger Offllama", "Offllama herunterladen", "Descargar Offllama"],
-    ["Apri Offllama Web", "Open Offllama Web", "Ouvrir Offllama Web", "Offllama Web öffnen", "Abrir Offllama Web"],
+    ["Scarica LlamaNest", "Download LlamaNest", "Télécharger LlamaNest", "LlamaNest herunterladen", "Descargar LlamaNest"],
+    ["Apri LlamaNest Web", "Open LlamaNest Web", "Ouvrir LlamaNest Web", "LlamaNest Web öffnen", "Abrir LlamaNest Web"],
     ["Scopri come funziona", "See how it works", "Découvrez comment ça marche", "So funktioniert es", "Descubre cómo funciona"],
     ["Gratis · Nessun account · Mac e Windows", "Free · No account · Mac and Windows", "Gratuit · Sans compte · Mac et Windows", "Kostenlos · Kein Konto · Mac und Windows", "Gratis · Sin cuenta · Mac y Windows"],
-    ["Offllama · sul tuo computer", "Offllama · on your computer", "Offllama · sur votre ordinateur", "Offllama · auf deinem Computer", "Offllama · en tu ordenador"],
+    ["LlamaNest · sul tuo computer", "LlamaNest · on your computer", "LlamaNest · sur votre ordinateur", "LlamaNest · auf deinem Computer", "LlamaNest · en tu ordenador"],
     ["Nuova chat", "New chat", "Nouvelle discussion", "Neuer Chat", "Nuevo chat"],
     ["Posso usarlo anche senza Internet?", "Can I use it without Internet?", "Puis-je l'utiliser sans Internet ?", "Kann ich es ohne Internet nutzen?", "¿Puedo usarlo sin Internet?"],
     ["Sì. Dopo aver scaricato un modello, puoi conversare e cercare nei tuoi documenti direttamente sul computer, anche offline.", "Yes. Once you download a model, you can chat and search your documents directly on your computer, even offline.", "Oui. Après avoir téléchargé un modèle, vous pouvez discuter et rechercher dans vos documents directement sur votre ordinateur, même hors ligne.", "Ja. Nach dem Download eines Modells kannst du direkt auf deinem Computer chatten und deine Dokumente durchsuchen, auch offline.", "Sí. Después de descargar un modelo, puedes conversar y buscar en tus documentos directamente en tu ordenador, incluso sin conexión."],
-    ["Chiedi a Offllama…", "Ask Offllama…", "Demandez à Offllama…", "Frag Offllama…", "Pregunta a Offllama…"],
+    ["Chiedi a LlamaNest…", "Ask LlamaNest…", "Demandez à LlamaNest…", "Frag LlamaNest…", "Pregunta a LlamaNest…"],
     ["Pronto anche per la tua chiavetta USB", "Ready for your USB drive too", "Prêt aussi pour votre clé USB", "Auch für deinen USB-Stick bereit", "También listo para tu memoria USB"],
     ["Scegli la tua versione.", "Choose your version.", "Choisissez votre version.", "Wähle deine Version.", "Elige tu versión."],
     ["Scarica lo ZIP adatto al tuo computer. Estrai la cartella sul disco o direttamente su una chiavetta USB.", "Download the ZIP for your computer. Extract the folder to your drive or directly to a USB drive.", "Téléchargez le ZIP adapté à votre ordinateur. Extrayez le dossier sur votre disque ou directement sur une clé USB.", "Lade die passende ZIP-Datei herunter. Entpacke den Ordner auf deinen Computer oder direkt auf einen USB-Stick.", "Descarga el ZIP adecuado para tu ordenador. Extrae la carpeta en el disco o directamente en una memoria USB."],
@@ -30,7 +30,7 @@
     ["Informazioni sulle licenze", "Licensing information", "Informations sur les licences", "Lizenzinformationen", "Información sobre licencias"],
     ["Semplice per davvero", "Truly simple", "Vraiment simple", "Ganz einfach", "Realmente sencillo"],
     ["Uno spazio tutto tuo.", "A space of your own.", "Un espace à vous.", "Dein eigener Bereich.", "Un espacio solo tuyo."],
-    ["Offllama porta modelli, chat e documenti nella cartella che scegli. Puoi tenerla sul computer o portarla con te.", "Offllama keeps models, chats, and documents in a folder you choose. Keep it on your computer or take it with you.", "Offllama conserve modèles, discussions et documents dans le dossier de votre choix. Gardez-le sur votre ordinateur ou emportez-le.", "Offllama speichert Modelle, Chats und Dokumente in einem Ordner deiner Wahl. Behalte ihn auf deinem Computer oder nimm ihn mit.", "Offllama guarda modelos, chats y documentos en la carpeta que elijas. Puedes dejarla en el ordenador o llevarla contigo."],
+    ["LlamaNest porta modelli, chat e documenti nella cartella che scegli. Puoi tenerla sul computer o portarla con te.", "LlamaNest keeps models, chats, and documents in a folder you choose. Keep it on your computer or take it with you.", "LlamaNest conserve modèles, discussions et documents dans le dossier de votre choix. Gardez-le sur votre ordinateur ou emportez-le.", "LlamaNest speichert Modelle, Chats und Dokumente in einem Ordner deiner Wahl. Behalte ihn auf deinem Computer oder nimm ihn mit.", "LlamaNest guarda modelos, chats y documentos en la carpeta que elijas. Puedes dejarla en el ordenador o llevarla contigo."],
     ["I tuoi documenti", "Your documents", "Vos documents", "Deine Dokumente", "Tus documentos"],
     ["Importa PDF testuali, TXT e Markdown. Cerca i passaggi rilevanti e consulta le fonti nella chat.", "Import text PDFs, TXT, and Markdown. Find relevant passages and check sources in the chat.", "Importez des PDF textuels, des fichiers TXT et Markdown. Retrouvez les passages pertinents et consultez les sources dans la discussion.", "Importiere Text-PDFs, TXT und Markdown. Finde relevante Stellen und prüfe Quellen im Chat.", "Importa PDF de texto, TXT y Markdown. Encuentra fragmentos relevantes y consulta las fuentes en el chat."],
     ["Portalo con te", "Take it with you", "Emportez-le", "Nimm es mit", "Llévalo contigo"],
@@ -44,8 +44,8 @@
     ["Scegli Mac o Windows", "Choose Mac or Windows", "Choisissez Mac ou Windows", "Mac oder Windows wählen", "Elige Mac o Windows"],
     ["Scarica la versione corretta e decomprimi lo ZIP sul computer o sulla chiavetta.", "Download the right version and extract the ZIP to your computer or USB drive.", "Téléchargez la bonne version et extrayez le ZIP sur votre ordinateur ou clé USB.", "Lade die passende Version herunter und entpacke die ZIP-Datei auf deinen Computer oder USB-Stick.", "Descarga la versión adecuada y extrae el ZIP en el ordenador o en la memoria USB."],
     ["02 / AVVIA", "02 / START", "02 / LANCER", "02 / STARTEN", "02 / INICIAR"],
-    ["Apri Offllama", "Open Offllama", "Ouvrez Offllama", "Offllama öffnen", "Abre Offllama"],
-    ["Su Mac apri “Avvia Offllama.command”; su Windows apri “Avvia Offllama.cmd”.", "On Mac, open “Avvia Offllama.command”; on Windows, open “Avvia Offllama.cmd”.", "Sur Mac, ouvrez « Avvia Offllama.command » ; sur Windows, ouvrez « Avvia Offllama.cmd ».", "Öffne auf dem Mac „Avvia Offllama.command“ und unter Windows „Avvia Offllama.cmd“.", "En Mac, abre «Avvia Offllama.command»; en Windows, abre «Avvia Offllama.cmd»."],
+    ["Apri LlamaNest", "Open LlamaNest", "Ouvrez LlamaNest", "LlamaNest öffnen", "Abre LlamaNest"],
+    ["Su Mac apri “Avvia LlamaNest.command”; su Windows apri “Avvia LlamaNest.cmd”.", "On Mac, open “Avvia LlamaNest.command”; on Windows, open “Avvia LlamaNest.cmd”.", "Sur Mac, ouvrez « Avvia LlamaNest.command » ; sur Windows, ouvrez « Avvia LlamaNest.cmd ».", "Öffne auf dem Mac „Avvia LlamaNest.command“ und unter Windows „Avvia LlamaNest.cmd“.", "En Mac, abre «Avvia LlamaNest.command»; en Windows, abre «Avvia LlamaNest.cmd»."],
     ["03 / CONVERSA", "03 / CHAT", "03 / DISCUTER", "03 / CHATTEN", "03 / CONVERSAR"],
     ["Scegli un modello", "Choose a model", "Choisissez un modèle", "Modell wählen", "Elige un modelo"],
     ["Scarica un modello compatibile con la RAM del tuo computer. Poi puoi lavorare anche offline.", "Download a model that fits your computer's RAM. Then you can work offline too.", "Téléchargez un modèle adapté à la RAM de votre ordinateur. Vous pourrez ensuite travailler hors ligne.", "Lade ein Modell herunter, das zum RAM deines Computers passt. Danach kannst du auch offline arbeiten.", "Descarga un modelo compatible con la RAM de tu ordenador. Después también podrás trabajar sin conexión."],
@@ -60,13 +60,13 @@
   ];
 
   const attributes = [
-    ["Offllama, torna all'inizio", "Offllama, back to top", "Offllama, retour en haut", "Offllama, zurück nach oben", "Offllama, volver arriba"],
-    ["Volpe, simbolo di Offllama", "Fox, Offllama symbol", "Renard, symbole de Offllama", "Fuchs, Symbol von Offllama", "Zorro, símbolo de Offllama"],
+    ["LlamaNest, torna all'inizio", "LlamaNest, back to top", "LlamaNest, retour en haut", "LlamaNest, zurück nach oben", "LlamaNest, volver arriba"],
+    ["Volpe, simbolo di LlamaNest", "Fox, LlamaNest symbol", "Renard, symbole de LlamaNest", "Fuchs, Symbol von LlamaNest", "Zorro, símbolo de LlamaNest"],
     ["Navigazione principale", "Main navigation", "Navigation principale", "Hauptnavigation", "Navegación principal"],
-    ["Anteprima illustrativa della chat Offllama", "Illustrative preview of Offllama chat", "Aperçu illustratif du chat Offllama", "Illustrative Vorschau des Offllama Chats", "Vista ilustrativa del chat de Offllama"],
-    ["Scarica Offllama per Mac Apple Silicon, file ZIP", "Download Offllama for Apple Silicon Mac, ZIP file", "Télécharger Offllama pour Mac Apple Silicon, fichier ZIP", "Offllama für Apple Silicon Mac herunterladen, ZIP-Datei", "Descargar Offllama para Mac Apple Silicon, archivo ZIP"],
-    ["Scarica Offllama per Mac Intel, file ZIP", "Download Offllama for Intel Mac, ZIP file", "Télécharger Offllama pour Mac Intel, fichier ZIP", "Offllama für Intel-Mac herunterladen, ZIP-Datei", "Descargar Offllama para Mac Intel, archivo ZIP"],
-    ["Scarica Offllama per Windows x64, file ZIP", "Download Offllama for Windows x64, ZIP file", "Télécharger Offllama pour Windows x64, fichier ZIP", "Offllama für Windows x64 herunterladen, ZIP-Datei", "Descargar Offllama para Windows x64, archivo ZIP"],
+    ["Anteprima illustrativa della chat LlamaNest", "Illustrative preview of LlamaNest chat", "Aperçu illustratif du chat LlamaNest", "Illustrative Vorschau des LlamaNest Chats", "Vista ilustrativa del chat de LlamaNest"],
+    ["Scarica LlamaNest per Mac Apple Silicon, file ZIP", "Download LlamaNest for Apple Silicon Mac, ZIP file", "Télécharger LlamaNest pour Mac Apple Silicon, fichier ZIP", "LlamaNest für Apple Silicon Mac herunterladen, ZIP-Datei", "Descargar LlamaNest para Mac Apple Silicon, archivo ZIP"],
+    ["Scarica LlamaNest per Mac Intel, file ZIP", "Download LlamaNest for Intel Mac, ZIP file", "Télécharger LlamaNest pour Mac Intel, fichier ZIP", "LlamaNest für Intel-Mac herunterladen, ZIP-Datei", "Descargar LlamaNest para Mac Intel, archivo ZIP"],
+    ["Scarica LlamaNest per Windows x64, file ZIP", "Download LlamaNest for Windows x64, ZIP file", "Télécharger LlamaNest pour Windows x64, fichier ZIP", "LlamaNest für Windows x64 herunterladen, ZIP-Datei", "Descargar LlamaNest para Windows x64, archivo ZIP"],
     ["Link utili", "Useful links", "Liens utiles", "Nützliche Links", "Enlaces útiles"]
   ];
 
@@ -93,10 +93,10 @@
     if (attributeDictionary.has(value)) element.setAttribute("aria-label", attributeDictionary.get(value));
   });
   const meta = {
-    en: ["Offllama — Local, portable AI for Mac and Windows", "Offllama is a free, portable AI assistant for Mac and Windows. Keep it on your computer or a USB drive and use GGUF models locally.", "Offllama — Your AI, wherever you go", "A free, portable AI assistant for Mac and Windows, created by FipraAI."],
-    fr: ["Offllama — IA locale et portable pour Mac et Windows", "Offllama est un assistant IA gratuit et portable pour Mac et Windows. Gardez-le sur votre ordinateur ou une clé USB et utilisez des modèles GGUF en local.", "Offllama — Votre IA, partout avec vous", "Un assistant IA gratuit et portable pour Mac et Windows, créé par FipraAI."],
-    de: ["Offllama — Lokale, tragbare KI für Mac und Windows", "Offllama ist ein kostenloser, tragbarer KI-Assistent für Mac und Windows. Nutze GGUF-Modelle lokal auf deinem Computer oder USB-Stick.", "Offllama — Deine KI, überall dabei", "Ein kostenloser, tragbarer KI-Assistent für Mac und Windows von FipraAI."],
-    es: ["Offllama — IA local y portátil para Mac y Windows", "Offllama es un asistente de IA gratuito y portátil para Mac y Windows. Guárdalo en tu ordenador o memoria USB y usa modelos GGUF de forma local.", "Offllama — Tu IA, donde vayas", "Un asistente de IA gratuito y portátil para Mac y Windows, creado por FipraAI."]
+    en: ["LlamaNest by FipraAI — Local, portable AI for Mac and Windows", "LlamaNest is a free, portable AI assistant for Mac and Windows. Keep it on your computer or a USB drive and use GGUF models locally.", "LlamaNest by FipraAI — Your AI, wherever you go", "A free, portable AI assistant for Mac and Windows, created by FipraAI."],
+    fr: ["LlamaNest by FipraAI — IA locale et portable pour Mac et Windows", "LlamaNest est un assistant IA gratuit et portable pour Mac et Windows. Gardez-le sur votre ordinateur ou une clé USB et utilisez des modèles GGUF en local.", "LlamaNest by FipraAI — Votre IA, partout avec vous", "Un assistant IA gratuit et portable pour Mac et Windows, créé par FipraAI."],
+    de: ["LlamaNest by FipraAI — Lokale, tragbare KI für Mac und Windows", "LlamaNest ist ein kostenloser, tragbarer KI-Assistent für Mac und Windows. Nutze GGUF-Modelle lokal auf deinem Computer oder USB-Stick.", "LlamaNest by FipraAI — Deine KI, überall dabei", "Ein kostenloser, tragbarer KI-Assistent für Mac und Windows von FipraAI."],
+    es: ["LlamaNest by FipraAI — IA local y portátil para Mac y Windows", "LlamaNest es un asistente de IA gratuito y portátil para Mac y Windows. Guárdalo en tu ordenador o memoria USB y usa modelos GGUF de forma local.", "LlamaNest by FipraAI — Tu IA, donde vayas", "Un asistente de IA gratuito y portátil para Mac y Windows, creado por FipraAI."]
   }[language];
   document.title = meta[0];
   document.querySelector('meta[name="description"]').content = meta[1];

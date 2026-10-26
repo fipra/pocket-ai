@@ -16,3 +16,5 @@
 .hardware-advice{background:#eef6f0;border:1px solid #d6e7da;border-radius:11px;padding:12px 14px;font-size:13px;line-height:1.5;color:#315b42}.hardware-advice strong{display:block;margin-bottom:2px}.model-advice{display:block;line-height:1.4}.model-advice.good{color:#267049}.model-advice.possible,.model-advice.slow,.model-advice.unknown{color:#886923}.model-advice.low,.model-advice.unsupported{color:#a34d38}
 .model-card .split-parts{display:inline-block;width:max-content;border-radius:999px;background:#e8f4ed;color:#286449;padding:3px 8px;font-weight:600}
 .split-tool{margin-top:22px;padding-top:4px;border-top:1px solid #e8e8e8}.split-tool .action{margin-top:15px}
+
+.brand .brand-name{display:inline-flex;flex-direction:column;gap:3px;line-height:1.15}.brand .brand-credit{display:block;margin:0;align-self:auto;font-size:10px;font-weight:500;letter-spacing:.03em;color:#747474}

@@ -12,7 +12,7 @@ test('memory uses only relevant confirmed notes and keeps the prompt short', () 
   assert.match(memoryContext('Prepare an Atlas report', notes), /Swiss francs/);
   assert.doesNotMatch(memoryContext('Prepare an Atlas report', notes), /Luna/);
   assert.equal(memoryContext('Unrelated question', notes), '');
-  assert.match(memoryMarkdown(notes), /^# Offllama memory/m);
+  assert.match(memoryMarkdown(notes), /^# LlamaNest memory/m);
   assert.deepEqual(parseMemoryMarkdown(memoryMarkdown(notes)), notes.map(note => note.text));
 });
 

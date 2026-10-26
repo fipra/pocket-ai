@@ -1,7 +1,7 @@
-# Offllama Rust
+# LlamaNest by FipraAI
 
 > [!IMPORTANT]
-> **Commercial use of current Offllama versions requires a separate paid written license before use.** This includes internal business use, client work, paid services, resale, and integration into a commercial product. [Contact the project owner about an agreement](https://github.com/fipra/usb-ai/issues/new?title=Commercial%20licensing%20inquiry) and read the [commercial licensing terms](COMMERCIAL_LICENSE.md).
+> **Commercial use of current LlamaNest versions requires a separate paid written license before use.** This includes internal business use, client work, paid services, resale, and integration into a commercial product. [Contact the project owner about an agreement](https://github.com/fipra/usb-ai/issues/new?title=Commercial%20licensing%20inquiry) and read the [commercial licensing terms](COMMERCIAL_LICENSE.md).
 >
 > Earlier copies released under MIT retain their commercial-use rights; see the [licensing history](LICENSING_HISTORY.md). Third-party tools and models have their own licenses.
 
@@ -19,8 +19,8 @@ releases. See the
 [licensing history](LICENSING_HISTORY.md) for the source cutoff and exact asset
 digests.
 
-For future distributions, all Offllama code that Fabrizio Casula owns is offered
-under the [Offllama Personal Use License v1.0](LICENSE), including owned code
+For future distributions, all LlamaNest code that Fabrizio Casula owns is offered
+under the [USB AI Personal Use License v1.0](LICENSE), including owned code
 that appeared in the earlier MIT versions. Personal, educational, and
 non-commercial research use is free. Commercial use, resale, commercial
 redistribution, and integration into commercial products require a separate
@@ -52,14 +52,14 @@ Free space for quantization is checked on the drive containing the app's `models
 
 1. Download [**USB-AI-Rust-Windows-x64.zip**](https://github.com/fipra/usb-ai/releases/download/rust-windows-stop-2026-10-24/USB-AI-Rust-Windows-x64.zip).
 2. Extract the complete folder to your USB drive or another location.
-3. Double-click `Avvia Offllama GPU.cmd` to use a detected Vulkan GPU (including NVIDIA RTX), or `Avvia Offllama.cmd` for CPU mode. The GPU launcher falls back to CPU when no Vulkan device is detected.
+3. Double-click `Avvia LlamaNest GPU.cmd` to use a detected Vulkan GPU (including NVIDIA RTX), or `Avvia LlamaNest.cmd` for CPU mode. The GPU launcher falls back to CPU when no Vulkan device is detected.
 4. Open **Models → Import GGUF into models** to select a model already on the PC, or send your first prompt and choose a download. Chat and document search then work offline.
 
 The destination PC does **not** need Rust or Cargo. Keep the whole folder together. Imported and newly downloaded models are stored in `USB-AI-Rust-Windows-x64\models`; importing copies the GGUF and keeps the source file. Files downloaded by older versions in `PocketAI-data\models` remain discoverable. GPU mode needs a working Vulkan graphics driver. Run `bin\gpu\llama-server.exe --list-devices` to check which GPU the bundled runtime detects. This build is for Windows x64. The automated Windows build checks the package and included tools, but GPU inference on a physical Windows PC still needs testing.
 
 ### macOS
 
-Download the ZIP that matches your Mac from the [macOS release](https://github.com/fipra/usb-ai/releases/tag/rust-mac-stop-2026-10-24): **arm64** for Apple Silicon or **x86_64** for Intel. Extract the complete folder to your USB drive and double-click `Avvia Offllama.command`. Send your first prompt to download the default model, or choose another model. The ZIP includes the app, its license, `llama-server`, `llama-cli`, `pdftotext`, and their required libraries; it does not include model weights or personal data.
+Download the ZIP that matches your Mac from the [macOS release](https://github.com/fipra/usb-ai/releases/tag/rust-mac-stop-2026-10-24): **arm64** for Apple Silicon or **x86_64** for Intel. Extract the complete folder to your USB drive and double-click `Avvia LlamaNest.command`. Send your first prompt to download the default model, or choose another model. The ZIP includes the app, its license, `llama-server`, `llama-cli`, `pdftotext`, and their required libraries; it does not include model weights or personal data.
 
 On Mac, llama.cpp uses Metal automatically when its bundled backend detects a compatible GPU. Run `bin/llama-server --list-devices` inside the extracted folder to check for `Metal:`. The Apple Silicon package build checks that Metal is available.
 
@@ -93,7 +93,7 @@ On Windows, use PowerShell to run the same Cargo command after installing Rust, 
 
 - `POCKET_AI_HOME` selects another data directory. `USB_AI_DIR` selects the base directory containing `models/` and, by default, `PocketAI-data/`.
 - `LLAMA_SERVER` and `PDFTOTEXT` select alternate tool executables.
-- The first answer starts `llama-server`; subsequent answers reuse the loaded model until another GGUF is selected or Offllama closes. Answers appear as they are generated. Stop ends the current answer and keeps any text already generated, so you can send another prompt.
+- The first answer starts `llama-server`; subsequent answers reuse the loaded model until another GGUF is selected or LlamaNest closes. Answers appear as they are generated. Stop ends the current answer and keeps any text already generated, so you can send another prompt.
 - Document search is keyword based. Scanned PDFs require OCR before import.
 
 Before contributing, run:
