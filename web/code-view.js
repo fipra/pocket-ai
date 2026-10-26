@@ -14,16 +14,151 @@
   };
   function blocks(text) {
     const parts = [];
-    const re = /(^|\n)```([\w.+-]*)[^\n]*\n([\s\S]*?)\n```(?=\n|$)/g;
+    const re = /(^|\n)(`{3,}|~{3,})([\w.+-]*)[^\n]*\n/g;
     let cursor = 0;
     for (const match of text.matchAll(re)) {
+      if (match.index < cursor) continue;
       const start = match.index + match[1].length;
       if (start > cursor) parts.push({ type: 'text', text: text.slice(cursor, start) });
-      parts.push({ type: 'code', language: match[2].toLowerCase(), text: match[3] });
-      cursor = match.index + match[0].length;
+      const codeStart = match.index + match[0].length;
+      const close = new RegExp(`(?:^|\\n)${match[2][0]}{${match[2].length},}[ \\t]*(?=\\n|$)`, 'g');
+      close.lastIndex = codeStart;
+      const end = close.exec(text);
+      if (!end) {
+        parts.push({ type: 'code', language: match[3].toLowerCase(), text: text.slice(codeStart), incomplete: true });
+        cursor = text.length;
+        break;
+      }
+      parts.push({ type: 'code', language: match[3].toLowerCase(), text: text.slice(codeStart, end.index) });
+      cursor = end.index + end[0].length;
     }
     if (cursor < text.length) parts.push({ type: 'text', text: text.slice(cursor) });
     return parts;
+  }
+  const inlinePattern = /(`+)([^`\n]+?)\1|\[([^\]\n]+)\]\(([^\s)]+)\)|\*\*([^*\n]+)\*\*|__([^_\n]+)__|~~([^~\n]+)~~|\*([^*\n]+)\*|_([^_\n]+)_|(https?:\/\/[^\s<>]+)/g;
+  const wordCharacter = character => /[\p{L}\p{N}]/u.test(character || '');
+  function appendInline(parent, text, depth = 0) {
+    if (depth > 5) { parent.append(document.createTextNode(text)); return; }
+    const pattern = new RegExp(inlinePattern.source, 'g');
+    let cursor = 0;
+    for (const match of text.matchAll(pattern)) {
+      if (match.index > cursor) parent.append(document.createTextNode(text.slice(cursor, match.index)));
+      if ((match[6] || match[9]) && (wordCharacter(text[match.index - 1]) || wordCharacter(text[match.index + match[0].length]))) {
+        parent.append(document.createTextNode(match[0]));
+      } else if (match[1]) {
+        parent.append(element('code', match[2]));
+      } else if (match[3] || match[10]) {
+        const punctuation = match[10]?.match(/[.,;!?]+$/)?.[0] || '';
+        const label = match[3] || match[10].slice(0, match[10].length - punctuation.length);
+        const raw = match[4] || label;
+        const url = safeLink(raw);
+        if (url) {
+          const link = element('a', label);
+          link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer';
+          parent.append(link);
+          if (punctuation) parent.append(document.createTextNode(punctuation));
+        } else parent.append(document.createTextNode(match[0]));
+      } else {
+        const tag = match[5] || match[6] ? 'strong' : match[7] ? 's' : 'em';
+        const value = match[5] || match[6] || match[7] || match[8] || match[9];
+        const node = element(tag);
+        appendInline(node, value, depth + 1);
+        parent.append(node);
+      }
+      cursor = match.index + match[0].length;
+    }
+    if (cursor < text.length) parent.append(document.createTextNode(text.slice(cursor)));
+  }
+  function safeLink(raw) {
+    try {
+      const url = new URL(raw);
+      return ['https:', 'http:', 'mailto:'].includes(url.protocol) ? url.href : null;
+    } catch { return null; }
+  }
+  function tableCells(line) {
+    const cells = [];
+    let value = '';
+    const source = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+    for (let i = 0; i < source.length; i++) {
+      if (source[i] === '\\' && source[i + 1] === '|') { value += '|'; i++; }
+      else if (source[i] === '|') { cells.push(value.trim()); value = ''; }
+      else value += source[i];
+    }
+    cells.push(value.trim());
+    return cells;
+  }
+  const listLine = line => /^(\s{0,8})([-*+]|\d{1,3}[.)])\s+(.+)$/.exec(line);
+  const headingLine = line => /^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+  const ruleLine = line => /^ {0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line);
+  const quoteLine = line => /^ {0,3}> ?(.*)$/.exec(line);
+  function tableAt(lines, index) {
+    if (index + 1 >= lines.length || !lines[index].includes('|')) return false;
+    const head = tableCells(lines[index]), separator = tableCells(lines[index + 1]);
+    return head.length >= 2 && separator.length === head.length && separator.every(cell => /^:?-{3,}:?$/.test(cell));
+  }
+  function specialLine(lines, index) {
+    const line = lines[index];
+    return headingLine(line) || ruleLine(line) || quoteLine(line) || listLine(line) || tableAt(lines, index);
+  }
+  function appendMarkdown(container, text, depth = 0) {
+    const lines = text.replace(/\r\n?/g, '\n').split('\n');
+    for (let i = 0; i < lines.length;) {
+      if (!lines[i].trim()) { i++; continue; }
+      const heading = headingLine(lines[i]);
+      if (heading) {
+        const node = element(`h${heading[1].length}`);
+        appendInline(node, heading[2]); container.append(node); i++; continue;
+      }
+      if (ruleLine(lines[i])) { container.append(element('hr')); i++; continue; }
+      if (depth < 4 && quoteLine(lines[i])) {
+        const quoted = [];
+        while (i < lines.length && quoteLine(lines[i])) quoted.push(quoteLine(lines[i++])[1]);
+        const node = element('blockquote'); appendMarkdown(node, quoted.join('\n'), depth + 1);
+        container.append(node); continue;
+      }
+      if (tableAt(lines, i)) {
+        const headings = tableCells(lines[i]);
+        const wrap = element('div', undefined, 'markdown-table-wrap');
+        const table = element('table'), thead = element('thead'), tr = element('tr');
+        for (const label of headings) { const th = element('th'); appendInline(th, label); tr.append(th); }
+        thead.append(tr); table.append(thead);
+        const tbody = element('tbody'); i += 2;
+        while (i < lines.length && lines[i].includes('|') && lines[i].trim()) {
+          const cells = tableCells(lines[i++]), row = element('tr');
+          for (let column = 0; column < headings.length; column++) {
+            const td = element('td'); appendInline(td, cells[column] || ''); row.append(td);
+          }
+          tbody.append(row);
+        }
+        table.append(tbody); wrap.append(table); container.append(wrap); continue;
+      }
+      if (listLine(lines[i])) {
+        const stack = [];
+        while (i < lines.length) {
+          const match = listLine(lines[i]);
+          if (!match) break;
+          const indent = match[1].length, ordered = /^\d/.test(match[2]);
+          while (stack.length && (stack.at(-1).indent > indent || stack.at(-1).indent === indent && stack.at(-1).ordered !== ordered)) stack.pop();
+          if (!stack.length || stack.at(-1).indent < indent) {
+            const list = element(ordered ? 'ol' : 'ul');
+            if (ordered) list.start = Number.parseInt(match[2], 10);
+            if (stack.length) stack.at(-1).item.append(list); else container.append(list);
+            stack.push({ indent, ordered, list, item: null });
+          }
+          const item = element('li');
+          const check = /^\[([ xX])\]\s+/.exec(match[3]);
+          if (check) item.append(element('span', check[1].toLowerCase() === 'x' ? '☑ ' : '☐ ', 'task-marker'));
+          appendInline(item, check ? match[3].slice(check[0].length) : match[3]);
+          stack.at(-1).list.append(item); stack.at(-1).item = item;
+          i++;
+        }
+        continue;
+      }
+      const paragraph = [];
+      while (i < lines.length && lines[i].trim() && (!paragraph.length || !specialLine(lines, i))) paragraph.push(lines[i++]);
+      if (!paragraph.length) { i++; continue; }
+      const node = element('p'); appendInline(node, paragraph.join('\n')); container.append(node);
+    }
   }
   const localPath = value => {
     const path = value.trim().replace(/^\.\//, '');
@@ -31,10 +166,10 @@
       /^[\w./-]+$/.test(path) && !path.includes('//') ? path : null;
   };
   function appFiles(parts) {
-    const html = parts.find(part => part.type === 'code' && /^(html|htm)$/.test(part.language));
+    const html = parts.find(part => part.type === 'code' && !part.incomplete && /^(html|htm)$/.test(part.language));
     if (!html) return null;
-    const css = parts.find(part => part.type === 'code' && part.language === 'css');
-    const js = parts.find(part => part.type === 'code' && /^(js|javascript)$/.test(part.language));
+    const css = parts.find(part => part.type === 'code' && !part.incomplete && part.language === 'css');
+    const js = parts.find(part => part.type === 'code' && !part.incomplete && /^(js|javascript)$/.test(part.language));
     const cssRefs = [...html.text.matchAll(/<link\b[^>]*\bhref\s*=\s*["']([^"']+\.css)["'][^>]*>/gi)].map(match => match[1]);
     const jsRefs = [...html.text.matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+\.js)["'][^>]*>\s*<\/script>/gi)].map(match => match[1]);
     const localCss = cssRefs.map(localPath).filter(Boolean);
@@ -131,7 +266,9 @@
     dialog.showModal();
   }
   function render(container, text, language = 'en') {
-    if (!text?.includes('```')) {
+    const rich = /\n\s*\n|(^|\n) {0,3}(?:#{1,6}\s|>|[-*+]\s|\d{1,3}[.)]\s|[-*_]{3,}\s*$)|[`*_~\[\]|]|https?:\/\//m.test(text || '');
+    container.classList?.toggle('markdown', rich);
+    if (!rich) {
       const plain = text || '';
       if (container.childNodes.length === 1 && container.firstChild.nodeType === 3) {
         if (container.firstChild.data !== plain) container.firstChild.data = plain;
@@ -145,7 +282,7 @@
     const app = appFiles(parts);
     container.replaceChildren();
     for (const part of parts) {
-      if (part.type === 'text') { container.append(element('span', part.text)); continue; }
+      if (part.type === 'text') { appendMarkdown(container, part.text); continue; }
       const shell = element('section', undefined, 'code-block');
       const bar = element('div', undefined, 'code-bar');
       bar.append(element('span', part.language || 'code'));

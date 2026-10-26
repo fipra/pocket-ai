@@ -1,5 +1,6 @@
 import './style.css';
 import '../code-view.js';
+import '../message-markdown.css';
 import * as db from './storage.js';
 import { translations, preferredLanguage } from './i18n.js';
 import { CATALOG } from './catalog.js';

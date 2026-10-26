@@ -4,10 +4,48 @@ import assert from 'node:assert/strict';
 globalThis.window = {};
 await import('../../code-view.js');
 
-test('complete fenced code becomes a code block, partial streaming text stays visible', () => {
+test('complete and streaming fenced code become code blocks', () => {
   const { blocks } = window.USB_AI_CODE_VIEW;
   assert.deepEqual(blocks('Example\n```html\n<h1>Hello</h1>\n```').map(part => part.type), ['text', 'code']);
-  assert.deepEqual(blocks('```html\n<h1>Still streaming').map(part => part.type), ['text']);
+  const partial = blocks('```html\n<h1>Still streaming');
+  assert.deepEqual(partial.map(part => part.type), ['code']);
+  assert.equal(partial[0].incomplete, true);
+  assert.equal(partial[0].text, '<h1>Still streaming');
+});
+
+test('answers render headings, lists, tables, links and code without injecting HTML', () => {
+  const originalDocument = globalThis.document;
+  const makeElement = tag => ({
+    tagName: tag.toUpperCase(), children: [], className: '', textContent: '',
+    append(...items) { this.children.push(...items); },
+    replaceChildren(...items) { this.children = items; },
+    classList: { toggle() {} }
+  });
+  globalThis.document = {
+    createElement: makeElement,
+    createTextNode: data => ({ nodeType: 3, data })
+  };
+  try {
+    const container = makeElement('div');
+    window.USB_AI_CODE_VIEW.render(container, '# Report\n\n**Summary** and `code`. Model-Q3_K_M.gguf.\n\n- First\n- Second\n\n| Item | Value |\n| --- | --- |\n| GPU | Yes |\n\n> A note\n\n[Safe](https://example.com) [Unsafe](javascript:alert(1)) <script>alert(1)</script>\n\n```js\nconst n = 1;\n```');
+    const all = [];
+    const visit = item => { all.push(item); for (const child of item.children || []) visit(child); };
+    visit(container);
+    const tags = all.map(item => item.tagName).filter(Boolean);
+    for (const tag of ['H1', 'STRONG', 'UL', 'LI', 'TABLE', 'TH', 'TD', 'BLOCKQUOTE', 'A', 'CODE']) assert.ok(tags.includes(tag), tag);
+    assert.ok(!tags.includes('SCRIPT'));
+    const links = all.filter(item => item.tagName === 'A');
+    assert.equal(links.length, 1);
+    assert.equal(links[0].href, 'https://example.com/');
+    assert.equal(links[0].rel, 'noopener noreferrer');
+    assert.ok(all.some(item => item.data?.includes('<script>alert(1)</script>')));
+    assert.ok(all.some(item => item.textContent === 'const n = 1;'));
+    const visibleText = item => item.data || item.textContent || (item.children || []).map(visibleText).join('');
+    assert.ok(visibleText(container).includes('Model-Q3_K_M.gguf'));
+    const tableOnly = makeElement('div');
+    window.USB_AI_CODE_VIEW.render(tableOnly, '| Name | Value |\n| --- | --- |\n| RAM | 8 GB |');
+    assert.equal(tableOnly.children[0].children[0].tagName, 'TABLE');
+  } finally { globalThis.document = originalDocument; }
 });
 
 test('stream rendering coalesces tokens and flushes the final answer', () => {

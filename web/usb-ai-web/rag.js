@@ -1,5 +1,7 @@
 import { documentQuestion, recentContext } from './retrieval.js';
 
+const FORMAT_GUIDE = { role:'system', content:'For longer answers, use short Markdown paragraphs, headings or lists when helpful. Put code in fenced blocks. Keep brief answers brief.' };
+
 export function appQuestion(question) {
   const asksToBuild = /\b(crea|creare|costruisci|sviluppa|scrivi|create|build|make|develop|write|erstelle|baue|crée|construis|crea|haz)\b/i.test(question);
   const asksForApp = /\b(app|applicazione|application|website|sito|webpage|pagina web|html|javascript)\b/i.test(question);
@@ -9,10 +11,10 @@ export function appQuestion(question) {
 
 export function ragContexts(history, question, sources) {
   question = appQuestion(question);
-  if (!sources.length) return [recentContext(history, question)];
+  if (!sources.length) return [[FORMAT_GUIDE, ...recentContext(history, question)]];
   return [
-    recentContext(history, documentQuestion(question, sources, 1300), 700),
-    [{ role:'user', content:documentQuestion(question, sources.slice(0,1), 500) }]
+    [FORMAT_GUIDE, ...recentContext(history, documentQuestion(question, sources, 1300), 700)],
+    [FORMAT_GUIDE, { role:'user', content:documentQuestion(question, sources.slice(0,1), 500) }]
   ];
 }
 

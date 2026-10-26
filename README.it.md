@@ -31,6 +31,7 @@ modelli di terzi mantengono le rispettive licenze.
 ## Funzioni
 
 - Chat con un modello GGUF locale.
+- Risposte formattate con titoli, elenchi, tabelle, link e blocchi di codice copiabili nelle versioni Web, Mac e Windows.
 - Quantizzazione locale dei GGUF in Q8_0, Q4_K_M, Q3_K_M o Q2_K nelle versioni Mac e Windows.
 - Importazione di PDF testuali, TXT e Markdown (massimo 20 MB per file).
 - Ricerca per parole chiave nei documenti, con estratti e numeri di pagina per i PDF.

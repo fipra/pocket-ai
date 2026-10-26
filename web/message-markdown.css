@@ -1,0 +1,22 @@
+.message-body.markdown{white-space:normal;line-height:1.68;min-width:0}
+.message-body.markdown>:first-child{margin-top:0}
+.message-body.markdown>:last-child{margin-bottom:0}
+.message-body.markdown p{margin:.65em 0;white-space:pre-wrap}
+.message-body.markdown h1,.message-body.markdown h2,.message-body.markdown h3,.message-body.markdown h4,.message-body.markdown h5,.message-body.markdown h6{line-height:1.3;letter-spacing:-.02em;margin:1.15em 0 .4em;font-weight:700}
+.message-body.markdown h1{font-size:1.55em}.message-body.markdown h2{font-size:1.35em}.message-body.markdown h3{font-size:1.18em}.message-body.markdown h4,.message-body.markdown h5,.message-body.markdown h6{font-size:1.05em}
+.message-body.markdown strong{font-size:inherit;line-height:inherit;font-weight:700}
+.message-body.markdown ul,.message-body.markdown ol{margin:.65em 0;padding-left:1.55em}
+.message-body.markdown li{padding-left:.15em;margin:.26em 0}
+.message-body.markdown li>ul,.message-body.markdown li>ol{margin:.3em 0}
+.message-body.markdown .task-marker{color:#39805a}
+.message-body.markdown blockquote{border-left:3px solid #d2ddd5;padding:.1em 0 .1em 1em;margin:1em 0;color:#536056}
+.message-body.markdown blockquote p{margin:.35em 0}
+.message-body.markdown hr{border:0;border-top:1px solid #e5e7e5;margin:1.25em 0}
+.message-body.markdown a{color:#246a51;text-decoration:underline;text-underline-offset:2px;overflow-wrap:anywhere}
+.message-body.markdown :not(pre)>code{background:#f0f2f1;border:1px solid #e6e9e7;border-radius:5px;padding:.1em .32em;font: .92em/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}
+.message-body.markdown .markdown-table-wrap{max-width:100%;overflow-x:auto;margin:1em 0;border:1px solid #e4e7e5;border-radius:9px}
+.message-body.markdown table{border-collapse:collapse;width:100%;min-width:max-content;font-size:.94em}
+.message-body.markdown th,.message-body.markdown td{text-align:left;border-bottom:1px solid #e4e7e5;padding:.55em .8em;vertical-align:top}
+.message-body.markdown th{background:#f7f9f8;font-weight:700}
+.message-body.markdown tbody tr:last-child td{border-bottom:0}
+.message-body.markdown .code-block{margin:1em 0}

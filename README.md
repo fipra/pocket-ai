@@ -32,6 +32,7 @@ have their own licenses.
 ## Features
 
 - Chat with a local GGUF model.
+- Read formatted responses with headings, lists, tables, links, and copyable code blocks in Web, Mac, and Windows.
 - Quantize a local GGUF to Q8_0, Q4_K_M, Q3_K_M, or Q2_K in the Mac and Windows app using bundled `llama-quantize`.
 - Import text PDFs, TXT, and Markdown files (up to 20 MB each).
 - Search documents by keyword, with excerpts and PDF page numbers.
