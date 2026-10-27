@@ -233,7 +233,7 @@
     if (!status) return;
     const busy = saving || Boolean(pendingAction) || status.job?.active === true;
     const runningButton = {train:'train-start',preview:'preview-start',export:'export-model',distill:'generate-start',auto:'auto-start',document:'doc-generate'}[status.job?.active ? status.job.kind : ''];
-    for (const id of ['train-start','preview-start','export-model','generate-start','auto-start','doc-upload','doc-generate','openrouter-save','openrouter-remove','distill-openrouter-save','distill-openrouter-remove','use-answers','cancel-job','pair-import','prompt-import','correction-save']) {
+    for (const id of ['train-start','choose-local-model','preview-start','export-model','generate-start','auto-start','doc-upload','doc-generate','openrouter-save','openrouter-remove','distill-openrouter-save','distill-openrouter-remove','use-answers','cancel-job','pair-import','prompt-import','correction-save']) {
       const loading = id === pendingAction || id === runningButton;
       $(id).classList.toggle('loading', loading);
       $(id).setAttribute('aria-busy', String(loading));
@@ -247,10 +247,14 @@
         selector.replaceChildren(...models.map(model => {
           const option = document.createElement('option');
           option.value = model;
-          option.textContent = model.split('/').pop();
+          option.textContent = model === '@local'
+            ? tr('localModelOption').replace('{name}', status.localModelName || tr('localModelUnknown'))
+            : model.split('/').pop();
           return option;
         }));
       }
+      const localOption = [...selector.options].find(option => option.value === '@local');
+      if (localOption) localOption.textContent = tr('localModelOption').replace('{name}', status.localModelName || tr('localModelUnknown'));
       selector.value = status.baseModel || '';
       selector.disabled = busy;
     }
@@ -292,15 +296,17 @@
     const pendingPrompt = Boolean($('teacher-prompt').value.trim());
     const longTraining = training.some(row => [...(row.completion || '')].length > 4000);
     const answersMatch = !prompts.length || (prompts.length === distilled.length && prompts.every((row, index) => row.prompt === distilled[index].prompt));
-    $('train-start').disabled = busy || pendingPair || longTraining || !status.trainSupported || training.length < 5;
+    const localInvalid = status.baseModel === '@local' && !status.localModelValid;
+    $('choose-local-model').disabled = busy || !status.trainSupported;
+    $('train-start').disabled = busy || pendingPair || longTraining || !status.trainSupported || localInvalid || training.length < 5;
     $('train-start').textContent = tr(status.canContinue ? 'continueTrain' : 'trainStart');
     $('iterations-label').textContent = tr(status.canContinue ? 'additionalIterations' : 'iterations');
     $('train-mode').hidden = !status.canContinue;
     $('train-mode').textContent = status.canContinue ? tr('continueHelp') : '';
     $('generate-start').disabled = busy || pendingPrompt || prompts.length === 0 || !teacherReady;
     $('auto-start').disabled = busy || !$('auto-topic').value.trim() || !teacherReady;
-    $('preview-start').disabled = busy || !status.adapterFresh;
-    $('export-model').disabled = busy || !status.adapterFresh || !status.trainSupported;
+    $('preview-start').disabled = busy || !status.adapterFresh || localInvalid;
+    $('export-model').disabled = busy || !status.adapterFresh || !status.trainSupported || localInvalid;
     $('correction-save').disabled = busy || !lastPreviewPrompt;
     $('pair-export').disabled = busy || !training.length;
     $('prompt-export').disabled = busy || !prompts.length;
@@ -311,10 +317,13 @@
     $('use-answers').disabled = busy || answerEditing || !answersMatch || !distilled.length || distilled.some(row => [...(row.completion || '')].length > 4000);
     if (distilled.length && !answersMatch) message('answer-message', tr('staleAnswers'), true);
     else if ($('answer-message').textContent === tr('staleAnswers')) message('answer-message');
-    $('base-model').textContent = status.baseModel || '';
+    $('base-model').textContent = status.resolvedBaseModel || status.baseModel || '';
     const chatBase = (status.chatTrainBases || []).find(([file]) => file === chatModel)?.[1];
     const chatNote = $('chat-model-note');
-    if (chatBase) {
+    if (status.baseModel === '@local') {
+      chatNote.textContent = tr(localInvalid ? 'localModelMissing' : 'localModelSelected')
+        .replace('{name}', status.localModelName || tr('localModelUnknown'));
+    } else if (chatBase) {
       chatNote.textContent = tr('chatModelTrainable').replace('{model}', chatModel);
     } else {
       chatNote.textContent = tr(chatModel ? 'chatModelUnsupported' : 'chatModelMissing');
@@ -463,6 +472,14 @@
     const chosen = event.target.value;
     try { await withPending(id, async () => { status = await api('select_student', {model: chosen}); render(); }); }
     catch (error) { render(); message(activeTab === 'train' ? 'train-message' : 'generate-message', error.message, true); }
+  };
+  $('choose-local-model').onclick = async () => {
+    try { await withPending('choose-local-model', async () => {
+      status = await api('choose_local_model');
+      render();
+      message('train-message');
+    }); }
+    catch (error) { message('train-message', localError(error), true); }
   };
   $('pair-reset').onclick = () => resetPath('training');
   $('prompt-reset').onclick = () => resetPath('prompts');

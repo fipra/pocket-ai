@@ -12,7 +12,7 @@ try {
   $bin = Join-Path $out 'bin'
   $gpuRuntime = $env:USB_AI_VULKAN_RUNTIME_DIR
   $data = Join-Path $out 'PocketAI-data'
-  foreach ($obsolete in @('Avvia USB AI Rust.cmd','Avvia Offllama.cmd','Avvia USB AI Rust GPU.cmd','Avvia Offllama GPU.cmd','Avvia LlamaNest GPU.cmd','Avvia LlamaNest LAN GPU.cmd')) {
+  foreach ($obsolete in @('Avvia USB AI Rust.cmd','Avvia Offllama.cmd','Avvia USB AI Rust GPU.cmd','Avvia Offllama GPU.cmd')) {
     Remove-Item (Join-Path $out $obsolete) -Force -ErrorAction SilentlyContinue
   }
   if (Test-Path $bin) { Remove-Item $bin -Recurse -Force }
@@ -64,6 +64,7 @@ if exist "%GPU_SERVER%" (
   "%GPU_SERVER%" --list-devices 2>nul | findstr /C:"Vulkan" >nul
   if not errorlevel 1 (
     set "LLAMA_SERVER=%GPU_SERVER%"
+    set "USB_AI_GPU=1"
     echo Vulkan GPU detected. Starting with GPU acceleration.
   )
 )
@@ -76,9 +77,38 @@ set "USB_AI_BIND_ADDR=0.0.0.0"
 call "%~dp0Avvia LlamaNest.cmd"
 '@ | Set-Content (Join-Path $out 'Avvia LlamaNest LAN.cmd')
   @'
+@echo off
+setlocal
+set "GPU_SERVER=%~dp0bin\gpu\llama-server.exe"
+if not exist "%GPU_SERVER%" (
+  echo Vulkan GPU runtime is missing from bin\gpu.
+  pause
+  exit /b 1
+)
+"%GPU_SERVER%" --list-devices 2>nul | findstr /C:"Vulkan" >nul
+if errorlevel 1 (
+  echo No compatible Vulkan GPU was detected. Use Avvia LlamaNest.cmd for automatic CPU fallback.
+  pause
+  exit /b 1
+)
+set "LLAMA_SERVER=%GPU_SERVER%"
+set "USB_AI_GPU=1"
+set "USB_AI_REQUIRE_GPU=1"
+echo Starting LlamaNest with Vulkan GPU acceleration.
+"%~dp0bin\usb-ai-rust.exe"
+'@ | Set-Content (Join-Path $out 'Avvia LlamaNest GPU.cmd')
+  @'
+@echo off
+setlocal
+set "USB_AI_BIND_ADDR=0.0.0.0"
+call "%~dp0Avvia LlamaNest GPU.cmd"
+'@ | Set-Content (Join-Path $out 'Avvia LlamaNest LAN GPU.cmd')
+  @'
 Double-click Avvia LlamaNest.cmd. The browser opens at 127.0.0.1.
 The launcher uses a Vulkan GPU when one is detected, otherwise the CPU.
+For an explicit GPU start, use Avvia LlamaNest GPU.cmd. It reports an error if Vulkan is unavailable.
 To open LlamaNest from another computer, use Avvia LlamaNest LAN.cmd.
+For LAN with an explicit Vulkan GPU, use Avvia LlamaNest LAN GPU.cmd.
 Then visit http://SERVER-NAME:48157/ or http://SERVER-IP:48157/ from that computer; use the port printed by the app if 48157 is busy.
 LAN mode has no login and uses HTTP. Allow inbound TCP 48157-48167 on the Windows firewall only for trusted networks.
 Keep the whole folder on the USB drive. Models and data stay here.

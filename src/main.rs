@@ -1729,6 +1729,9 @@ impl App {
         if self.inference.is_none() {
             let mut load_error = String::new();
             for cpu_only in [false, true] {
+                if cpu_only && env::var_os("USB_AI_REQUIRE_GPU").is_some_and(|value| value == "1") {
+                    break;
+                }
                 let listener = std::net::TcpListener::bind("127.0.0.1:0")
                     .map_err(|e| format!("llama-server: {e}"))?;
                 let port = listener.local_addr().map_err(|e| e.to_string())?.port();
@@ -1740,6 +1743,8 @@ impl App {
                     .args(["-c", "8192", "--no-webui"]);
                 if cpu_only {
                     command.args(["--device", "none", "-ngl", "0"]);
+                } else if env::var_os("USB_AI_GPU").is_some_and(|value| value == "1") {
+                    command.args(["-ngl", "999"]);
                 }
                 let child = match command
                     .stdin(Stdio::null())
@@ -2476,6 +2481,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 MESSAGE_MARKDOWN_CSS.as_bytes().to_vec(),
             )
         } else if method == Method::Post && url.starts_with("/lab/") {
+            let local_client = request
+                .remote_addr()
+                .is_some_and(|address| address.ip().is_loopback());
             let strict_origin = request.headers().iter().any(|header| {
                 header.field.equiv("Origin") && origin_matches_host(header.value.as_str(), host)
             });
@@ -2526,6 +2534,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 let model =
                                     data["model"].as_str().ok_or("Choose a student model")?;
                                 lab_service.lock().unwrap().select_student(model)
+                            }
+                            "choose_local_model" => {
+                                if local_client {
+                                    lab::choose_local_model(lab_service.clone())
+                                } else {
+                                    Err("localModelLocalOnly".into())
+                                }
                             }
                             "examples" => {
                                 let kind = data["kind"].as_str().unwrap_or("training");

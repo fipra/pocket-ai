@@ -227,6 +227,7 @@ fn openrouter_completion(
     result
 }
 const DEFAULT_STUDENT: &str = "Qwen/Qwen2.5-0.5B-Instruct";
+const LOCAL_STUDENT: &str = "@local";
 const STUDENT_MODELS: [&str; 6] = [
     DEFAULT_STUDENT,
     "Qwen/Qwen2.5-1.5B-Instruct",
@@ -617,27 +618,76 @@ impl Service {
         Ok(self.status())
     }
 
-    fn student_model(&self) -> &'static str {
+    fn local_model_path(&self) -> Option<PathBuf> {
+        let saved = fs::read_to_string(self.root.join("local-model-path.txt")).ok()?;
+        let path = PathBuf::from(saved.trim_end_matches(['\r', '\n']));
+        path.is_absolute().then_some(path)
+    }
+
+    fn student_selection(&self) -> String {
         let saved = fs::read_to_string(self.root.join("student-model.txt")).unwrap_or_default();
+        if saved.trim() == LOCAL_STUDENT && self.local_model_path().is_some() {
+            return LOCAL_STUDENT.to_owned();
+        }
         STUDENT_MODELS
             .iter()
             .copied()
             .find(|model| *model == saved.trim())
             .unwrap_or(DEFAULT_STUDENT)
+            .to_owned()
+    }
+
+    fn student_model(&self) -> String {
+        let selected = self.student_selection();
+        if selected == LOCAL_STUDENT {
+            return self
+                .local_model_path()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned();
+        }
+        selected
+    }
+
+    fn checked_student_model(&self) -> Result<String, String> {
+        let model = self.student_model();
+        if self.student_selection() == LOCAL_STUDENT {
+            validate_local_model_folder(Path::new(&model))?;
+        }
+        Ok(model)
     }
 
     pub fn select_student(&mut self, model: &str) -> Result<Value, String> {
         if self.busy() {
             return Err("A lab job is already running".into());
         }
-        if !STUDENT_MODELS.contains(&model) {
+        if !STUDENT_MODELS.contains(&model)
+            && !(model == LOCAL_STUDENT && self.local_model_path().is_some())
+        {
             return Err("Unsupported student model".into());
+        }
+        if model == LOCAL_STUDENT {
+            validate_local_model_folder(&self.local_model_path().unwrap())?;
         }
         fs::create_dir_all(&self.root).map_err(|e| e.to_string())?;
         let temporary = self.root.join("student-model.txt.part");
         fs::write(&temporary, model).map_err(|e| e.to_string())?;
         fs::rename(&temporary, self.root.join("student-model.txt")).map_err(|e| e.to_string())?;
         Ok(self.status())
+    }
+
+    fn select_local_model_path(&mut self, folder: &Path) -> Result<Value, String> {
+        if self.busy() {
+            return Err("A lab job is already running".into());
+        }
+        let folder = fs::canonicalize(folder).map_err(|_| "localModelInvalid")?;
+        validate_local_model_folder(&folder)?;
+        fs::create_dir_all(&self.root).map_err(|e| e.to_string())?;
+        let temporary = self.root.join("local-model-path.txt.part");
+        fs::write(&temporary, folder.to_string_lossy().as_bytes()).map_err(|e| e.to_string())?;
+        fs::rename(&temporary, self.root.join("local-model-path.txt"))
+            .map_err(|e| e.to_string())?;
+        self.select_student(LOCAL_STUDENT)
     }
 
     fn latest_adapter(&self) -> Option<PathBuf> {
@@ -767,7 +817,10 @@ impl Service {
         let distilled_count = self.rows("distilled").map_or(0, |rows| rows.len());
         json!({"trainingCount":training_count,"promptCount":prompt_count,"distilledCount":distilled_count,
             "job":self.job.as_ref().map(|job|job.lock().unwrap().status()),
-            "baseModel":self.student_model(),"studentModels":STUDENT_MODELS,
+            "baseModel":self.student_selection(),"resolvedBaseModel":self.student_model(),
+            "studentModels":STUDENT_MODELS.iter().copied().chain(self.local_model_path().is_some().then_some(LOCAL_STUDENT)).collect::<Vec<_>>(),
+            "localModelName":self.local_model_path().and_then(|path|path.file_name().map(|name|name.to_string_lossy().into_owned())),
+            "localModelValid":self.local_model_path().is_some_and(|path|validate_local_model_folder(&path).is_ok()),
             "chatTrainBases":CHAT_TRAIN_BASES,"selectionSaved":self.root.join("student-model.txt").is_file(),
             "trainSupported":cfg!(all(target_os="macos", target_arch="aarch64")),
             "workspace":self.root,"document":self.document_meta(),"openrouterConfigured":self.openrouter_key().is_ok(),"adapter":self.latest_adapter(),"adapterFresh":self.adapter_fresh(),
@@ -1024,7 +1077,7 @@ pub fn start_preview(service: Arc<Mutex<Service>>, prompt: &str) -> Result<Value
             return Err("Retrain the model with the current examples before previewing".into());
         }
         let adapter = lab.latest_adapter().ok_or("Train an adapter first")?;
-        let student = lab.student_model();
+        let student = lab.checked_student_model()?;
         let job = Arc::new(Mutex::new(Job::new("preview", 1)));
         lab.job = Some(job.clone());
         (adapter, student, lab.root.clone(), job)
@@ -1043,7 +1096,7 @@ pub fn start_preview(service: Arc<Mutex<Service>>, prompt: &str) -> Result<Value
             let log = fs::File::create(&log_path).map_err(|e| e.to_string())?;
             let answer = fs::File::create(&answer_path).map_err(|e| e.to_string())?;
             let child = Command::new(tool_path("MLX_LM_GENERATE", "mlx_lm.generate"))
-                .args(["--model", student, "--adapter-path"])
+                .args(["--model", &student, "--adapter-path"])
                 .arg(adapter)
                 .args([
                     "--prompt",
@@ -1524,7 +1577,7 @@ pub fn start_train(
         }
         let job = Arc::new(Mutex::new(Job::new("train", iters as usize)));
         let resume = lab.continuation_adapter(&examples);
-        let student = lab.student_model();
+        let student = lab.checked_student_model()?;
         lab.job = Some(job.clone());
         (examples, student, lab.root.clone(), resume, job)
     };
@@ -1536,7 +1589,7 @@ pub fn start_train(
                 return Ok(String::new());
             }
             let run = root.join("runs").join(id());
-            let data = prepare_training_data(&run, &examples, student, iters, resume.as_deref())?;
+            let data = prepare_training_data(&run, &examples, &student, iters, resume.as_deref())?;
             let adapter = run.join("adapter");
             let log_path = run.join("train.log");
             let log = fs::File::create(&log_path).map_err(|e| e.to_string())?;
@@ -1544,7 +1597,7 @@ pub fn start_train(
             let executable = tool_path("MLX_LM_LORA", "mlx_lm.lora");
             let mut command = Command::new(&executable);
             command
-                .args(["--model", student, "--train", "--data"])
+                .args(["--model", &student, "--train", "--data"])
                 .arg(&data)
                 .arg("--adapter-path")
                 .arg(&adapter);
@@ -1703,6 +1756,63 @@ fn validate_cached_snapshot(snapshot: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_local_model_folder(folder: &Path) -> Result<(), String> {
+    if !folder.is_dir() {
+        return Err("localModelInvalid".into());
+    }
+    let config_path = folder.join("config.json");
+    if fs::metadata(&config_path).map_or(true, |meta| meta.len() > 1024 * 1024) {
+        return Err("localModelInvalid".into());
+    }
+    let config: Value =
+        serde_json::from_slice(&fs::read(config_path).map_err(|_| "localModelInvalid")?)
+            .map_err(|_| "localModelInvalid")?;
+    if config["model_type"].as_str().is_none_or(str::is_empty)
+        || !(folder.join("tokenizer.json").is_file() || folder.join("tokenizer.model").is_file())
+        || !fs::read_dir(folder)
+            .map_err(|_| "localModelInvalid")?
+            .filter_map(Result::ok)
+            .any(|entry| {
+                entry
+                    .path()
+                    .extension()
+                    .is_some_and(|ext| ext == "safetensors")
+                    && entry
+                        .metadata()
+                        .is_ok_and(|meta| meta.is_file() && meta.len() > 0)
+            })
+    {
+        return Err("localModelInvalid".into());
+    }
+    Ok(())
+}
+
+pub fn choose_local_model(service: Arc<Mutex<Service>>) -> Result<Value, String> {
+    if !cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        return Err("localModelMacOnly".into());
+    }
+    if service.lock().unwrap().busy() {
+        return Err("A lab job is already running".into());
+    }
+    let output = Command::new("osascript")
+        .args([
+            "-e",
+            "POSIX path of (choose folder with prompt \"Choose a model folder for fine tuning\")",
+        ])
+        .output()
+        .map_err(|_| "localModelPickerUnavailable")?;
+    if !output.status.success() {
+        return Err("localModelCancelled".into());
+    }
+    let folder = std::str::from_utf8(&output.stdout)
+        .map_err(|_| "localModelInvalid")?
+        .trim_end_matches(['\r', '\n']);
+    service
+        .lock()
+        .unwrap()
+        .select_local_model_path(Path::new(folder))
+}
+
 fn run_export_step(
     job: &Arc<Mutex<Job>>,
     mut command: Command,
@@ -1787,7 +1897,7 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
             return Err("Fine tune with the current examples before creating a model".into());
         }
         let adapter = lab.latest_adapter().ok_or("Train an adapter first")?;
-        let student = lab.student_model();
+        let student = lab.checked_student_model()?;
         let job = Arc::new(Mutex::new(Job::new("export", 3)));
         lab.job = Some(job.clone());
         (adapter, student, job)
@@ -1797,7 +1907,19 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
         let export = run.join("export");
         let fused = export.join("fused");
         let f16 = export.join("model-f16.gguf");
-        let short_name = student.rsplit('/').next().unwrap_or("Qwen");
+        let short_name = Path::new(&student)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("Model")
+            .chars()
+            .filter(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
+            .take(80)
+            .collect::<String>();
+        let short_name = if short_name.is_empty() {
+            "Model"
+        } else {
+            &short_name
+        };
         let final_name = format!(
             "LlamaNest-{short_name}-{}-Q4_K_M.gguf",
             run.file_name().unwrap().to_string_lossy()
@@ -1824,11 +1946,25 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
                 .and_then(|line| line.split_whitespace().nth(3))
                 .and_then(|value| value.parse::<u64>().ok())
                 .ok_or("Cannot check free disk space")?;
-            let needed_gb = match student {
+            let needed_gb = match student.as_str() {
                 DEFAULT_STUDENT => 3,
                 "Qwen/Qwen2.5-1.5B-Instruct" => 8,
                 "Qwen/Qwen2.5-3B-Instruct" | "meta-llama/Llama-3.2-3B-Instruct" => 16,
                 "Qwen/Qwen2.5-7B-Instruct" => 35,
+                _ if Path::new(&student).is_absolute() => {
+                    let weight_bytes = fs::read_dir(&student)
+                        .map_err(|e| e.to_string())?
+                        .filter_map(Result::ok)
+                        .filter(|entry| {
+                            entry
+                                .path()
+                                .extension()
+                                .is_some_and(|ext| ext == "safetensors")
+                        })
+                        .filter_map(|entry| entry.metadata().ok().map(|meta| meta.len()))
+                        .sum::<u64>();
+                    3 + weight_bytes.saturating_mul(3).div_ceil(1024 * 1024 * 1024)
+                }
                 _ => 45,
             };
             if kib < needed_gb * 1024 * 1024 {
@@ -1838,7 +1974,13 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
             }
             let fuse_tool = resolved_tool("MLX_LM_FUSE", "mlx_lm.fuse");
             let python = mlx_python(&fuse_tool);
-            let base = cached_base_model(&python, student)?;
+            let base = if Path::new(&student).is_absolute() {
+                let path = PathBuf::from(&student);
+                validate_local_model_folder(&path)?;
+                path
+            } else {
+                cached_base_model(&python, &student)?
+            };
             let mut fuse = Command::new(&fuse_tool);
             fuse.arg("--model")
                 .arg(&base)
@@ -1846,6 +1988,15 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
                 .arg(&adapter)
                 .arg("--save-path")
                 .arg(&fused);
+            if Path::new(&student).is_absolute() {
+                let config: Value = serde_json::from_slice(
+                    &fs::read(base.join("config.json")).map_err(|e| e.to_string())?,
+                )
+                .map_err(|e| e.to_string())?;
+                if !config["quantization"].is_null() || !config["quantization_config"].is_null() {
+                    fuse.arg("--de-quantize");
+                }
+            }
             run_export_step(&job, fuse, "Fuse adapter with base model", &log)?;
             if !fused.join("config.json").is_file() {
                 return Err("Fusion did not produce a model".into());
@@ -2091,6 +2242,46 @@ mod tests {
                 .expect("curated chat model needs a training base");
             assert!(STUDENT_MODELS.contains(base));
         }
+    }
+
+    #[test]
+    fn local_training_folder_is_validated_and_selection_persists() {
+        let root = std::env::temp_dir().join(format!("llamanest-local-model-{}", id()));
+        let folder = root.join("my-model");
+        fs::create_dir_all(&folder).unwrap();
+        let mut service = Service::new(root.join("lab"));
+        assert_eq!(
+            service.select_local_model_path(&folder).unwrap_err(),
+            "localModelInvalid"
+        );
+        fs::write(folder.join("config.json"), br#"{"model_type":"qwen2"}"#).unwrap();
+        fs::write(folder.join("tokenizer.json"), b"{}").unwrap();
+        fs::write(folder.join("model.safetensors"), b"weights").unwrap();
+        let selected = service.select_local_model_path(&folder).unwrap();
+        assert_eq!(selected["baseModel"], LOCAL_STUDENT);
+        assert_eq!(selected["localModelValid"], true);
+        assert_eq!(
+            selected["resolvedBaseModel"],
+            fs::canonicalize(&folder).unwrap().to_str().unwrap()
+        );
+        let mut reopened = Service::new(root.join("lab"));
+        assert_eq!(reopened.status()["baseModel"], LOCAL_STUDENT);
+        assert_eq!(
+            reopened
+                .select_student(folder.to_str().unwrap())
+                .unwrap_err(),
+            "Unsupported student model"
+        );
+        reopened.select_student(DEFAULT_STUDENT).unwrap();
+        assert_eq!(reopened.status()["baseModel"], DEFAULT_STUDENT);
+        reopened.select_student(LOCAL_STUDENT).unwrap();
+        fs::remove_file(folder.join("model.safetensors")).unwrap();
+        assert_eq!(reopened.status()["localModelValid"], false);
+        assert_eq!(
+            reopened.checked_student_model().unwrap_err(),
+            "localModelInvalid"
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
