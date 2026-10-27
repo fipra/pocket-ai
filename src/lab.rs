@@ -502,6 +502,7 @@ impl Service {
         write_private_file(&temporary, key.as_bytes())?;
         let file = fs::File::open(&temporary).map_err(|e| e.to_string())?;
         file.sync_all().map_err(|e| e.to_string())?;
+        drop(file);
         let target = self.root.join("openrouter-key.txt");
         let backup = self.root.join(format!("openrouter-key.{}.backup", id()));
         let had_target = target.is_file();
