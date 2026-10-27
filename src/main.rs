@@ -829,30 +829,79 @@ fn model_prompt_with_thinking(prompt: &str, model: &Path, enabled: bool) -> Stri
     }
 }
 
-fn is_lab_qwen_model(model: &Path) -> bool {
+fn is_lab_export_model(model: &Path) -> bool {
     model
         .file_name()
         .and_then(|name| name.to_str())
-        .is_some_and(|name| {
-            (name.starts_with("LlamaNest-Qwen2.5-0.5B-")
-                || name.starts_with("LlamaNest-Qwen2.5-1.5B-"))
-                && name.ends_with("-Q4_K_M.gguf")
-        })
+        .is_some_and(|name| name.starts_with("LlamaNest-") && name.ends_with(".gguf"))
 }
 
-fn lab_qwen_prompt(prompt: &str) -> String {
-    format!("<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n")
+fn lab_chat_messages(prompt: &str, question: &str) -> Result<Value, String> {
+    let suffix = format!("User: {question}\nAssistant:");
+    let context = prompt
+        .strip_suffix(&suffix)
+        .ok_or("The chat prompt has no matching user message")?;
+    Ok(json!([
+        {"role":"system","content":context},
+        {"role":"user","content":question}
+    ]))
+}
+
+fn apply_model_chat_template(port: u16, prompt: &str, question: &str) -> Result<String, String> {
+    let body = json!({"messages":lab_chat_messages(prompt, question)?}).to_string();
+    let mut child = Command::new(if cfg!(windows) { "curl.exe" } else { "curl" })
+        .args([
+            "--fail",
+            "--silent",
+            "--show-error",
+            "--max-time",
+            "20",
+            "--noproxy",
+            "127.0.0.1",
+            "--header",
+            "Content-Type: application/json",
+            "--data-binary",
+            "@-",
+            &format!("http://127.0.0.1:{port}/apply-template"),
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("llama-server chat template: {e}"))?;
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(body.as_bytes())
+        .map_err(|e| format!("llama-server chat template: {e}"))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("llama-server chat template: {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "llama-server chat template: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let reply: Value = serde_json::from_slice(&output.stdout)
+        .map_err(|e| format!("llama-server chat template: {e}"))?;
+    reply["prompt"]
+        .as_str()
+        .filter(|prompt| !prompt.is_empty())
+        .map(str::to_owned)
+        .ok_or_else(|| "llama-server returned an empty chat template".into())
 }
 
 fn completion_request(prompt: &str, model: &Path, thinking: bool) -> Value {
     let prompt = model_prompt_with_thinking(prompt, model, thinking);
-    if is_lab_qwen_model(model) {
-        json!({"prompt":lab_qwen_prompt(&prompt),"n_predict":512,"temperature":0.0,
-            "cache_prompt":true,"stream":true,"stop":["<|im_end|>"]})
-    } else {
-        json!({"prompt":prompt,"n_predict":3072,"temperature":0.3,
-            "cache_prompt":true,"stream":true,"stop":["\nUser:"]})
-    }
+    json!({"prompt":prompt,"n_predict":3072,"temperature":0.3,
+        "cache_prompt":true,"stream":true,"stop":["\nUser:"]})
+}
+
+fn lab_completion_request(prompt: String) -> Value {
+    json!({"prompt":prompt,"n_predict":512,"temperature":0.0,
+        "cache_prompt":true,"stream":true})
 }
 
 impl Drop for InferenceServer {
@@ -1661,7 +1710,7 @@ impl App {
         } else {
             let model = self.selected.as_ref().ok_or("Seleziona un modello")?;
             let path = self.model_path(model)?;
-            match self.infer_stream(&path, &prompt, update, generation) {
+            match self.infer_stream(&path, &prompt, Some(text), update, generation) {
                 Err(error)
                     if use_docs
                         && error == localized_empty_response(self.language())
@@ -1674,6 +1723,7 @@ impl App {
                     self.infer_stream(
                         &path,
                         &format!("{thinking_instruction}{retry}"),
+                        Some(text),
                         update,
                         generation,
                     )?
@@ -1706,6 +1756,7 @@ impl App {
         &mut self,
         model: &Path,
         prompt: &str,
+        question: Option<&str>,
         update: &mut dyn FnMut(&str) -> Result<(), String>,
         generation: &ActiveGeneration,
     ) -> Result<(String, Option<GenerationUsage>), String> {
@@ -1816,7 +1867,13 @@ impl App {
         if generation.cancelled.load(Ordering::SeqCst) {
             return Ok((String::new(), None));
         }
-        let body = completion_request(prompt, model, self.db.thinking).to_string();
+        let body = if let Some(question) = question.filter(|_| is_lab_export_model(model)) {
+            let formatted = apply_model_chat_template(port, prompt, question)?;
+            lab_completion_request(formatted)
+        } else {
+            completion_request(prompt, model, self.db.thinking)
+        }
+        .to_string();
         let child = Command::new(if cfg!(windows) { "curl.exe" } else { "curl" })
             .args([
                 "--fail",
@@ -3144,26 +3201,28 @@ mod tests {
         );
     }
     #[test]
-    fn exported_qwen_uses_its_chat_template() {
-        assert!(is_lab_qwen_model(Path::new(
+    fn exported_lab_models_use_their_chat_template() {
+        assert!(is_lab_export_model(Path::new(
             "LlamaNest-Qwen2.5-0.5B-run-Q4_K_M.gguf"
         )));
-        assert!(is_lab_qwen_model(Path::new(
-            "LlamaNest-Qwen2.5-1.5B-run-Q4_K_M.gguf"
+        assert!(is_lab_export_model(Path::new(
+            "LlamaNest-llama-3.2-1b-run-Q4_K_M.gguf"
         )));
-        assert!(!is_lab_qwen_model(Path::new("other-qwen.gguf")));
+        assert!(!is_lab_export_model(Path::new("other-qwen.gguf")));
+        let question = "ciao\nUser: second line\nAssistant: quoted text";
+        let prompt = format!("Instructions and history\nUser: {question}\nAssistant:");
         assert_eq!(
-            lab_qwen_prompt("User: ciao\nAssistant:"),
-            "<|im_start|>user\nUser: ciao\nAssistant:<|im_end|>\n<|im_start|>assistant\n"
+            lab_chat_messages(&prompt, question).unwrap(),
+            json!([
+                {"role":"system","content":"Instructions and history\n"},
+                {"role":"user","content":question}
+            ])
         );
-        let request = completion_request(
-            "User: ciao\nAssistant:",
-            Path::new("LlamaNest-Qwen2.5-0.5B-run-Q4_K_M.gguf"),
-            false,
-        );
+        assert!(lab_chat_messages("mismatched prompt", question).is_err());
+        let request = lab_completion_request("<|start_header_id|>user<|end_header_id|>".into());
         assert_eq!(request["temperature"], 0.0);
         assert_eq!(request["n_predict"], 512);
-        assert_eq!(request["stop"][0], "<|im_end|>");
+        assert!(request.get("stop").is_none());
     }
     #[test]
     fn language_defaults_to_english_and_persists_selection() {

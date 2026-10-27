@@ -1578,7 +1578,7 @@ fn teacher_answer(
             }
             let mut app = app.lock().unwrap();
             let answer = app
-                .infer_stream(path, request, &mut |_| Ok(()), &generation)
+                .infer_stream(path, request, None, &mut |_| Ok(()), &generation)
                 .map(|(answer, _)| answer)?;
             job.lock().unwrap().generation = None;
             Ok(answer)
