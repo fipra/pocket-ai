@@ -9,6 +9,7 @@
   let prompts = [];
   let distilled = [];
   let models = [];
+  let chatModel = null;
   let saving = false;
   let savingTarget = null;
   let pendingAction = null;
@@ -246,7 +247,7 @@
         selector.replaceChildren(...models.map(model => {
           const option = document.createElement('option');
           option.value = model;
-          option.textContent = model.replace('Qwen/', '');
+          option.textContent = model.split('/').pop();
           return option;
         }));
       }
@@ -311,6 +312,13 @@
     if (distilled.length && !answersMatch) message('answer-message', tr('staleAnswers'), true);
     else if ($('answer-message').textContent === tr('staleAnswers')) message('answer-message');
     $('base-model').textContent = status.baseModel || '';
+    const chatBase = (status.chatTrainBases || []).find(([file]) => file === chatModel)?.[1];
+    const chatNote = $('chat-model-note');
+    if (chatBase) {
+      chatNote.textContent = tr('chatModelTrainable').replace('{model}', chatModel);
+    } else {
+      chatNote.textContent = tr(chatModel ? 'chatModelUnsupported' : 'chatModelMissing');
+    }
     $('workspace').textContent = status.workspace || '';
     if (!models.length && !distillCloud) message('generate-message', tr('noModels'));
     else if (pendingPrompt) message('generate-message', tr('pendingPrompt'));
@@ -719,6 +727,7 @@
       const app = await api('state');
       if (dictionaries[app.language]) language = app.language;
       models = app.models || [];
+      chatModel = app.model || null;
     } catch (_) { /* The chat may be busy. */ }
     translate();
     for (const id of ['student-train','student-distill']) {
@@ -748,6 +757,11 @@
       api('examples', {kind:'prompts'}), api('examples', {kind:'distilled'})
     ]);
     status = loaded[0].status === 'fulfilled' ? loaded[0].value : null;
+    const chatBase = (status?.chatTrainBases || []).find(([file]) => file === chatModel)?.[1];
+    if (chatBase && !status.selectionSaved && !status.job?.active) {
+      try { status = await api('select_student', {model:chatBase}); }
+      catch (_) { /* The user can still choose a supported base model. */ }
+    }
     $('initial-loading').hidden = Boolean(status);
     if (!status) {
       $('initial-loading').classList.remove('loading');

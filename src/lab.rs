@@ -227,7 +227,31 @@ fn openrouter_completion(
     result
 }
 const DEFAULT_STUDENT: &str = "Qwen/Qwen2.5-0.5B-Instruct";
-const STUDENT_MODELS: [&str; 2] = [DEFAULT_STUDENT, "Qwen/Qwen2.5-1.5B-Instruct"];
+const STUDENT_MODELS: [&str; 6] = [
+    DEFAULT_STUDENT,
+    "Qwen/Qwen2.5-1.5B-Instruct",
+    "Qwen/Qwen2.5-3B-Instruct",
+    "Qwen/Qwen2.5-7B-Instruct",
+    "meta-llama/Llama-3.2-3B-Instruct",
+    "google/gemma-2-9b-it",
+];
+// A GGUF is quantized for inference. MLX trains the corresponding full-precision base.
+const CHAT_TRAIN_BASES: [(&str, &str); 5] = [
+    ("qwen2.5-0.5b-instruct-q4_k_m.gguf", DEFAULT_STUDENT),
+    (
+        "qwen2.5-3b-instruct-q4_k_m.gguf",
+        "Qwen/Qwen2.5-3B-Instruct",
+    ),
+    (
+        "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+        "Qwen/Qwen2.5-7B-Instruct",
+    ),
+    (
+        "Llama-3.2-3B-Instruct-IQ3_M.gguf",
+        "meta-llama/Llama-3.2-3B-Instruct",
+    ),
+    ("gemma-2-9b-it-Q4_K_M.gguf", "google/gemma-2-9b-it"),
+];
 
 #[derive(Clone, Debug)]
 struct Example {
@@ -743,7 +767,9 @@ impl Service {
         let distilled_count = self.rows("distilled").map_or(0, |rows| rows.len());
         json!({"trainingCount":training_count,"promptCount":prompt_count,"distilledCount":distilled_count,
             "job":self.job.as_ref().map(|job|job.lock().unwrap().status()),
-            "baseModel":self.student_model(),"studentModels":STUDENT_MODELS,"trainSupported":cfg!(all(target_os="macos", target_arch="aarch64")),
+            "baseModel":self.student_model(),"studentModels":STUDENT_MODELS,
+            "chatTrainBases":CHAT_TRAIN_BASES,"selectionSaved":self.root.join("student-model.txt").is_file(),
+            "trainSupported":cfg!(all(target_os="macos", target_arch="aarch64")),
             "workspace":self.root,"document":self.document_meta(),"openrouterConfigured":self.openrouter_key().is_ok(),"adapter":self.latest_adapter(),"adapterFresh":self.adapter_fresh(),
             "canContinue":self.continuation_adapter(&training).is_some()})
     }
@@ -1667,14 +1693,12 @@ fn validate_cached_snapshot(snapshot: &Path) -> Result<(), String> {
     let config: Value =
         serde_json::from_slice(&fs::read(snapshot.join("config.json")).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
-    if config["model_type"] != "qwen2"
+    if !["qwen2", "llama", "gemma2"].contains(&config["model_type"].as_str().unwrap_or(""))
         || !snapshot.join("tokenizer.json").is_file()
         || !(snapshot.join("model.safetensors").is_file()
             || snapshot.join("model.safetensors.index.json").is_file())
     {
-        return Err(
-            "The cached Qwen base model is missing required weights or tokenizer files".into(),
-        );
+        return Err("The cached base model is missing required weights or tokenizer files".into());
     }
     Ok(())
 }
@@ -1800,7 +1824,13 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
                 .and_then(|line| line.split_whitespace().nth(3))
                 .and_then(|value| value.parse::<u64>().ok())
                 .ok_or("Cannot check free disk space")?;
-            let needed_gb = if student == DEFAULT_STUDENT { 3 } else { 8 };
+            let needed_gb = match student {
+                DEFAULT_STUDENT => 3,
+                "Qwen/Qwen2.5-1.5B-Instruct" => 8,
+                "Qwen/Qwen2.5-3B-Instruct" | "meta-llama/Llama-3.2-3B-Instruct" => 16,
+                "Qwen/Qwen2.5-7B-Instruct" => 35,
+                _ => 45,
+            };
             if kib < needed_gb * 1024 * 1024 {
                 return Err(format!(
                     "At least {needed_gb} GB of free disk space is needed to create the model"
@@ -2048,6 +2078,19 @@ mod tests {
         service.select_student(DEFAULT_STUDENT).unwrap();
         assert_eq!(service.status()["adapterFresh"], true);
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn curated_chat_models_have_supported_training_bases() {
+        let catalog: Value = serde_json::from_str(include_str!("../models/catalog.json")).unwrap();
+        for model in catalog.as_array().unwrap() {
+            let file = model["file"].as_str().unwrap();
+            let (_, base) = CHAT_TRAIN_BASES
+                .iter()
+                .find(|(name, _)| *name == file)
+                .expect("curated chat model needs a training base");
+            assert!(STUDENT_MODELS.contains(base));
+        }
     }
 
     #[test]
