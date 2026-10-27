@@ -15,6 +15,50 @@ const MAX_DOCUMENT_UPLOAD: usize = 20 * 1024 * 1024;
 const MAX_DOCUMENT_TEXT: usize = 1024 * 1024;
 const OPENROUTER_MODELS_URL: &str = "https://openrouter.ai/api/v1/models";
 const OPENROUTER_CHAT_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
+const CUDA_LAB_SCRIPT: &str = include_str!("../scripts/cuda_lab.py");
+
+fn adapter_weights(adapter: &Path) -> Option<PathBuf> {
+    ["adapters.safetensors", "adapter_model.safetensors"]
+        .iter()
+        .map(|name| adapter.join(name))
+        .find(|path| path.is_file())
+}
+
+fn cuda_python(root: &Path) -> Result<PathBuf, String> {
+    let python = std::env::var_os("LLAMANEST_CUDA_PYTHON")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            root.parent()
+                .unwrap_or(root)
+                .join("cuda-venv/Scripts/python.exe")
+        });
+    python.is_file().then_some(python).ok_or_else(|| {
+        "CUDA training is not installed. Run Installa Fine Tuning GPU.cmd in the Windows package."
+            .into()
+    })
+}
+
+fn cuda_worker(directory: &Path) -> Result<PathBuf, String> {
+    let script = directory.join("cuda_lab.py");
+    fs::write(&script, CUDA_LAB_SCRIPT).map_err(|e| e.to_string())?;
+    Ok(script)
+}
+
+fn cuda_converter() -> Result<PathBuf, String> {
+    let converter = std::env::var_os("LLAMA_CONVERT_HF")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            std::env::current_exe()
+                .ok()
+                .and_then(|exe| exe.parent().map(Path::to_path_buf))
+                .unwrap_or_default()
+                .join("converter/convert_hf_to_gguf.py")
+        });
+    converter
+        .is_file()
+        .then_some(converter)
+        .ok_or_else(|| "The Windows package is missing the Hugging Face to GGUF converter".into())
+}
 
 fn valid_openrouter_key(key: &str) -> bool {
     (10..=256).contains(&key.len())
@@ -714,7 +758,7 @@ impl Service {
                         .and_then(|manifest| manifest["validationExamples"].as_u64())
                         .is_some_and(|count| count > 0)
                 });
-                path.join("adapters.safetensors").is_file() && eligible
+                adapter_weights(path).is_some() && eligible
             })
             .max()
     }
@@ -737,8 +781,10 @@ impl Service {
         }) {
             return false;
         }
-        let adapter_time =
-            fs::metadata(adapter.join("adapters.safetensors")).and_then(|meta| meta.modified());
+        let adapter_time = adapter_weights(&adapter)
+            .ok_or_else(|| std::io::Error::other("Adapter missing"))
+            .and_then(fs::metadata)
+            .and_then(|meta| meta.modified());
         let training_time = fs::metadata(training).and_then(|meta| meta.modified());
         matches!((adapter_time, training_time), (Ok(adapter), Ok(training)) if adapter >= training)
     }
@@ -760,7 +806,7 @@ impl Service {
         let reset_time = fs::metadata(self.root.join("training-reset.marker"))
             .and_then(|meta| meta.modified())
             .ok();
-        let adapter_time = fs::metadata(adapter.join("adapters.safetensors"))
+        let adapter_time = fs::metadata(adapter_weights(&adapter)?)
             .and_then(|meta| meta.modified())
             .ok()?;
         if reset_time.is_some_and(|reset| adapter_time <= reset) {
@@ -822,7 +868,7 @@ impl Service {
             "localModelName":self.local_model_path().and_then(|path|path.file_name().map(|name|name.to_string_lossy().into_owned())),
             "localModelValid":self.local_model_path().is_some_and(|path|validate_local_model_folder(&path).is_ok()),
             "chatTrainBases":CHAT_TRAIN_BASES,"selectionSaved":self.root.join("student-model.txt").is_file(),
-            "trainSupported":cfg!(all(target_os="macos", target_arch="aarch64")),
+            "trainSupported":cfg!(any(all(target_os="macos", target_arch="aarch64"), target_os="windows")),
             "workspace":self.root,"document":self.document_meta(),"openrouterConfigured":self.openrouter_key().is_ok(),"adapter":self.latest_adapter(),"adapterFresh":self.adapter_fresh(),
             "canContinue":self.continuation_adapter(&training).is_some()})
     }
@@ -1095,21 +1141,42 @@ pub fn start_preview(service: Arc<Mutex<Service>>, prompt: &str) -> Result<Value
             let answer_path = dir.join(format!("{preview_id}.txt"));
             let log = fs::File::create(&log_path).map_err(|e| e.to_string())?;
             let answer = fs::File::create(&answer_path).map_err(|e| e.to_string())?;
-            let child = Command::new(tool_path("MLX_LM_GENERATE", "mlx_lm.generate"))
-                .args(["--model", &student, "--adapter-path"])
-                .arg(adapter)
-                .args([
-                    "--prompt",
-                    &prompt,
-                    "--max-tokens",
-                    "160",
-                    "--verbose",
-                    "false",
-                ])
+            let mut command = if cfg!(windows) {
+                let python = cuda_python(&root)?;
+                let script = cuda_worker(&dir)?;
+                let mut command = Command::new(python);
+                command
+                    .arg(script)
+                    .arg("preview")
+                    .arg("--model")
+                    .arg(&student)
+                    .arg("--adapter")
+                    .arg(&adapter)
+                    .arg("--prompt")
+                    .arg(&prompt)
+                    .arg("--max-tokens")
+                    .arg("160");
+                command
+            } else {
+                let mut command = Command::new(tool_path("MLX_LM_GENERATE", "mlx_lm.generate"));
+                command
+                    .args(["--model", &student, "--adapter-path"])
+                    .arg(&adapter)
+                    .args([
+                        "--prompt",
+                        &prompt,
+                        "--max-tokens",
+                        "160",
+                        "--verbose",
+                        "false",
+                    ]);
+                command
+            };
+            let child = command
                 .stdout(Stdio::from(answer))
                 .stderr(Stdio::from(log))
                 .spawn()
-                .map_err(|e| format!("Cannot start mlx_lm.generate: {e}"))?;
+                .map_err(|e| format!("Cannot start the preview worker: {e}"))?;
             {
                 let mut guard = job.lock().unwrap();
                 if guard.cancelled {
@@ -1139,7 +1206,16 @@ pub fn start_preview(service: Arc<Mutex<Service>>, prompt: &str) -> Result<Value
                 };
                 if let Some(status) = done {
                     if !status.success() {
-                        return Err(format!("mlx_lm.generate exited with {status}; see the log"));
+                        let detail = fs::read_to_string(&log_path)
+                            .ok()
+                            .and_then(|log| {
+                                log.lines()
+                                    .rev()
+                                    .find(|line| !line.trim().is_empty())
+                                    .map(|line| line.chars().take(300).collect::<String>())
+                            })
+                            .unwrap_or_else(|| format!("exited with {status}"));
+                        return Err(format!("Preview failed: {detail}"));
                     }
                     break;
                 }
@@ -1550,8 +1626,11 @@ pub fn start_train(
     app: Arc<Mutex<App>>,
     iters: u64,
 ) -> Result<Value, String> {
-    if !cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-        return Err("This local preview supports LoRA training on Apple Silicon only".into());
+    if !cfg!(any(
+        all(target_os = "macos", target_arch = "aarch64"),
+        target_os = "windows"
+    )) {
+        return Err("Fine tuning requires an Apple Silicon Mac or a Windows CUDA GPU".into());
     }
     if !(20..=300).contains(&iters) {
         return Err("Iterations must be between 20 and 300".into());
@@ -1578,6 +1657,9 @@ pub fn start_train(
         let job = Arc::new(Mutex::new(Job::new("train", iters as usize)));
         let resume = lab.continuation_adapter(&examples);
         let student = lab.checked_student_model()?;
+        if cfg!(windows) && lab.student_selection() != LOCAL_STUDENT {
+            return Err("Choose a local model folder before CUDA training".into());
+        }
         lab.job = Some(job.clone());
         (examples, student, lab.root.clone(), resume, job)
     };
@@ -1594,18 +1676,36 @@ pub fn start_train(
             let log_path = run.join("train.log");
             let log = fs::File::create(&log_path).map_err(|e| e.to_string())?;
             let stderr = log.try_clone().map_err(|e| e.to_string())?;
-            let executable = tool_path("MLX_LM_LORA", "mlx_lm.lora");
-            let mut command = Command::new(&executable);
-            command
-                .args(["--model", &student, "--train", "--data"])
-                .arg(&data)
-                .arg("--adapter-path")
-                .arg(&adapter);
-            if let Some(previous) = &resume {
-                command.arg("--resume-adapter-file").arg(previous);
-            }
-            let child = command
-                .args([
+            let mut command = if cfg!(windows) {
+                let python = cuda_python(&root)?;
+                let script = cuda_worker(&run)?;
+                let mut command = Command::new(python);
+                command
+                    .arg(script)
+                    .arg("train")
+                    .arg("--model")
+                    .arg(&student)
+                    .arg("--data")
+                    .arg(data.join("train.jsonl"))
+                    .arg("--adapter")
+                    .arg(&adapter)
+                    .arg("--iters")
+                    .arg(iters.to_string());
+                if let Some(previous) = &resume {
+                    command.arg("--resume").arg(previous.parent().unwrap());
+                }
+                command
+            } else {
+                let mut command = Command::new(tool_path("MLX_LM_LORA", "mlx_lm.lora"));
+                command
+                    .args(["--model", &student, "--train", "--data"])
+                    .arg(&data)
+                    .arg("--adapter-path")
+                    .arg(&adapter);
+                if let Some(previous) = &resume {
+                    command.arg("--resume-adapter-file").arg(previous);
+                }
+                command.args([
                     "--iters",
                     &iters.to_string(),
                     "--batch-size",
@@ -1615,11 +1715,14 @@ pub fn start_train(
                     "1024",
                     "--steps-per-report",
                     "1",
-                ])
+                ]);
+                command
+            };
+            let child = command
                 .stdout(Stdio::from(log))
                 .stderr(Stdio::from(stderr))
                 .spawn()
-                .map_err(|e| format!("Cannot start mlx_lm.lora: {e}"))?;
+                .map_err(|e| format!("Cannot start the training worker: {e}"))?;
             {
                 let mut guard = job.lock().unwrap();
                 if guard.cancelled {
@@ -1629,7 +1732,7 @@ pub fn start_train(
                     return Ok(String::new());
                 }
                 guard.phase = "running";
-                guard.log = Some(log_path);
+                guard.log = Some(log_path.clone());
                 guard.child = Some(child);
             }
             loop {
@@ -1648,15 +1751,22 @@ pub fn start_train(
                 };
                 if let Some(status) = done {
                     if !status.success() {
-                        return Err(format!(
-                            "mlx_lm.lora exited with {status}; see the training log"
-                        ));
+                        let detail = fs::read_to_string(&log_path)
+                            .ok()
+                            .and_then(|log| {
+                                log.lines()
+                                    .rev()
+                                    .find(|line| !line.trim().is_empty())
+                                    .map(|line| line.chars().take(300).collect::<String>())
+                            })
+                            .unwrap_or_else(|| format!("exited with {status}"));
+                        return Err(format!("Training failed: {detail}"));
                     }
                     break;
                 }
                 thread::sleep(Duration::from_millis(250));
             }
-            if !adapter.join("adapters.safetensors").is_file() {
+            if adapter_weights(&adapter).is_none() {
                 return Err("Training ended without an adapter; see the training log".into());
             }
             fs::write(run.join(".complete"), "ok\n").map_err(|e| e.to_string())?;
@@ -1788,19 +1898,30 @@ fn validate_local_model_folder(folder: &Path) -> Result<(), String> {
 }
 
 pub fn choose_local_model(service: Arc<Mutex<Service>>) -> Result<Value, String> {
-    if !cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-        return Err("localModelMacOnly".into());
+    if !cfg!(any(target_os = "macos", target_os = "windows")) {
+        return Err("localModelUnsupportedPlatform".into());
     }
     if service.lock().unwrap().busy() {
         return Err("A lab job is already running".into());
     }
-    let output = Command::new("osascript")
-        .args([
-            "-e",
-            "POSIX path of (choose folder with prompt \"Choose a model folder for fine tuning\")",
-        ])
-        .output()
-        .map_err(|_| "localModelPickerUnavailable")?;
+    let output = if cfg!(windows) {
+        Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-STA",
+                "-Command",
+                "Add-Type -AssemblyName System.Windows.Forms; $picker = New-Object System.Windows.Forms.FolderBrowserDialog; $picker.Description = 'Choose a model folder for fine tuning'; if ($picker.ShowDialog() -eq 'OK') { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); [Console]::WriteLine($picker.SelectedPath) } else { exit 1 }",
+            ])
+            .output()
+    } else {
+        Command::new("osascript")
+            .args([
+                "-e",
+                "POSIX path of (choose folder with prompt \"Choose a model folder for fine tuning\")",
+            ])
+            .output()
+    }
+    .map_err(|_| "localModelPickerUnavailable")?;
     if !output.status.success() {
         return Err("localModelCancelled".into());
     }
@@ -1880,15 +2001,18 @@ fn run_export_step(
 }
 
 pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Result<Value, String> {
-    if !cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-        return Err("Model export is available on Apple Silicon Macs only".into());
+    if !cfg!(any(
+        all(target_os = "macos", target_arch = "aarch64"),
+        target_os = "windows"
+    )) {
+        return Err("Model export requires an Apple Silicon Mac or Windows".into());
     }
     let models = app
         .try_lock()
         .map_err(|_| "Chat is busy; try again when it finishes")?
         .models
         .clone();
-    let (adapter, student, job) = {
+    let (adapter, student, root, job) = {
         let mut lab = service.lock().unwrap();
         if lab.busy() {
             return Err("A lab job is already running".into());
@@ -1900,7 +2024,7 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
         let student = lab.checked_student_model()?;
         let job = Arc::new(Mutex::new(Job::new("export", 3)));
         lab.job = Some(job.clone());
-        (adapter, student, job)
+        (adapter, student, lab.root.clone(), job)
     };
     thread::spawn(move || {
         let run = adapter.parent().unwrap().to_path_buf();
@@ -1935,17 +2059,7 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
             }
             // Fusion writes a full copy, conversion writes F16, then quantization writes Q4.
             // Keep a reserve to avoid filling the user's disk halfway through export.
-            let free = Command::new("df")
-                .args(["-Pk"])
-                .arg(&models)
-                .output()
-                .map_err(|e| e.to_string())?;
-            let kib = String::from_utf8_lossy(&free.stdout)
-                .lines()
-                .last()
-                .and_then(|line| line.split_whitespace().nth(3))
-                .and_then(|value| value.parse::<u64>().ok())
-                .ok_or("Cannot check free disk space")?;
+            let free_bytes = crate::quantize::free_disk_bytes(&models)?;
             let needed_gb = match student.as_str() {
                 DEFAULT_STUDENT => 3,
                 "Qwen/Qwen2.5-1.5B-Instruct" => 8,
@@ -1967,44 +2081,67 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
                 }
                 _ => 45,
             };
-            if kib < needed_gb * 1024 * 1024 {
+            if free_bytes < needed_gb * 1024 * 1024 * 1024 {
                 return Err(format!(
                     "At least {needed_gb} GB of free disk space is needed to create the model"
                 ));
             }
-            let fuse_tool = resolved_tool("MLX_LM_FUSE", "mlx_lm.fuse");
-            let python = mlx_python(&fuse_tool);
-            let base = if Path::new(&student).is_absolute() {
-                let path = PathBuf::from(&student);
-                validate_local_model_folder(&path)?;
-                path
+            let python = if cfg!(windows) {
+                let python = cuda_python(&root)?;
+                let script = cuda_worker(&export)?;
+                let mut merge = Command::new(&python);
+                merge
+                    .arg(script)
+                    .arg("merge")
+                    .arg("--model")
+                    .arg(&student)
+                    .arg("--adapter")
+                    .arg(&adapter)
+                    .arg("--output")
+                    .arg(&fused);
+                run_export_step(&job, merge, "Merge CUDA adapter with base model", &log)?;
+                python
             } else {
-                cached_base_model(&python, &student)?
-            };
-            let mut fuse = Command::new(&fuse_tool);
-            fuse.arg("--model")
-                .arg(&base)
-                .arg("--adapter-path")
-                .arg(&adapter)
-                .arg("--save-path")
-                .arg(&fused);
-            if Path::new(&student).is_absolute() {
-                let config: Value = serde_json::from_slice(
-                    &fs::read(base.join("config.json")).map_err(|e| e.to_string())?,
-                )
-                .map_err(|e| e.to_string())?;
-                if !config["quantization"].is_null() || !config["quantization_config"].is_null() {
-                    fuse.arg("--de-quantize");
+                let fuse_tool = resolved_tool("MLX_LM_FUSE", "mlx_lm.fuse");
+                let python = mlx_python(&fuse_tool);
+                let base = if Path::new(&student).is_absolute() {
+                    let path = PathBuf::from(&student);
+                    validate_local_model_folder(&path)?;
+                    path
+                } else {
+                    cached_base_model(&python, &student)?
+                };
+                let mut fuse = Command::new(&fuse_tool);
+                fuse.arg("--model")
+                    .arg(&base)
+                    .arg("--adapter-path")
+                    .arg(&adapter)
+                    .arg("--save-path")
+                    .arg(&fused);
+                if Path::new(&student).is_absolute() {
+                    let config: Value = serde_json::from_slice(
+                        &fs::read(base.join("config.json")).map_err(|e| e.to_string())?,
+                    )
+                    .map_err(|e| e.to_string())?;
+                    if !config["quantization"].is_null() || !config["quantization_config"].is_null()
+                    {
+                        fuse.arg("--de-quantize");
+                    }
                 }
-            }
-            run_export_step(&job, fuse, "Fuse adapter with base model", &log)?;
+                run_export_step(&job, fuse, "Fuse adapter with base model", &log)?;
+                python
+            };
             if !fused.join("config.json").is_file() {
                 return Err("Fusion did not produce a model".into());
             }
 
             let mut convert = Command::new(python);
             convert
-                .arg(resolved_tool("LLAMA_CONVERT_HF", "convert_hf_to_gguf.py"))
+                .arg(if cfg!(windows) {
+                    cuda_converter()?
+                } else {
+                    resolved_tool("LLAMA_CONVERT_HF", "convert_hf_to_gguf.py")
+                })
                 .arg(&fused)
                 .args(["--outfile"])
                 .arg(&f16)

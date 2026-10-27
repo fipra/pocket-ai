@@ -9,7 +9,6 @@
   let prompts = [];
   let distilled = [];
   let models = [];
-  let chatModel = null;
   let saving = false;
   let savingTarget = null;
   let pendingAction = null;
@@ -238,26 +237,7 @@
       $(id).classList.toggle('loading', loading);
       $(id).setAttribute('aria-busy', String(loading));
     }
-    for (const id of ['student-train','student-distill']) $(id + '-wait').hidden = pendingAction !== id;
     for (const id of ['pair-message','prompt-message','answer-message']) $(id).classList.toggle('loading', id === savingTarget);
-    for (const id of ['student-train', 'student-distill']) {
-      const selector = $(id);
-      const models = status.studentModels || [];
-      if (selector.options.length !== models.length || models.some((model, index) => selector.options[index]?.value !== model)) {
-        selector.replaceChildren(...models.map(model => {
-          const option = document.createElement('option');
-          option.value = model;
-          option.textContent = model === '@local'
-            ? tr('localModelOption').replace('{name}', status.localModelName || tr('localModelUnknown'))
-            : model.split('/').pop();
-          return option;
-        }));
-      }
-      const localOption = [...selector.options].find(option => option.value === '@local');
-      if (localOption) localOption.textContent = tr('localModelOption').replace('{name}', status.localModelName || tr('localModelUnknown'));
-      selector.value = status.baseModel || '';
-      selector.disabled = busy;
-    }
     $('pair-count').textContent = `${training.length < 5 ? `${training.length}/5` : training.length} ${tr('pairCount')}`;
     $('doc-name').textContent = status.document?.name || tr('documentNone');
     const cloud = $('doc-provider').value === 'openrouter';
@@ -296,17 +276,18 @@
     const pendingPrompt = Boolean($('teacher-prompt').value.trim());
     const longTraining = training.some(row => [...(row.completion || '')].length > 4000);
     const answersMatch = !prompts.length || (prompts.length === distilled.length && prompts.every((row, index) => row.prompt === distilled[index].prompt));
-    const localInvalid = status.baseModel === '@local' && !status.localModelValid;
-    $('choose-local-model').disabled = busy || !status.trainSupported;
-    $('train-start').disabled = busy || pendingPair || longTraining || !status.trainSupported || localInvalid || training.length < 5;
+    const localSelected = status.baseModel === '@local';
+    const localReady = localSelected && status.localModelValid;
+    $('choose-local-model').disabled = busy;
+    $('train-start').disabled = busy || pendingPair || longTraining || !status.trainSupported || !localReady || training.length < 5;
     $('train-start').textContent = tr(status.canContinue ? 'continueTrain' : 'trainStart');
     $('iterations-label').textContent = tr(status.canContinue ? 'additionalIterations' : 'iterations');
     $('train-mode').hidden = !status.canContinue;
     $('train-mode').textContent = status.canContinue ? tr('continueHelp') : '';
     $('generate-start').disabled = busy || pendingPrompt || prompts.length === 0 || !teacherReady;
     $('auto-start').disabled = busy || !$('auto-topic').value.trim() || !teacherReady;
-    $('preview-start').disabled = busy || !status.adapterFresh || localInvalid;
-    $('export-model').disabled = busy || !status.adapterFresh || !status.trainSupported || localInvalid;
+    $('preview-start').disabled = busy || !status.adapterFresh || !localReady;
+    $('export-model').disabled = busy || !status.adapterFresh || !status.trainSupported || !localReady;
     $('correction-save').disabled = busy || !lastPreviewPrompt;
     $('pair-export').disabled = busy || !training.length;
     $('prompt-export').disabled = busy || !prompts.length;
@@ -317,17 +298,17 @@
     $('use-answers').disabled = busy || answerEditing || !answersMatch || !distilled.length || distilled.some(row => [...(row.completion || '')].length > 4000);
     if (distilled.length && !answersMatch) message('answer-message', tr('staleAnswers'), true);
     else if ($('answer-message').textContent === tr('staleAnswers')) message('answer-message');
-    $('base-model').textContent = status.resolvedBaseModel || status.baseModel || '';
-    const chatBase = (status.chatTrainBases || []).find(([file]) => file === chatModel)?.[1];
+    $('base-model').textContent = localSelected ? status.resolvedBaseModel || '' : '';
     const chatNote = $('chat-model-note');
-    if (status.baseModel === '@local') {
-      chatNote.textContent = tr(localInvalid ? 'localModelMissing' : 'localModelSelected')
+    if (localSelected) {
+      chatNote.textContent = tr(localReady ? 'localModelSelected' : 'localModelMissing')
         .replace('{name}', status.localModelName || tr('localModelUnknown'));
-    } else if (chatBase) {
-      chatNote.textContent = tr('chatModelTrainable').replace('{model}', chatModel);
     } else {
-      chatNote.textContent = tr(chatModel ? 'chatModelUnsupported' : 'chatModelMissing');
+      chatNote.textContent = tr('localModelChooseFirst');
     }
+    $('distill-target-model').textContent = localReady
+      ? tr('localModelOption').replace('{name}', status.localModelName || tr('localModelUnknown'))
+      : tr('localModelChooseFirst');
     $('workspace').textContent = status.workspace || '';
     if (!models.length && !distillCloud) message('generate-message', tr('noModels'));
     else if (pendingPrompt) message('generate-message', tr('pendingPrompt'));
@@ -468,11 +449,6 @@
 
   $('tab-train').onclick = () => tab('train');
   $('tab-distill').onclick = () => tab('distill');
-  for (const id of ['student-train', 'student-distill']) $(id).onchange = async event => {
-    const chosen = event.target.value;
-    try { await withPending(id, async () => { status = await api('select_student', {model: chosen}); render(); }); }
-    catch (error) { render(); message(activeTab === 'train' ? 'train-message' : 'generate-message', error.message, true); }
-  };
   $('choose-local-model').onclick = async () => {
     try { await withPending('choose-local-model', async () => {
       status = await api('choose_local_model');
@@ -744,17 +720,8 @@
       const app = await api('state');
       if (dictionaries[app.language]) language = app.language;
       models = app.models || [];
-      chatModel = app.model || null;
     } catch (_) { /* The chat may be busy. */ }
     translate();
-    for (const id of ['student-train','student-distill']) {
-      const note = document.createElement('span');
-      note.id = id + '-wait';
-      note.className = 'hint loading';
-      note.textContent = tr('saving');
-      note.hidden = true;
-      $(id).after(note);
-    }
     for (const id of ['teacher','doc-teacher']) {
       const selector = $(id);
       selector.replaceChildren();
@@ -774,11 +741,6 @@
       api('examples', {kind:'prompts'}), api('examples', {kind:'distilled'})
     ]);
     status = loaded[0].status === 'fulfilled' ? loaded[0].value : null;
-    const chatBase = (status?.chatTrainBases || []).find(([file]) => file === chatModel)?.[1];
-    if (chatBase && !status.selectionSaved && !status.job?.active) {
-      try { status = await api('select_student', {model:chatBase}); }
-      catch (_) { /* The user can still choose a supported base model. */ }
-    }
     $('initial-loading').hidden = Boolean(status);
     if (!status) {
       $('initial-loading').classList.remove('loading');

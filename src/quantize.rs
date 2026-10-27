@@ -101,7 +101,7 @@ pub fn looks_quantized(source: &str) -> bool {
 }
 
 #[cfg(windows)]
-fn free_disk_bytes(dir: &Path) -> Result<u64, String> {
+pub(crate) fn free_disk_bytes(dir: &Path) -> Result<u64, String> {
     use std::os::windows::ffi::OsStrExt;
 
     #[link(name = "Kernel32")]
@@ -140,7 +140,7 @@ fn free_disk_bytes(dir: &Path) -> Result<u64, String> {
 }
 
 #[cfg(not(windows))]
-fn free_disk_bytes(dir: &Path) -> Result<u64, String> {
+pub(crate) fn free_disk_bytes(dir: &Path) -> Result<u64, String> {
     let output = Command::new("df")
         .arg("-Pk")
         .arg(dir)
