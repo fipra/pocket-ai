@@ -23,6 +23,8 @@ let chats = [], documents = [], models = [], memories = [], activeId, selectedId
 let pendingMemoryPrompt = null;
 let thinking = false;
 let remoteConfig, remoteEntries = [];
+let remotePanelOpen = false;
+try { remotePanelOpen = localStorage.getItem('llamanest-remote-panel-open') === '1'; } catch { /* Storage may be unavailable. */ }
 const allModels = async () => [...await savedModels(), ...remoteEntries];
 const isRemote = id => String(id || '').startsWith('remote:');
 let hubResults = [], hubNext = null, hubSearching = false;
@@ -366,6 +368,13 @@ $('install').onclick = async () => { if (installing) { installing.prompt(); awai
 window.addEventListener('online', render); window.addEventListener('offline', render);
 if (import.meta.env.PROD && 'serviceWorker' in navigator) navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(console.warn);
 function setupRemoteUi() {
+  const toggle = node('button', undefined, 'action subtle');
+  toggle.id = 'remote-toggle'; toggle.type = 'button'; toggle.setAttribute('aria-controls', 'remote-section');
+  toggle.onclick = () => {
+    remotePanelOpen = !remotePanelOpen;
+    try { localStorage.setItem('llamanest-remote-panel-open', remotePanelOpen ? '1' : '0'); } catch { /* Keep the current choice for this session. */ }
+    renderRemotePanel();
+  };
   const section = node('section', undefined, 'split-tool');
   section.id = 'remote-section';
   const title = node('h3'); title.id = 'remote-title';
@@ -377,7 +386,7 @@ function setupRemoteUi() {
   const status = node('p', undefined, 'hint'); status.id = 'remote-status'; status.setAttribute('role', 'status');
   const list = node('div', undefined, 'cards'); list.id = 'remote-list';
   form.append(url, key, connect); section.append(title, description, form, status, list);
-  $('hardware-advice').before(section);
+  $('hardware-advice').before(toggle, section);
   form.onsubmit = event => { event.preventDefault(); run(async () => {
     setBusy(true); status.textContent = tr('remoteConnecting');
     const next = { url: url.value.trim(), token: key.value.trim() };
@@ -388,6 +397,9 @@ function setupRemoteUi() {
 }
 function renderRemotePanel() {
   if (!$('remote-title')) return;
+  $('remote-section').hidden = !remotePanelOpen;
+  $('remote-toggle').setAttribute('aria-expanded', String(remotePanelOpen));
+  $('remote-toggle').textContent = `${remotePanelOpen ? '▾' : '▸'} ${tr(remotePanelOpen ? 'remoteHide' : 'remoteShow')}`;
   $('remote-title').textContent = tr('remoteTitle');
   $('remote-description').textContent = tr('remoteDescription');
   $('remote-connect').textContent = tr('remoteConnect');
