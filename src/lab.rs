@@ -7,7 +7,7 @@ use std::{
     process::{Child, Command, Stdio},
     sync::{Arc, Mutex},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 const MAX_DATASET: usize = 2 * 1024 * 1024;
@@ -2116,10 +2116,21 @@ pub fn choose_local_model(service: Arc<Mutex<Service>>, file: bool) -> Result<Va
 
 fn run_export_step(
     job: &Arc<Mutex<Job>>,
+    command: Command,
+    label: &str,
+    log: &Path,
+    advance: bool,
+) -> Result<(), String> {
+    run_export_step_with_timeout(job, command, label, log, advance, None)
+}
+
+fn run_export_step_with_timeout(
+    job: &Arc<Mutex<Job>>,
     mut command: Command,
     label: &str,
     log: &Path,
     advance: bool,
+    timeout: Option<Duration>,
 ) -> Result<(), String> {
     let output = fs::OpenOptions::new()
         .create(true)
@@ -2145,6 +2156,7 @@ fn run_export_step(
         guard.log = Some(log.to_path_buf());
         guard.child = Some(child);
     }
+    let started = Instant::now();
     loop {
         let mut guard = job.lock().unwrap();
         let status = guard
@@ -2178,9 +2190,75 @@ fn run_export_step(
             }
             return Ok(());
         }
+        if timeout.is_some_and(|limit| started.elapsed() >= limit) {
+            if let Some(child) = guard.child.as_mut() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+            guard.child = None;
+            return Err(format!("{label} timed out"));
+        }
         drop(guard);
         thread::sleep(Duration::from_millis(250));
     }
+}
+
+fn verify_exported_gguf(
+    job: &Arc<Mutex<Job>>,
+    python: &Path,
+    script: &Path,
+    model: &Path,
+    base: &Path,
+    original: Option<&Path>,
+    gguf_package: Option<&Path>,
+    log: &Path,
+) -> Result<(), String> {
+    valid_gguf(model)?;
+    let mut verify = Command::new(python);
+    verify
+        .arg(script)
+        .arg("verify-gguf")
+        .arg("--model")
+        .arg(model)
+        .arg("--base")
+        .arg(base);
+    if let Some(source) = original {
+        verify.arg("--original").arg(source);
+    }
+    if let Some(package) = gguf_package {
+        verify.arg("--gguf-package").arg(package);
+    }
+    run_export_step(job, verify, "Verify exported GGUF tokenizer", log, false)
+}
+
+fn gguf_smoke_command(model: &Path) -> Command {
+    let mut command = Command::new(tool_path("LLAMA_CLI", "llama-cli"));
+    command
+        .arg("-m")
+        .arg(model)
+        .args([
+            "-ngl",
+            "0",
+            "-p",
+            "Hello",
+            "-n",
+            "1",
+            "--single-turn",
+            "--simple-io",
+        ])
+        .stdin(Stdio::null());
+    command
+}
+
+fn smoke_exported_gguf(job: &Arc<Mutex<Job>>, model: &Path, log: &Path) -> Result<(), String> {
+    run_export_step_with_timeout(
+        job,
+        gguf_smoke_command(model),
+        "Load and run GGUF with bundled llama-cli",
+        log,
+        false,
+        Some(Duration::from_secs(180)),
+    )
 }
 
 pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Result<Value, String> {
@@ -2234,6 +2312,7 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
         let part = models.join(format!(".{final_name}.part"));
         let target = models.join(&final_name);
         let log = export.join("export.log");
+        let mut keep_verified_part = false;
         let result = (|| -> Result<String, String> {
             fs::create_dir_all(&export).map_err(|e| e.to_string())?;
             fs::create_dir_all(&models).map_err(|e| e.to_string())?;
@@ -2243,16 +2322,52 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
             if fused.exists() {
                 fs::remove_dir_all(&fused).map_err(|e| e.to_string())?;
             }
-            for stale in [&f16, &part] {
-                if stale.exists() {
-                    fs::remove_file(stale).map_err(|e| e.to_string())?;
-                }
+            if f16.exists() {
+                fs::remove_file(&f16).map_err(|e| e.to_string())?;
             }
             let training_base = prepare_gguf_base(Path::new(&student), &root, &job, &log)?;
             if let Ok(recorded) = fs::read_to_string(run.join("training-base.txt")) {
                 if recorded != training_base.to_string_lossy() {
                     return Err("The training base changed since fine tuning; exporting would lose the learned weights".into());
                 }
+            }
+            let converter_path = if cfg!(windows) {
+                cuda_converter()?
+            } else {
+                cuda_converter()
+                    .unwrap_or_else(|_| resolved_tool("LLAMA_CONVERT_HF", "convert_hf_to_gguf.py"))
+            };
+            let gguf_package = converter_path
+                .parent()
+                .map(|parent| parent.join("gguf-py"))
+                .filter(|path| path.is_dir());
+            let export_script = export_worker(&export)?;
+            if part.is_file() {
+                if training_base.is_dir() {
+                    let python = if cfg!(windows) {
+                        cuda_python(&root)?
+                    } else {
+                        mlx_python(&mlx_tool(&root, "MLX_LM_FUSE", "mlx_lm.fuse"))
+                    };
+                    if verify_exported_gguf(
+                        &job,
+                        &python,
+                        &export_script,
+                        &part,
+                        &training_base,
+                        Path::new(&student).is_file().then(|| Path::new(&student)),
+                        gguf_package.as_deref(),
+                        &log,
+                    )
+                    .is_ok()
+                    {
+                        keep_verified_part = true;
+                        smoke_exported_gguf(&job, &part, &log)?;
+                        fs::rename(&part, &target).map_err(|e| e.to_string())?;
+                        return Ok(final_name);
+                    }
+                }
+                fs::remove_file(&part).map_err(|e| e.to_string())?;
             }
             // Fusion writes a full copy, conversion writes F16, then quantization writes Q4.
             // Keep a reserve to avoid filling the user's disk halfway through export.
@@ -2342,17 +2457,6 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
             if !fused.join("config.json").is_file() {
                 return Err("Fusion did not produce a model".into());
             }
-            let converter_path = if cfg!(windows) {
-                cuda_converter()?
-            } else {
-                cuda_converter()
-                    .unwrap_or_else(|_| resolved_tool("LLAMA_CONVERT_HF", "convert_hf_to_gguf.py"))
-            };
-            let gguf_package = converter_path
-                .parent()
-                .map(|parent| parent.join("gguf-py"))
-                .filter(|path| path.is_dir());
-            let export_script = export_worker(&export)?;
             let mut tokenizer = Command::new(&python);
             tokenizer
                 .arg(&export_script)
@@ -2388,35 +2492,18 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
             let mut quantize = Command::new(tool_path("LLAMA_QUANTIZE", "llama-quantize"));
             quantize.arg(&f16).arg(&part).arg("Q4_K_M");
             run_export_step(&job, quantize, "Quantize GGUF model", &log, true)?;
-            valid_gguf(&part)?;
-            let mut verify = Command::new(&python);
-            verify
-                .arg(&export_script)
-                .arg("verify-gguf")
-                .arg("--model")
-                .arg(&part)
-                .arg("--base")
-                .arg(&export_base);
-            if Path::new(&student).is_file() {
-                verify.arg("--original").arg(&student);
-            }
-            if let Some(package) = &gguf_package {
-                verify.arg("--gguf-package").arg(package);
-            }
-            run_export_step(&job, verify, "Verify exported GGUF tokenizer", &log, false)?;
-            let mut smoke = Command::new(tool_path("LLAMA_CLI", "llama-cli"));
-            smoke
-                .arg("-m")
-                .arg(&part)
-                .args(["-ngl", "0", "-p", "Hello", "-n", "1"])
-                .stdin(Stdio::null());
-            run_export_step(
+            verify_exported_gguf(
                 &job,
-                smoke,
-                "Load and run GGUF with bundled llama-cli",
+                &python,
+                &export_script,
+                &part,
+                &export_base,
+                Path::new(&student).is_file().then(|| Path::new(&student)),
+                gguf_package.as_deref(),
                 &log,
-                false,
             )?;
+            keep_verified_part = true;
+            smoke_exported_gguf(&job, &part, &log)?;
             fs::rename(&part, &target).map_err(|e| e.to_string())?;
             // The finished model is in the library; temporary full precision copies are no longer needed.
             let _ = fs::remove_file(&f16);
@@ -2424,7 +2511,9 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
             Ok(final_name)
         })();
         if result.is_err() {
-            let _ = fs::remove_file(&part);
+            if !keep_verified_part {
+                let _ = fs::remove_file(&part);
+            }
             let _ = fs::remove_file(&f16);
             let _ = fs::remove_dir_all(&fused);
         }
@@ -2438,7 +2527,10 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
             "failed"
         };
         match result {
-            Ok(name) => guard.output = Some(name),
+            Ok(name) => {
+                guard.done = guard.total;
+                guard.output = Some(name);
+            }
             Err(error) => guard.error = Some(error),
         }
     });
@@ -2448,6 +2540,15 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn export_smoke_check_exits_after_one_turn() {
+        let command = gguf_smoke_command(Path::new("model.gguf"));
+        let args: Vec<_> = command.get_args().collect();
+        assert!(args.contains(&std::ffi::OsStr::new("--single-turn")));
+        assert!(args.contains(&std::ffi::OsStr::new("--simple-io")));
+        assert!(args.contains(&std::ffi::OsStr::new("-n")));
+    }
     #[test]
     fn cached_base_needs_weights_and_tokenizer_but_not_repository_docs() {
         let dir = std::env::temp_dir().join(format!("llamanest-cached-base-{}", id()));
