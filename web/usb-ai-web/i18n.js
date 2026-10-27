@@ -247,6 +247,14 @@ const remoteStrings = {
   es: { remoteTitle:'Servidor GPU de la red local', remoteDescription:'Conecta el servicio LlamaNest en dtiwinai. Los modelos y mensajes seleccionados se envían por la red local. Chrome o Edge puede pedir acceso a la red.', remoteToken:'Token de acceso', remoteConnect:'Conectar', remoteConnecting:'Conectando al servidor LAN…', remoteConnected:'Servidor LAN conectado', remoteUnavailable:'El modelo remoto no está disponible. Vuelve a conectar el servidor.', remoteDownloading:'Descargando y verificando el modelo en dtiwinai…', saveRemote:'Guardar en dtiwinai', remoteActive:'GPU LAN', remoteDataNotice:'Los mensajes y fragmentos de documentos se envían al servidor LAN elegido.' }
 };
 for (const language of Object.keys(remoteStrings)) Object.assign(translations[language], remoteStrings[language]);
+const remoteVisibilityStrings = {
+  en: { remoteShow:'Show LAN GPU server', remoteHide:'Hide LAN GPU server' },
+  it: { remoteShow:'Mostra server GPU nella LAN', remoteHide:'Nascondi server GPU nella LAN' },
+  fr: { remoteShow:'Afficher le serveur GPU du réseau local', remoteHide:'Masquer le serveur GPU du réseau local' },
+  de: { remoteShow:'GPU-Server im lokalen Netz anzeigen', remoteHide:'GPU-Server im lokalen Netz ausblenden' },
+  es: { remoteShow:'Mostrar servidor GPU de la red local', remoteHide:'Ocultar servidor GPU de la red local' }
+};
+for (const language of Object.keys(remoteVisibilityStrings)) Object.assign(translations[language], remoteVisibilityStrings[language]);
 translations.en.remoteSingleOnly = 'This test currently supports one GGUF file per remote model.';
 translations.it.remoteSingleOnly = 'Questo test supporta per ora un solo file GGUF per modello remoto.';
 translations.fr.remoteSingleOnly = 'Ce test prend actuellement en charge un seul fichier GGUF par modèle distant.';
