@@ -44,7 +44,8 @@ fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
         options.mode(0o600);
     }
     let mut file = options.open(path).map_err(|e| e.to_string())?;
-    file.write_all(bytes).map_err(|e| e.to_string())
+    file.write_all(bytes).map_err(|e| e.to_string())?;
+    file.sync_all().map_err(|e| e.to_string())
 }
 
 fn openrouter_models(key: &str, query: &str) -> Result<Vec<Value>, String> {
@@ -500,9 +501,6 @@ impl Service {
         fs::create_dir_all(&self.root).map_err(|e| e.to_string())?;
         let temporary = self.root.join(format!("openrouter-key.{}.part", id()));
         write_private_file(&temporary, key.as_bytes())?;
-        let file = fs::File::open(&temporary).map_err(|e| e.to_string())?;
-        file.sync_all().map_err(|e| e.to_string())?;
-        drop(file);
         let target = self.root.join("openrouter-key.txt");
         let backup = self.root.join(format!("openrouter-key.{}.backup", id()));
         let had_target = target.is_file();
