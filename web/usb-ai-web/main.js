@@ -15,12 +15,16 @@ import { usesSafariCpu, needsSafariFallback, largeModelWarningBrowser } from './
 import { browserHardware, modelGuidance, recommendedModel } from './model-guidance.js';
 import { memoryContext, memoryMarkdown, parseMemoryMarkdown, rememberRequest, memoryCommand, identityMemoryNotes } from './memory.js';
 import { splitGgufFile } from './gguf-split.js';
+import { remoteModels, remoteDownload, remoteChat } from './remote.js';
 
 const $ = id => document.getElementById(id);
 let language = preferredLanguage();
 let chats = [], documents = [], models = [], memories = [], activeId, selectedId, busy = false, controller, installing;
 let pendingMemoryPrompt = null;
 let thinking = false;
+let remoteConfig, remoteEntries = [];
+const allModels = async () => [...await savedModels(), ...remoteEntries];
+const isRemote = id => String(id || '').startsWith('remote:');
 let hubResults = [], hubNext = null, hubSearching = false;
 let pendingFirstPrompt = false;
 let splitSourceFile, splitController;
@@ -41,7 +45,7 @@ const modelSize = bytes => bytes >= 1e9 ? `${(bytes/1e9).toFixed(2)} GB` : `${(b
 function setStatus(text = '', error = false, loading = false) { $('status').textContent = text; $('status').classList.toggle('error', error); $('status').classList.toggle('loading', loading); }
 function translate() { document.documentElement.lang = language; document.querySelectorAll('[data-i18n]').forEach(element => { element.textContent = tr(element.dataset.i18n); }); document.querySelectorAll('[data-placeholder]').forEach(element => { element.placeholder = tr(element.dataset.placeholder); }); $('language').value = language; $('stop').ariaLabel = tr('stop'); $('send').ariaLabel = tr('send'); }
 function closeSidebar() { $('sidebar').classList.remove('open'); }
-function saveSettings() { return db.put('settings', { id: 'main', language, selectedId, activeId, thinking }); }
+function saveSettings() { return db.put('settings', { id: 'main', language, selectedId, activeId, thinking, remoteConfig }); }
 function renderChats() { const list = $('chat-list'); list.replaceChildren(); if (!chats.length) list.append(node('p', tr('noChats'), 'empty')); for (const chat of [...chats].sort((a,b) => b.updated - a.updated)) { const button = node('button', chat.title, `chat-item${chat.id === activeId ? ' active' : ''}`); button.onclick = () => { activeId = chat.id; saveSettings(); render(); closeSidebar(); }; list.append(button); } }
 function renderMessages() { const box = $('messages'); box.replaceChildren(); const chat = chats.find(item => item.id === activeId); if (!chat?.messages.length) { const welcome = node('div', undefined, 'welcome'); welcome.append(node('div', '✦', 'welcome-mark'), node('h1', tr('welcome')), node('p', models.length ? tr('welcomeNote') : tr(usesSafariCpu() ? 'safariStarterHint' : 'starterHint'))); box.append(welcome); return; } for (const message of chat.messages) { const row = node('article', undefined, `message ${message.role}`); row.append(node('div', message.role === 'user' ? 'U' : '✦', 'avatar')); const content = node('div'); const body = node('div', undefined, 'message-body'); if (message.role === 'assistant') window.USB_AI_RESPONSE_VIEW.render(body, message, language, thinking); else window.USB_AI_CODE_VIEW.render(body, message.text, language); content.append(node('strong', message.role === 'user' ? tr('you') : tr('assistant')), body); if (message.role === 'assistant' && message.text) { const correction = node('button', tr('rememberCorrection'), 'memory-correction'); correction.onclick = () => { pendingMemoryPrompt = null; $('memory-id').value = ''; $('memory-text').value = ''; $('memory-dialog').showModal(); $('memory-text').focus(); }; content.append(correction); } if (message.sources?.length) { const details = node('details', undefined, 'source'); details.append(node('summary', `${tr('sources')} (${message.sources.length})`)); for (const source of message.sources) details.append(node('p', `${source.name}: ${source.text}`)); content.append(details); } row.append(content); box.append(row); } $('thread').scrollTop = $('thread').scrollHeight; }
 function appendModelAdvice(info, model, hardware, recommended = false) {
@@ -50,14 +54,15 @@ function appendModelAdvice(info, model, hardware, recommended = false) {
   info.append(node('small', (recommended ? tr('deviceChoice') + ' · ' : '') + detail, 'model-advice ' + advice.fit));
 }
 function renderModels() {
+  renderRemotePanel();
   const hardware = browserHardware();
   const best = recommendedModel(CATALOG, hardware);
   const summary = $('hardware-advice');
   summary.replaceChildren(node('strong', tr('hardwareAdviceTitle')));
   const hardwareText = hardware.ramGb === null ? tr('browserRamUnknown') : tr('browserHardware').replace('{ram}', hardware.ramGb).replace('{cores}', hardware.cores ?? '?');
   summary.append(node('span', hardwareText + (best ? ' ' + tr('hardwareAdviceChoice').replace('{model}', best.name) : '')));
-  const catalog = $('catalog'); catalog.replaceChildren(); for (const item of CATALOG) { const saved = models.some(model => model.id === item.id); const card = node('div', undefined, 'model-card'); const info = node('div'); info.append(node('strong', item.name), node('small', `${(item.size/1e6).toFixed(0)} MB · ${item.license}`)); appendModelAdvice(info, item, hardware, best?.id === item.id); if (item.mobile) info.append(node('small', tr('phoneModel'))); const link = node('a', tr('source')); link.href = item.source; link.target = '_blank'; link.rel = 'noopener noreferrer'; info.append(link); card.append(info); if (!saved) { const button = node('button', tr('download'), 'action'); button.disabled = busy || !navigator.onLine; button.onclick = () => run(async () => { setBusy(true); setStatus(tr('downloading')); $('model-progress').classList.add('loading'); await downloadCurated(item.id, ({loaded,total}) => { $('model-progress').textContent = `${tr('downloading')} ${Math.round(loaded/total*100)}%`; }); setStatus(tr('verifying')); models = await savedModels(); renderModels(); await chooseModel(item.id); $('model-progress').textContent = ''; }); card.append(button); } catalog.append(card); }
-  const saved = $('saved-models'); saved.replaceChildren(); if (!models.length) saved.append(node('p', tr('chooseModel'), 'hint')); for (const model of models) { const card = node('div', undefined, 'model-card'); const info = node('div'); info.append(node('strong', model.name), node('small', modelSize(model.size))); const partCount = model.shards?.length || model.fileHandles?.length || model.files?.length || 1; if (partCount > 1) info.append(node('small', tr('splitParts').replace('{count}', partCount), 'split-parts')); appendModelAdvice(info, model, hardware); if (model.source === 'directory') info.append(node('small', `${model.folderLabel || 'usb-ai-models'}/${model.filename}`)); else if (model.source === 'download') info.append(node('small', tr('browserCache'))); const invalid = isAuxiliaryGguf(model.filename || model.shards?.[0]?.url || model.url || model.name); if (invalid) info.append(node('small', tr('auxiliaryFile'), 'error')); const needsSplit = model.source === 'directory' && Number(model.size) > WEB_FILE_LIMIT && (model.fileHandles?.length || 1) === 1 || model.source === 'file' && (model.files || []).some(file => file.size > WEB_FILE_LIMIT); if (needsSplit) info.append(node('small', tr('modelNeedsSplit'), 'error')); card.append(info); const actions = node('div', undefined, 'card-actions'); const button = node('button', invalid ? tr('invalidModel') : needsSplit ? tr('splitRequired') : loadedModelId() === model.id ? tr('loaded') : tr('load'), 'action'); button.disabled = invalid || needsSplit || busy || loadedModelId() === model.id; button.onclick = () => run(() => chooseModel(model.id)); actions.append(button); if (model.source === 'directory' && canSaveToFolder()) { const show = node('button', tr('showFolder'), 'action subtle'); show.disabled = busy; show.onclick = () => run(() => showModelFolder(model)); actions.append(show); } if (model.source === 'download' && canSaveToFolder()) { const move = node('button', tr('saveToFolder'), 'action subtle'); move.disabled = busy || !navigator.onLine; move.onclick = () => run(async () => { setBusy(true); $('model-progress').classList.add('loading'); await moveCachedToFolder(model, ({loaded,total}) => { $('model-progress').textContent = `${tr('downloading')} ${Math.round(loaded/total*100)}%`; }); models = await savedModels(); $('model-progress').classList.remove('loading'); $('model-progress').textContent = ''; renderModels(); setStatus(tr('savedToFolder')); }); actions.append(move); } const remove = node('button', tr('remove'), 'action subtle'); remove.disabled = busy; remove.onclick = () => run(async () => { if (!confirm(tr(model.source === 'directory' ? 'removeFolderReferenceConfirm' : 'deleteModelConfirm'))) return; await deleteModel(model.id); if (selectedId === model.id) selectedId = undefined; models = await savedModels(); await saveSettings(); render(); }); actions.append(remove); card.append(actions); saved.append(card); } }
+  const catalog = $('catalog'); catalog.replaceChildren(); for (const item of CATALOG) { const saved = models.some(model => model.id === item.id); const card = node('div', undefined, 'model-card'); const info = node('div'); info.append(node('strong', item.name), node('small', `${(item.size/1e6).toFixed(0)} MB · ${item.license}`)); appendModelAdvice(info, item, hardware, best?.id === item.id); if (item.mobile) info.append(node('small', tr('phoneModel'))); const link = node('a', tr('source')); link.href = item.source; link.target = '_blank'; link.rel = 'noopener noreferrer'; info.append(link); card.append(info); if (!saved) { const button = node('button', tr('download'), 'action'); button.disabled = busy || !navigator.onLine; button.onclick = () => run(async () => { setBusy(true); setStatus(tr('downloading')); $('model-progress').classList.add('loading'); await downloadCurated(item.id, ({loaded,total}) => { $('model-progress').textContent = `${tr('downloading')} ${Math.round(loaded/total*100)}%`; }); setStatus(tr('verifying')); models = await allModels(); renderModels(); await chooseModel(item.id); $('model-progress').textContent = ''; }); card.append(button); } catalog.append(card); }
+  const saved = $('saved-models'); saved.replaceChildren(); if (!models.length) saved.append(node('p', tr('chooseModel'), 'hint')); for (const model of models.filter(item => item.source !== 'remote')) { const card = node('div', undefined, 'model-card'); const info = node('div'); info.append(node('strong', model.name), node('small', modelSize(model.size))); const partCount = model.shards?.length || model.fileHandles?.length || model.files?.length || 1; if (partCount > 1) info.append(node('small', tr('splitParts').replace('{count}', partCount), 'split-parts')); appendModelAdvice(info, model, hardware); if (model.source === 'directory') info.append(node('small', `${model.folderLabel || 'usb-ai-models'}/${model.filename}`)); else if (model.source === 'download') info.append(node('small', tr('browserCache'))); const invalid = isAuxiliaryGguf(model.filename || model.shards?.[0]?.url || model.url || model.name); if (invalid) info.append(node('small', tr('auxiliaryFile'), 'error')); const needsSplit = model.source === 'directory' && Number(model.size) > WEB_FILE_LIMIT && (model.fileHandles?.length || 1) === 1 || model.source === 'file' && (model.files || []).some(file => file.size > WEB_FILE_LIMIT); if (needsSplit) info.append(node('small', tr('modelNeedsSplit'), 'error')); card.append(info); const actions = node('div', undefined, 'card-actions'); const button = node('button', invalid ? tr('invalidModel') : needsSplit ? tr('splitRequired') : loadedModelId() === model.id ? tr('loaded') : tr('load'), 'action'); button.disabled = invalid || needsSplit || busy || loadedModelId() === model.id; button.onclick = () => run(() => chooseModel(model.id)); actions.append(button); if (model.source === 'directory' && canSaveToFolder()) { const show = node('button', tr('showFolder'), 'action subtle'); show.disabled = busy; show.onclick = () => run(() => showModelFolder(model)); actions.append(show); } if (model.source === 'download' && canSaveToFolder()) { const move = node('button', tr('saveToFolder'), 'action subtle'); move.disabled = busy || !navigator.onLine; move.onclick = () => run(async () => { setBusy(true); $('model-progress').classList.add('loading'); await moveCachedToFolder(model, ({loaded,total}) => { $('model-progress').textContent = `${tr('downloading')} ${Math.round(loaded/total*100)}%`; }); models = await allModels(); $('model-progress').classList.remove('loading'); $('model-progress').textContent = ''; renderModels(); setStatus(tr('savedToFolder')); }); actions.append(move); } const remove = node('button', tr('remove'), 'action subtle'); remove.disabled = busy; remove.onclick = () => run(async () => { if (!confirm(tr(model.source === 'directory' ? 'removeFolderReferenceConfirm' : 'deleteModelConfirm'))) return; await deleteModel(model.id); if (selectedId === model.id) selectedId = undefined; models = await allModels(); await saveSettings(); render(); }); actions.append(remove); card.append(actions); saved.append(card); } }
 function renderAttachments() { const box = $('chat-attachments'); box.replaceChildren(); for (const doc of documentsForChat(documents, activeId)) { const chip = node('button', '📄 ' + doc.name, 'attachment-chip'); chip.type = 'button'; chip.title = tr('documents'); chip.onclick = () => { renderDocs(); $('docs-dialog').showModal(); }; box.append(chip); } }
 function renderDocs() { const box = $('doc-list'), legacy = $('legacy-doc-list'); box.replaceChildren(); legacy.replaceChildren(); const current = documentsForChat(documents, activeId); if (!current.length) box.append(node('p', tr('noChatDocs'), 'hint')); for (const doc of current) { const card = node('div', undefined, 'doc-card'); card.append(node('span', `${doc.name} · ${doc.chunks.length}`)); const button = node('button', tr('remove'), 'action subtle'); button.onclick = () => run(async () => { await db.remove('documents', doc.id); documents = documents.filter(item => item.id !== doc.id); render(); }); card.append(button); box.append(card); } const old = documents.filter(doc => !doc.chatId); if (old.length) { legacy.append(node('h3', tr('legacyDocs'))); for (const doc of old) { const card = node('div', undefined, 'doc-card'); card.append(node('span', doc.name)); const attach = node('button', tr('attachToChat'), 'action subtle'); attach.onclick = () => run(async () => { if (!activeId) await newChat(); doc.chatId = activeId; await db.put('documents', doc); render(); }); const remove = node('button', tr('remove'), 'action subtle'); remove.onclick = () => run(async () => { await db.remove('documents', doc.id); documents = documents.filter(item => item.id !== doc.id); render(); }); card.append(attach, remove); legacy.append(card); } } }
 function renderMemory() {
@@ -72,6 +77,13 @@ function renderMemory() {
     remove.onclick = () => run(async () => { await db.remove('memory', memory.id); memories = memories.filter(item => item.id !== memory.id); renderMemory(); });
     row.append(text, edit, remove); box.append(row);
   }
+}
+async function saveOnRemote(item) {
+  if (item.shards?.length) throw Error(tr('remoteSingleOnly'));
+  setBusy(true); setStatus(tr('remoteDownloading'), false, true);
+  const saved = await remoteDownload(remoteConfig, item);
+  remoteEntries = await remoteModels(remoteConfig); models = await allModels();
+  await chooseModel('remote:' + saved.id); setStatus(tr('ready')); render();
 }
 function renderSearch() {
   const box = $('hub-results'); box.replaceChildren();
@@ -91,7 +103,9 @@ function renderSearch() {
       const download = node('a', tr('downloadForSplit'), 'action');
       download.href = item.url;
       download.target = '_blank'; download.rel = 'noopener noreferrer';
-      card.append(download); box.append(card);
+      card.append(download);
+      if (remoteConfig) { const remoteButton = node('button', tr('saveRemote'), 'action subtle'); remoteButton.disabled = busy; remoteButton.onclick = () => run(() => saveOnRemote(item)); card.append(remoteButton); }
+      box.append(card);
       continue;
     }
     const button = node('button', installed ? tr('load') : tr('download'), 'action');
@@ -100,12 +114,14 @@ function renderSearch() {
       if (!installed) {
         setBusy(true); setStatus(tr('downloading')); $('model-progress').classList.add('loading');
         await downloadVerified(item, ({loaded,total,part,parts}) => { $('model-progress').textContent = `${tr('downloading')} ${part ? `${part}/${parts} · ` : ''}${Math.round(loaded/total*100)}%`; });
-        models = await savedModels();
+        models = await allModels();
         $('model-progress').textContent = '';
       }
       await chooseModel(item.id);
     });
-    card.append(button); box.append(card);
+    card.append(button);
+    if (remoteConfig) { const remoteButton = node('button', tr('saveRemote'), 'action subtle'); remoteButton.disabled = busy; remoteButton.onclick = () => run(() => saveOnRemote(item)); card.append(remoteButton); }
+    box.append(card);
   }
   $('hub-more').hidden = hubNext == null || hubSearching;
   $('hub-more').disabled = busy;
@@ -122,7 +138,7 @@ async function searchHub(skip = 0) {
   } catch (error) { $('hub-status').textContent = `${tr('error')}: ${error.message}`; }
   finally { hubSearching = false; renderSearch(); }
 }
-function render() { translate(); $('thinking-toggle').textContent = tr(thinking ? 'thinkingOn' : 'thinkingOff'); $('thinking-toggle').setAttribute('aria-pressed', String(thinking)); $('thinking-toggle').classList.toggle('on', thinking); renderBrowserModelWarning(); renderChats(); renderMessages(); if ($('models-dialog').open) { renderModels(); renderSearch(); } if ($('docs-dialog').open) renderDocs(); if ($('memory-dialog').open) renderMemory(); $('model-trigger').textContent = `${models.find(model => model.id === selectedId)?.name || tr('chooseModel')} ⌄`; $('send').disabled = busy; $('stop').hidden = !controller; $('attach-files').ariaLabel = tr('attachFiles'); $('attach-files').title = tr('attachFiles'); renderAttachments(); $('capability').textContent = `${navigator.gpu ? tr('capabilityGpu') : tr('capabilityWasm')} · ${navigator.onLine ? tr('private') : tr('offline')}`; $('folder-hint').textContent = tr(canSaveToFolder() ? 'folderHint' : 'folderFallbackHint'); $('choose-folder').hidden = !canSaveToFolder(); $('first-model-choice').hidden = !pendingFirstPrompt; $('download-starter-model').disabled = busy || !navigator.onLine; $('split-start').disabled = !splitSourceFile || busy || !canSaveToFolder(); $('split-cancel').hidden = !splitController; if (!canSaveToFolder()) $('split-progress').textContent = tr('splitBrowserUnavailable'); }
+function render() { translate(); document.querySelector('.local-pill').textContent = isRemote(selectedId) ? tr('remoteActive') : tr('private'); document.querySelector('.composer-note').textContent = isRemote(selectedId) ? tr('remoteDataNotice') : tr('localNote'); $('thinking-toggle').textContent = tr(thinking ? 'thinkingOn' : 'thinkingOff'); $('thinking-toggle').setAttribute('aria-pressed', String(thinking)); $('thinking-toggle').classList.toggle('on', thinking); renderBrowserModelWarning(); renderChats(); renderMessages(); if ($('models-dialog').open) { renderModels(); renderSearch(); } if ($('docs-dialog').open) renderDocs(); if ($('memory-dialog').open) renderMemory(); $('model-trigger').textContent = `${models.find(model => model.id === selectedId)?.name || tr('chooseModel')} ⌄`; $('send').disabled = busy; $('stop').hidden = !controller; $('attach-files').ariaLabel = tr('attachFiles'); $('attach-files').title = tr('attachFiles'); renderAttachments(); $('capability').textContent = `${navigator.gpu ? tr('capabilityGpu') : tr('capabilityWasm')} · ${navigator.onLine ? tr('private') : tr('offline')}`; $('folder-hint').textContent = tr(canSaveToFolder() ? 'folderHint' : 'folderFallbackHint'); $('choose-folder').hidden = !canSaveToFolder(); $('first-model-choice').hidden = !pendingFirstPrompt; $('download-starter-model').disabled = busy || !navigator.onLine; $('split-start').disabled = !splitSourceFile || busy || !canSaveToFolder(); $('split-cancel').hidden = !splitController; if (!canSaveToFolder()) $('split-progress').textContent = tr('splitBrowserUnavailable'); }
 function setBusy(value) {
   busy = value;
   $('send').disabled = value;
@@ -131,6 +147,7 @@ function setBusy(value) {
 }
 async function run(callback) { try { await callback(); } catch (error) { if (error.name === 'AbortError') { $('model-progress').classList.remove('loading'); $('model-progress').textContent = ''; setStatus(); return; } console.error(error); const message = error.message === 'SMARTPHONE_DISABLED' ? tr('phoneUnavailable') : error.message === 'MODEL_FILE_PERMISSION' ? tr('folderPermission') : error.message === 'NO_GGUF_IN_FOLDER' ? tr('noModelsInFolder') : error.message === 'INCOMPLETE_SHARDS' ? tr('incompleteShards') : error.message === 'AUXILIARY_GGUF' ? tr('auxiliaryFile') : error.message === 'MODEL_NEEDS_SPLIT' ? tr('modelNeedsSplit') : error.message === 'MODEL_STORAGE_LOW' ? tr('modelStorageLow') : error.message === 'LOAD_TIMEOUT' ? tr('loadTimeout') : error.message === 'DOCUMENT_NO_TEXT' ? tr('documentNoText') : /QuotaExceeded|storage|no space/i.test(error.name + ' ' + error.message) ? tr('storageError') : error.message; setStatus(`${tr('error')}: ${message}`, true); $('model-progress').classList.remove('loading'); $('model-progress').textContent = `${tr('error')}: ${message}`; } finally { if (busy && !controller) setBusy(false); } }
 async function chooseModel(id) {
+  if (isRemote(id)) { if (!remoteEntries.some(item => item.id === id)) throw Error(tr('remoteUnavailable')); selectedId = id; await saveSettings(); setStatus(tr('ready')); if ($('models-dialog').open) $('models-dialog').close(); render(); if (pendingFirstPrompt) { pendingFirstPrompt = false; await send(); } return; }
   if (busy && controller) return;
   setBusy(true);
   setStatus(tr('loading'), false, true);
@@ -221,12 +238,12 @@ async function send() {
   const body = $('messages').lastElementChild?.querySelector('.message-body');
   const streamView = body && window.USB_AI_RESPONSE_VIEW.streamRenderer(body, answer, language, thinking, $('thread'));
   try {
-    if (loadedModelId() !== selectedId) {
+    if (!isRemote(selectedId) && loadedModelId() !== selectedId) {
       setStatus(tr('loading'), false, true);
       await loadModel(selectedId);
       setStatus(tr('generating'), false, true);
     }
-    answer.usage = await completeWithRetry(contexts, (messages, onToken, signal) => streamChat(messages, onToken, signal, thinking), token => {
+    answer.usage = await completeWithRetry(contexts, (messages, onToken, signal) => isRemote(selectedId) ? remoteChat(remoteConfig, selectedId.slice(7), messages, onToken, signal) : streamChat(messages, onToken, signal, thinking), token => {
       answer.text += token;
       streamView?.update();
     }, controller.signal, () => {
@@ -248,7 +265,7 @@ async function send() {
     setBusy(false); render();
   }
 }
-async function init() { try { const settings = await db.get('settings','main'); language = settings?.language || preferredLanguage(); selectedId = settings?.selectedId; activeId = settings?.activeId; thinking = !!settings?.thinking; [chats, documents, models, memories] = await Promise.all([db.all('chats'), db.all('documents'), savedModels(), db.all('memory')]); if (isAuxiliaryGguf(models.find(model => model.id === selectedId)?.filename || models.find(model => model.id === selectedId)?.url || '')) { selectedId = undefined; await saveSettings(); } if (!chats.some(chat => chat.id === activeId)) activeId = chats[0]?.id; if (!models.some(model => model.id === selectedId)) selectedId = usesSafariCpu() ? undefined : models.find(isStarterModel)?.id; render(); if (needsSafariFallback(models.find(model => model.id === selectedId))) setStatus(tr('safariLargeModelWarning')); else if (isStarterModel(models.find(model => model.id === selectedId))) await run(() => chooseModel(selectedId)); } catch (error) { setStatus(`${tr('error')}: ${error.message}`, true); } }
+async function init() { try { const settings = await db.get('settings','main'); language = settings?.language || preferredLanguage(); selectedId = settings?.selectedId; activeId = settings?.activeId; thinking = !!settings?.thinking; remoteConfig = settings?.remoteConfig; [chats, documents, models, memories] = await Promise.all([db.all('chats'), db.all('documents'), savedModels(), db.all('memory')]); if (remoteConfig) { try { remoteEntries = await remoteModels(remoteConfig); models.push(...remoteEntries); } catch (error) { setStatus(tr('error') + ': ' + error.message, true); } } if (isAuxiliaryGguf(models.find(model => model.id === selectedId)?.filename || models.find(model => model.id === selectedId)?.url || '')) { selectedId = undefined; await saveSettings(); } if (!chats.some(chat => chat.id === activeId)) activeId = chats[0]?.id; if (!models.some(model => model.id === selectedId) && !isRemote(selectedId)) selectedId = usesSafariCpu() ? undefined : models.find(isStarterModel)?.id; render(); if (needsSafariFallback(models.find(model => model.id === selectedId))) setStatus(tr('safariLargeModelWarning')); else if (isStarterModel(models.find(model => model.id === selectedId))) await run(() => chooseModel(selectedId)); } catch (error) { setStatus(`${tr('error')}: ${error.message}`, true); } }
 $('prompt-form').onsubmit = event => { event.preventDefault(); run(send); };
 $('prompt').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('prompt-form').requestSubmit(); } };
 $('stop').onclick = () => controller?.abort();
@@ -265,7 +282,7 @@ $('memory-import').onchange = event => run(async () => { const file = event.targ
 document.querySelectorAll('[data-close]').forEach(button => button.onclick = () => $(button.dataset.close).close());
 $('language').onchange = () => { language = $('language').value; saveSettings(); render(); };
 $('attach-files').onclick = () => $('chat-files').click();
-$('model-file').onchange = event => run(async () => { const files = [...event.target.files]; event.target.value = ''; const result = await addLocalModel(files); models = await savedModels(); if (!result.persistent) models.push({ id:result.id, name:result.name, size:files.reduce((n,f) => n+f.size,0) }); renderModels(); setStatus(result.persistent ? tr('modelSaved') : tr('modelSession')); await chooseModel(result.id); });
+$('model-file').onchange = event => run(async () => { const files = [...event.target.files]; event.target.value = ''; const result = await addLocalModel(files); models = await allModels(); if (!result.persistent) models.push({ id:result.id, name:result.name, size:files.reduce((n,f) => n+f.size,0) }); renderModels(); setStatus(result.persistent ? tr('modelSaved') : tr('modelSession')); await chooseModel(result.id); });
 $('split-file').onchange = event => { splitSourceFile = event.target.files?.[0]; event.target.value = ''; $('split-progress').textContent = splitSourceFile ? `${splitSourceFile.name} · ${modelSize(splitSourceFile.size)}` : ''; $('split-start').disabled = !splitSourceFile || busy || !canSaveToFolder(); };
 $('split-cancel').onclick = () => splitController?.abort();
 $('split-start').onclick = () => run(async () => {
@@ -281,7 +298,7 @@ $('split-start').onclick = () => run(async () => {
     const id = crypto.randomUUID();
     await db.put('models', { id, name:file.name, source:'directory', filename:result.names[0], size:result.size,
       fileHandle:result.handles[0], fileHandles:result.handles, folderHandle:directory, folderLabel:directory.name });
-    models = await savedModels(); renderModels();
+    models = await allModels(); renderModels();
     splitSourceFile = undefined; $('split-progress').textContent = tr('splitComplete').replace('{count}', result.names.length);
     setStatus(tr('splitComplete').replace('{count}', result.names.length));
   } catch (error) {
@@ -292,7 +309,7 @@ $('split-start').onclick = () => run(async () => {
 $('use-existing-model').onclick = () => { if (canSaveToFolder()) $('choose-folder').click(); else $('model-file').click(); };
 $('choose-folder').onclick = () => run(async () => {
   const ids = await addModelsFromFolder();
-  models = await savedModels();
+  models = await allModels();
   renderModels();
   const selected = models.find(model => ids.includes(model.id) && isStarterModel(model)) || (ids.length === 1 ? models.find(model => model.id === ids[0]) : null);
   if (selected) await chooseModel(selected.id);
@@ -307,7 +324,7 @@ $('download-starter-model').onclick = () => run(async () => {
     $('model-progress').textContent = progress;
     setStatus(progress, false, true);
   });
-  models = await savedModels();
+  models = await allModels();
   await chooseModel(id);
 });
 $('hub-search-form').onsubmit = event => { event.preventDefault(); searchHub(); };
@@ -348,4 +365,43 @@ window.addEventListener('beforeinstallprompt', event => { event.preventDefault()
 $('install').onclick = async () => { if (installing) { installing.prompt(); await installing.userChoice; installing = undefined; $('install').hidden = true; } else setStatus(tr('installUnavailable')); };
 window.addEventListener('online', render); window.addEventListener('offline', render);
 if (import.meta.env.PROD && 'serviceWorker' in navigator) navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(console.warn);
+function setupRemoteUi() {
+  const section = node('section', undefined, 'split-tool');
+  section.id = 'remote-section';
+  const title = node('h3'); title.id = 'remote-title';
+  const description = node('p', undefined, 'hint'); description.id = 'remote-description';
+  const form = node('form', undefined, 'search-form'); form.id = 'remote-form';
+  const url = node('input'); url.id = 'remote-url'; url.type = 'url'; url.required = true; url.placeholder = 'https://dtiwinai.insel.ch:8081'; url.autocomplete = 'url';
+  const key = node('input'); key.id = 'remote-token'; key.type = 'password'; key.required = true; key.minLength = 32; key.autocomplete = 'off';
+  const connect = node('button', undefined, 'action'); connect.id = 'remote-connect'; connect.type = 'submit';
+  const status = node('p', undefined, 'hint'); status.id = 'remote-status'; status.setAttribute('role', 'status');
+  const list = node('div', undefined, 'cards'); list.id = 'remote-list';
+  form.append(url, key, connect); section.append(title, description, form, status, list);
+  $('hardware-advice').before(section);
+  form.onsubmit = event => { event.preventDefault(); run(async () => {
+    setBusy(true); status.textContent = tr('remoteConnecting');
+    const next = { url: url.value.trim(), token: key.value.trim() };
+    const entries = await remoteModels(next);
+    remoteConfig = next; remoteEntries = entries; models = await allModels();
+    await saveSettings(); status.textContent = tr('remoteConnected'); render();
+  }); };
+}
+function renderRemotePanel() {
+  if (!$('remote-title')) return;
+  $('remote-title').textContent = tr('remoteTitle');
+  $('remote-description').textContent = tr('remoteDescription');
+  $('remote-connect').textContent = tr('remoteConnect');
+  $('remote-token').placeholder = tr('remoteToken');
+  if (remoteConfig && !$('remote-url').value) $('remote-url').value = remoteConfig.url;
+  if (remoteConfig && !$('remote-token').value) $('remote-token').value = remoteConfig.token;
+  const list = $('remote-list'); list.replaceChildren();
+  for (const model of remoteEntries) {
+    const card = node('div', undefined, 'model-card');
+    const info = node('div'); info.append(node('strong', model.name), node('small', modelSize(model.size) + ' · dtiwinai'));
+    const button = node('button', selectedId === model.id ? tr('loaded') : tr('load'), 'action');
+    button.disabled = busy || selectedId === model.id; button.onclick = () => run(() => chooseModel(model.id));
+    card.append(info, button); list.append(card);
+  }
+}
+setupRemoteUi();
 init();
