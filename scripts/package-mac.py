@@ -73,6 +73,8 @@ def main():
     for refreshed in [BIN, LIB, OUT / "models"]:
         if refreshed.exists():
             shutil.rmtree(refreshed)
+    for obsolete in ("Avvia USB AI Rust.command", "Avvia Offllama.command"):
+        (OUT / obsolete).unlink(missing_ok=True)
     BIN.mkdir(parents=True)
     LIB.mkdir()
     (OUT / "models").mkdir()
@@ -142,8 +144,6 @@ def main():
     launcher = OUT / "Avvia LlamaNest.command"
     shutil.copy2(ROOT / "scripts/mac-launcher.command", launcher)
     launcher.chmod(0o755)
-    shutil.copy2(launcher, OUT / "Avvia USB AI Rust.command")
-    shutil.copy2(launcher, OUT / "Avvia Offllama.command")
     (OUT / "LEGGIMI.txt").write_text(
         "Doppio clic su Avvia LlamaNest.command. Il browser si apre su 127.0.0.1.\n"
         "Al primo avvio il launcher verifica i binari inclusi e rimuove la loro quarantena.\n"

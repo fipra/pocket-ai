@@ -71,6 +71,9 @@ jobs:
           foreach ($required in @('Avvia LlamaNest.cmd','Avvia LlamaNest GPU.cmd','bin/usb-ai-rust.exe','bin/llama-cli.exe','bin/llama-server.exe','bin/llama-quantize.exe','bin/gpu/llama-server.exe','bin/gpu/ggml-vulkan.dll','bin/pdftotext.exe','models/catalog.json','PocketAI-data/workspace.json','LICENSE','LICENSING_HISTORY.md')) {
             if (!(Test-Path (Join-Path $folder $required))) { throw "Package is missing $required" }
           }
+          foreach ($obsolete in @('Avvia USB AI Rust.cmd','Avvia Offllama.cmd','Avvia USB AI Rust GPU.cmd','Avvia Offllama GPU.cmd')) {
+            if (Test-Path (Join-Path $folder $obsolete)) { throw "Package contains obsolete launcher $obsolete" }
+          }
           $workspace = Get-Content (Join-Path $folder 'PocketAI-data/workspace.json') -Raw | ConvertFrom-Json
           if (@($workspace.chats).Count -ne 0) { throw 'Package contains conversations' }
           & (Join-Path $folder 'bin/llama-cli.exe') --help *> $null

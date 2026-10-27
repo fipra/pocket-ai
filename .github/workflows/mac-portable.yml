@@ -50,6 +50,8 @@ jobs:
           python3 scripts/package-mac.py
           folder="release/USB-AI-Rust-mac-${{ matrix.architecture }}"
           test -f "$folder/Avvia LlamaNest.command"
+          test ! -e "$folder/Avvia USB AI Rust.command"
+          test ! -e "$folder/Avvia Offllama.command"
           test -x "$folder/bin/usb-ai-rust"
           test -x "$folder/bin/llama-cli"
           test -x "$folder/bin/llama-server"

@@ -12,6 +12,9 @@ try {
   $bin = Join-Path $out 'bin'
   $gpuRuntime = $env:USB_AI_VULKAN_RUNTIME_DIR
   $data = Join-Path $out 'PocketAI-data'
+  foreach ($obsolete in @('Avvia USB AI Rust.cmd','Avvia Offllama.cmd','Avvia USB AI Rust GPU.cmd','Avvia Offllama GPU.cmd','Avvia LlamaNest GPU.cmd')) {
+    Remove-Item (Join-Path $out $obsolete) -Force -ErrorAction SilentlyContinue
+  }
   if (Test-Path $bin) { Remove-Item $bin -Recurse -Force }
   New-Item $bin -ItemType Directory -Force | Out-Null
   New-Item (Join-Path $out 'models') -ItemType Directory -Force | Out-Null
@@ -54,8 +57,6 @@ if errorlevel 1 (
 )
 "%~dp0bin\usb-ai-rust.exe"
 '@ | Set-Content (Join-Path $out 'Avvia LlamaNest GPU.cmd')
-    Copy-Item (Join-Path $out 'Avvia LlamaNest GPU.cmd') (Join-Path $out 'Avvia USB AI Rust GPU.cmd') -Force
-    Copy-Item (Join-Path $out 'Avvia LlamaNest GPU.cmd') (Join-Path $out 'Avvia Offllama GPU.cmd') -Force
   }
   Get-ChildItem (Join-Path $root 'models') -Filter '*.gguf' | ForEach-Object {
     $destination = Join-Path (Join-Path $out 'models') $_.Name
@@ -69,8 +70,6 @@ if errorlevel 1 (
     Copy-Item (Join-Path $root $name) (Join-Path $out $name)
   }
   '@echo off' + "`r`n" + '"%~dp0bin\usb-ai-rust.exe"' | Set-Content (Join-Path $out 'Avvia LlamaNest.cmd')
-  Copy-Item (Join-Path $out 'Avvia LlamaNest.cmd') (Join-Path $out 'Avvia USB AI Rust.cmd') -Force
-  Copy-Item (Join-Path $out 'Avvia LlamaNest.cmd') (Join-Path $out 'Avvia Offllama.cmd') -Force
   @'
 Double-click Avvia LlamaNest.cmd. The browser opens at 127.0.0.1.
 If Avvia LlamaNest GPU.cmd is present, use it to try Vulkan GPU acceleration.
