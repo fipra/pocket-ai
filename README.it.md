@@ -41,7 +41,7 @@ modelli di terzi mantengono le rispettive licenze.
 - Scelta tra modelli 0,5B, 3B, 7B e 9B con indicazione della RAM del computer e stima di compatibilità.
 - Interfaccia in inglese per impostazione predefinita; italiano, tedesco, francese e spagnolo selezionabili dal menu nella barra laterale. La preferenza resta salvata e guida la lingua delle risposte, salvo richiesta esplicita diversa.
 
-L'interfaccia si apre normalmente su `http://127.0.0.1:48157`. Se la porta è occupata, l'app sceglie automaticamente una porta libera tra `48158` e `48167` e apre l'indirizzo corretto nel browser. Il server ascolta solo sul computer locale. I dati sono salvati senza cifratura in `PocketAI-data/`.
+L'interfaccia si apre normalmente su `http://127.0.0.1:48157`. Se la porta è occupata, l'app sceglie automaticamente una porta libera tra `48158` e `48167` e apre l'indirizzo corretto nel browser. L'avvio normale ascolta solo sul computer locale. Su Windows, usa `Avvia LlamaNest LAN.cmd` oppure, nel pacchetto GPU, `Avvia LlamaNest LAN GPU.cmd` per aprire l'app anche da altri computer: per esempio `http://dtiwinai:48157/` o `http://161.62.136.186:48157/`. Questi avvii impostano `USB_AI_BIND_ADDR=0.0.0.0`; se la porta scelta è diversa, usa quella mostrata nella finestra dell'app. Consenti la porta TCP nel firewall di Windows solo per reti fidate. La modalità LAN non ha login e usa HTTP senza cifratura: chi può raggiungere la porta può accedere all'area di lavoro. I dati sono salvati senza cifratura in `PocketAI-data/`.
 
 L'addestramento e l'esportazione GGUF del Laboratorio richiedono per ora un Mac Apple Silicon con MLX-LM installato. Sia nella generazione da documento nel Fine tuning sia nella Distillazione, l'insegnante può essere un GGUF locale (offline) oppure un modello OpenRouter che consente la distillazione. OpenRouter può rispondere alle domande salvate o creare cinque esempi da un tema. Inserisci una chiave API OpenRouter in una delle due schede, scrivi parte del nome del modello e sceglilo dai suggerimenti. La stessa chiave vale per entrambe le schede e resta nello spazio dati locale non cifrato finché non la rimuovi. Estratti del documento, domande o temi inviati a OpenRouter raggiungono il provider del modello e le richieste possono comportare costi. Controlla le risposte prima di addestrare. Per leggere i Word `.docx` serve Python 3, per i PDF testuali `pdftotext`; i PDF scansionati richiedono prima OCR. Il Fine tuning non garantisce che il modello ricordi ogni dettaglio: se servono risposte esatte, consegna anche i documenti di riferimento.
 
@@ -83,6 +83,7 @@ Questa repo non contiene pesi GGUF nel controllo versione. Una copia locale del 
 Per ricreare il pacchetto da sorgente su Windows, lo script `scripts/package-windows.ps1` richiede Rust, `llama-server.exe`, `llama-cli.exe`, `llama-quantize.exe` e `pdftotext.exe`; la release sopra è generata automaticamente da GitHub Actions.
 
 ## Dati e requisiti
+
 
 - `POCKET_AI_HOME` sceglie una cartella dati alternativa.
 - `USB_AI_DIR` sceglie la cartella base che contiene `models/` e, per impostazione predefinita, `PocketAI-data/`.

@@ -12,7 +12,7 @@ try {
   $bin = Join-Path $out 'bin'
   $gpuRuntime = $env:USB_AI_VULKAN_RUNTIME_DIR
   $data = Join-Path $out 'PocketAI-data'
-  foreach ($obsolete in @('Avvia USB AI Rust.cmd','Avvia Offllama.cmd','Avvia USB AI Rust GPU.cmd','Avvia Offllama GPU.cmd','Avvia LlamaNest GPU.cmd')) {
+  foreach ($obsolete in @('Avvia USB AI Rust.cmd','Avvia Offllama.cmd','Avvia USB AI Rust GPU.cmd','Avvia Offllama GPU.cmd','Avvia LlamaNest GPU.cmd','Avvia LlamaNest LAN GPU.cmd')) {
     Remove-Item (Join-Path $out $obsolete) -Force -ErrorAction SilentlyContinue
   }
   if (Test-Path $bin) { Remove-Item $bin -Recurse -Force }
@@ -57,6 +57,12 @@ if errorlevel 1 (
 )
 "%~dp0bin\usb-ai-rust.exe"
 '@ | Set-Content (Join-Path $out 'Avvia LlamaNest GPU.cmd')
+    @'
+@echo off
+setlocal
+set "USB_AI_BIND_ADDR=0.0.0.0"
+call "%~dp0Avvia LlamaNest GPU.cmd"
+'@ | Set-Content (Join-Path $out 'Avvia LlamaNest LAN GPU.cmd')
   }
   Get-ChildItem (Join-Path $root 'models') -Filter '*.gguf' | ForEach-Object {
     $destination = Join-Path (Join-Path $out 'models') $_.Name
@@ -71,9 +77,18 @@ if errorlevel 1 (
   }
   '@echo off' + "`r`n" + '"%~dp0bin\usb-ai-rust.exe"' | Set-Content (Join-Path $out 'Avvia LlamaNest.cmd')
   @'
+@echo off
+setlocal
+set "USB_AI_BIND_ADDR=0.0.0.0"
+"%~dp0bin\usb-ai-rust.exe"
+'@ | Set-Content (Join-Path $out 'Avvia LlamaNest LAN.cmd')
+  @'
 Double-click Avvia LlamaNest.cmd. The browser opens at 127.0.0.1.
 If Avvia LlamaNest GPU.cmd is present, use it to try Vulkan GPU acceleration.
 The GPU launcher uses the CPU runtime when no Vulkan GPU is detected.
+To open LlamaNest from another computer, use Avvia LlamaNest LAN.cmd or Avvia LlamaNest LAN GPU.cmd when present.
+Then visit http://SERVER-NAME:48157/ or http://SERVER-IP:48157/ from that computer; use the port printed by the app if 48157 is busy.
+LAN mode has no login and uses HTTP. Allow inbound TCP 48157-48167 on the Windows firewall only for trusted networks.
 Keep the whole folder on the USB drive. Models and data stay here.
 Use Models > Import GGUF into models to copy an existing model, or copy GGUF files into the models folder and refresh the list.
 New downloads and imported models are stored in this models folder; PocketAI-data contains chats and older downloads.

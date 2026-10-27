@@ -68,7 +68,7 @@ jobs:
           & scripts/package-windows.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Windows package failed' }
           $folder = 'release/USB-AI-Rust-Windows-x64'
-          foreach ($required in @('Avvia LlamaNest.cmd','Avvia LlamaNest GPU.cmd','bin/usb-ai-rust.exe','bin/llama-cli.exe','bin/llama-server.exe','bin/llama-quantize.exe','bin/gpu/llama-server.exe','bin/gpu/ggml-vulkan.dll','bin/pdftotext.exe','models/catalog.json','PocketAI-data/workspace.json','LICENSE','LICENSING_HISTORY.md')) {
+          foreach ($required in @('Avvia LlamaNest.cmd','Avvia LlamaNest GPU.cmd','Avvia LlamaNest LAN.cmd','Avvia LlamaNest LAN GPU.cmd','bin/usb-ai-rust.exe','bin/llama-cli.exe','bin/llama-server.exe','bin/llama-quantize.exe','bin/gpu/llama-server.exe','bin/gpu/ggml-vulkan.dll','bin/pdftotext.exe','models/catalog.json','PocketAI-data/workspace.json','LICENSE','LICENSING_HISTORY.md')) {
             if (!(Test-Path (Join-Path $folder $required))) { throw "Package is missing $required" }
           }
           foreach ($obsolete in @('Avvia USB AI Rust.cmd','Avvia Offllama.cmd','Avvia USB AI Rust GPU.cmd','Avvia Offllama GPU.cmd')) {
@@ -114,7 +114,25 @@ jobs:
             if (!(Test-Path (Join-Path $importHome 'models/CI-Local.GGUF'))) { throw 'Imported GGUF was not saved in models' }
           } finally {
             Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
+            Wait-Process -Id $app.Id -Timeout 10 -ErrorAction SilentlyContinue
             Remove-Item Env:USB_AI_DIR -ErrorAction SilentlyContinue
+          }
+          $env:USB_AI_BIND_ADDR = '0.0.0.0'
+          $lanApp = Start-Process -FilePath (Resolve-Path (Join-Path $folder 'bin/usb-ai-rust.exe')) -PassThru -WindowStyle Hidden
+          try {
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 30; $attempt++) {
+              $status = & curl.exe --noproxy '*' -s -o NUL -w '%{http_code}' -H 'Host: dtiwinai:48157' -H 'Origin: http://dtiwinai:48157' 'http://127.0.0.1:48157/'
+              if ($status -eq '200') { $ready = $true; break }
+              Start-Sleep -Milliseconds 500
+            }
+            if (-not $ready) { throw 'LAN mode did not serve requests for the server hostname' }
+            $listener = Get-NetTCPConnection -State Listen -LocalPort 48157 -ErrorAction Stop | Where-Object LocalAddress -eq '0.0.0.0'
+            if (-not $listener) { throw 'LAN mode did not bind all IPv4 interfaces' }
+          } finally {
+            Stop-Process -Id $lanApp.Id -Force -ErrorAction SilentlyContinue
+            Wait-Process -Id $lanApp.Id -Timeout 10 -ErrorAction SilentlyContinue
+            Remove-Item Env:USB_AI_BIND_ADDR -ErrorAction SilentlyContinue
           }
           Compress-Archive -Path $folder -DestinationPath 'USB-AI-Rust-Windows-x64.zip' -Force
       - name: Upload build artifact

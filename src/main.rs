@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 use std::{
     env, fs,
     io::{self, BufRead, BufReader, Read, Write},
+    net::Ipv4Addr,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{
@@ -2214,10 +2215,20 @@ fn bind_first_available<T>(
     ))
 }
 
-fn bind_server() -> Result<(Server, u16), String> {
+fn bind_server(address: Ipv4Addr) -> Result<(Server, u16), String> {
     bind_first_available(|port| {
-        Server::http(format!("127.0.0.1:{port}")).map_err(|e| e.to_string())
+        Server::http(format!("{address}:{port}")).map_err(|e| e.to_string())
     })
+}
+
+fn configured_bind_address() -> Result<Ipv4Addr, String> {
+    let address = env::var("USB_AI_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1".into());
+    address
+        .parse()
+        .map_err(|_| "USB_AI_BIND_ADDR must be an IPv4 address".into())
+}
+fn origin_matches_host(origin: &str, host: Option<&str>) -> bool {
+    host.is_some_and(|host| origin == format!("http://{host}"))
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let packaged = env::current_exe()?
@@ -2272,18 +2283,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         app.lock().unwrap().root.join("lab"),
     )));
     let active_generation: Arc<Mutex<Option<Arc<ActiveGeneration>>>> = Arc::new(Mutex::new(None));
-    let (server, port) = bind_server()?;
-    let origin = format!("http://127.0.0.1:{port}");
-    println!("LlamaNest Rust: {origin}");
+    let bind_address = configured_bind_address()?;
+    let (server, port) = bind_server(bind_address)?;
+    println!("LlamaNest Rust: http://127.0.0.1:{port}");
+    if !bind_address.is_loopback() {
+        println!("LAN access enabled on {bind_address}:{port}");
+    }
     open_browser(port);
     for mut request in server.incoming_requests() {
         let url = request.url().to_owned();
         let method = request.method().clone();
+        let host = request
+            .headers()
+            .iter()
+            .find(|h| h.field.equiv("Host"))
+            .map(|h| h.value.as_str());
+        if bind_address.is_loopback()
+            && !matches!(host, Some(value) if value == format!("127.0.0.1:{port}") || value == format!("localhost:{port}"))
+        {
+            let _ =
+                request.respond(Response::from_string("Host not authorized").with_status_code(403));
+            continue;
+        }
         let allowed_origin = request
             .headers()
             .iter()
             .find(|h| h.field.equiv("Origin"))
-            .map(|h| h.value.as_str() == origin)
+            .map(|h| origin_matches_host(h.value.as_str(), host))
             .unwrap_or(true);
         if method == Method::Post && url == "/api/stop" && allowed_origin {
             let mut body = Vec::new();
@@ -2450,10 +2476,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 MESSAGE_MARKDOWN_CSS.as_bytes().to_vec(),
             )
         } else if method == Method::Post && url.starts_with("/lab/") {
-            let strict_origin = request
-                .headers()
-                .iter()
-                .any(|header| header.field.equiv("Origin") && header.value.as_str() == origin);
+            let strict_origin = request.headers().iter().any(|header| {
+                header.field.equiv("Origin") && origin_matches_host(header.value.as_str(), host)
+            });
             if !strict_origin {
                 (
                     403,
@@ -2680,6 +2705,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[cfg(unix)]
     #[test]
     fn stop_kills_current_generation_without_killing_model_server() {
@@ -3454,5 +3480,21 @@ mod tests {
         })
         .unwrap();
         assert_eq!((server, port), ("ready", 48158));
+    }
+    #[test]
+    fn lan_requests_accept_only_their_own_origin() {
+        assert!(origin_matches_host(
+            "http://dtiwinai:48157",
+            Some("dtiwinai:48157")
+        ));
+        assert!(origin_matches_host(
+            "http://161.62.136.186:48157",
+            Some("161.62.136.186:48157")
+        ));
+        assert!(!origin_matches_host(
+            "http://other.example:48157",
+            Some("dtiwinai:48157")
+        ));
+        assert!(!origin_matches_host("http://dtiwinai:48157", None));
     }
 }

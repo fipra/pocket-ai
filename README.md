@@ -41,7 +41,7 @@ have their own licenses.
 - Choose among curated 0.5B, 3B, 7B, and 9B models with guidance based on your computer's RAM and CPU cores.
 - Use the interface in English by default, or select Italian, German, French, or Spanish in the sidebar. The saved choice also guides the language of model responses unless you ask for another language.
 
-The app normally opens at `http://127.0.0.1:48157`. If that port is busy, it picks a free port through `48167` and opens the right address. The server listens only on your computer. Data is stored **without encryption** in `PocketAI-data/`.
+The app normally opens at `http://127.0.0.1:48157`. If that port is busy, it picks a free port through `48167` and opens the right address. The normal launcher listens only on your computer. On Windows, use `Avvia LlamaNest LAN.cmd` or, with a GPU package, `Avvia LlamaNest LAN GPU.cmd` to also open it from other computers at `http://SERVER-NAME:PORT/` or `http://SERVER-IP:PORT/`. These launchers set `USB_AI_BIND_ADDR=0.0.0.0`; the app prints the selected port. Allow that TCP port through Windows Firewall for trusted networks. LAN mode has no login and uses unencrypted HTTP, so anyone who can reach the port can access the workspace. Data is stored **without encryption** in `PocketAI-data/`.
 
 Laboratory training and GGUF export currently require an Apple Silicon Mac and an installed MLX-LM toolchain. In both Fine tuning document generation and Distillation, the teacher can be a local GGUF (offline) or an OpenRouter model that permits distillation. OpenRouter can answer saved questions or generate five examples from a topic. Enter an OpenRouter API key in either Laboratory tab, type part of a model name, and choose one of the suggestions. The same key works in both tabs and stays in the unencrypted local workspace until removed. Document excerpts, questions, or topics sent to OpenRouter reach the model provider, and requests may incur charges. Review all generated examples before training. Word `.docx` extraction uses Python 3; text PDF extraction uses `pdftotext`. Scanned PDFs need OCR first. Training on examples does not guarantee that the model will recall every detail in a document; include source documents when exact answers matter.
 
@@ -93,6 +93,7 @@ cargo run --release
 On Windows, use PowerShell to run the same Cargo command after installing Rust, `llama-server.exe`, `llama-cli.exe`, and `pdftotext.exe`. Developers can build the portable Windows folder with `scripts/package-windows.ps1`; GitHub Actions builds the downloadable ZIP automatically.
 
 ## Data, limits, and development
+
 
 - `POCKET_AI_HOME` selects another data directory. `USB_AI_DIR` selects the base directory containing `models/` and, by default, `PocketAI-data/`.
 - `LLAMA_SERVER` and `PDFTOTEXT` select alternate tool executables.
