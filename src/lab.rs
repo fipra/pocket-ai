@@ -2239,6 +2239,8 @@ fn gguf_smoke_command(model: &Path) -> Command {
         .args([
             "-ngl",
             "0",
+            "-c",
+            "512",
             "-p",
             "Hello",
             "-n",
@@ -2548,6 +2550,7 @@ mod tests {
         assert!(args.contains(&std::ffi::OsStr::new("--single-turn")));
         assert!(args.contains(&std::ffi::OsStr::new("--simple-io")));
         assert!(args.contains(&std::ffi::OsStr::new("-n")));
+        assert!(args.windows(2).any(|pair| pair == ["-c", "512"]));
     }
     #[test]
     fn cached_base_needs_weights_and_tokenizer_but_not_repository_docs() {
