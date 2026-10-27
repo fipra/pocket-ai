@@ -10,9 +10,13 @@ import shutil
 from pathlib import Path
 
 
+PREPARATION_VERSION = 2
+
+
 def source_identity(path):
     stat = path.stat()
-    return {"source": str(path.resolve()), "size": stat.st_size, "modified_ns": stat.st_mtime_ns}
+    return {"source": str(path.resolve()), "size": stat.st_size,
+            "modified_ns": stat.st_mtime_ns, "preparation_version": PREPARATION_VERSION}
 
 
 def prepared(output, identity):
@@ -32,6 +36,55 @@ def prepared(output, identity):
         return False
 
 
+def load_dense_gguf(source, torch, transformers):
+    """Load real floating point weights, not a packed GGUF inference model."""
+    options = {
+        "gguf_file": source.name,
+        "local_files_only": True,
+        "trust_remote_code": False,
+        "device_map": {"": "cpu"},
+    }
+    if hasattr(transformers, "GgufConfig"):
+        # New Transformers releases can retain GGUF blocks. Such a model
+        # cannot be serialized or used as the full-precision LoRA base.
+        options["quantization_config"] = transformers.GgufConfig(dequantize=True)
+        options["dtype"] = torch.float16
+    else:
+        # Older releases always dequantize GGUF while loading it.
+        options["torch_dtype"] = torch.float16
+    model = transformers.AutoModelForCausalLM.from_pretrained(str(source.parent), **options)
+    if (
+        getattr(model, "hf_quantizer", None) is not None
+        or getattr(model, "is_quantized", False)
+        or getattr(model.config, "quantization_config", None) is not None
+    ):
+        raise RuntimeError("GGUF loading did not produce a dense training model")
+    return model
+
+
+def restore_gguf_special_tokens(source, tokenizer, model):
+    from gguf import GGUFReader
+
+    reader = GGUFReader(str(source))
+    vocabulary = reader.get_field("tokenizer.ggml.tokens")
+    if vocabulary is None:
+        raise ValueError("The selected GGUF has no tokenizer vocabulary")
+    for kind in ("bos", "eos"):
+        special = reader.get_field(f"tokenizer.ggml.{kind}_token_id")
+        if special is None:
+            continue
+        token_id = special.contents()
+        if not isinstance(token_id, int) or not 0 <= token_id < len(vocabulary.data):
+            raise ValueError(f"The selected GGUF has an invalid {kind} token ID")
+        token = vocabulary.contents(token_id)
+        if tokenizer.convert_tokens_to_ids(token) != token_id:
+            raise ValueError(f"The imported tokenizer changed the GGUF {kind} token ID")
+        setattr(tokenizer, f"{kind}_token", token)
+        setattr(model.config, f"{kind}_token_id", token_id)
+        if getattr(model, "generation_config", None) is not None:
+            setattr(model.generation_config, f"{kind}_token_id", token_id)
+
+
 def prepare(source, output):
     source = Path(source)
     output = Path(output)
@@ -49,7 +102,8 @@ def prepare(source, output):
         raise RuntimeError("Not enough free disk space to unpack this GGUF for fine tuning")
     try:
         import torch
-        from transformers import AutoModelForCausalLM, AutoTokenizer
+        import transformers
+        from transformers import AutoTokenizer
     except ImportError as error:
         raise RuntimeError("GGUF conversion tools are missing. Run the fine tuning installer.") from error
     print("Unpacking GGUF into a trainable model; this can take several minutes", flush=True)
@@ -63,10 +117,8 @@ def prepare(source, output):
         )
         if not tokenizer.chat_template:
             raise ValueError("This GGUF has no chat template. Choose an instruct/chat GGUF that includes tokenizer.chat_template.")
-        model = AutoModelForCausalLM.from_pretrained(
-            str(source.parent), gguf_file=source.name, local_files_only=True,
-            trust_remote_code=False, torch_dtype=torch.float16, device_map={"": "cpu"},
-        )
+        model = load_dense_gguf(source, torch, transformers)
+        restore_gguf_special_tokens(source, tokenizer, model)
         model.save_pretrained(temporary, safe_serialization=True, max_shard_size="2GB")
         tokenizer.save_pretrained(temporary)
         (temporary / "source.json").write_text(json.dumps(identity), encoding="utf-8")
