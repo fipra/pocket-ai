@@ -35,12 +35,15 @@ modelli di terzi mantengono le rispettive licenze.
 - Quantizzazione locale dei GGUF in Q8_0, Q4_K_M, Q3_K_M o Q2_K nelle versioni Mac e Windows.
 - Importazione di PDF testuali, TXT e Markdown (massimo 20 MB per file).
 - Ricerca per parole chiave nei documenti, con estratti e numeri di pagina per i PDF.
+- Nel Laboratorio locale, creazione di esempi da PDF testuali, Word `.docx`, TXT o Markdown, revisione delle risposte, Fine tuning di un alunno Qwen supportato ed esportazione di un GGUF per la chat desktop.
 - Conversazioni persistenti ed esportazione Markdown.
 - Pacchetti portabili separati per Mac e Windows.
 - Scelta tra modelli 0,5B, 3B, 7B e 9B con indicazione della RAM del computer e stima di compatibilità.
 - Interfaccia in inglese per impostazione predefinita; italiano, tedesco, francese e spagnolo selezionabili dal menu nella barra laterale. La preferenza resta salvata e guida la lingua delle risposte, salvo richiesta esplicita diversa.
 
 L'interfaccia si apre normalmente su `http://127.0.0.1:48157`. Se la porta è occupata, l'app sceglie automaticamente una porta libera tra `48158` e `48167` e apre l'indirizzo corretto nel browser. Il server ascolta solo sul computer locale. I dati sono salvati senza cifratura in `PocketAI-data/`.
+
+L'addestramento e l'esportazione GGUF del Laboratorio richiedono per ora un Mac Apple Silicon con MLX-LM installato. Sia nella generazione da documento nel Fine tuning sia nella Distillazione, l'insegnante può essere un GGUF locale (offline) oppure un modello OpenRouter che consente la distillazione. OpenRouter può rispondere alle domande salvate o creare cinque esempi da un tema. Inserisci una chiave API OpenRouter in una delle due schede, scrivi parte del nome del modello e sceglilo dai suggerimenti. La stessa chiave vale per entrambe le schede e resta nello spazio dati locale non cifrato finché non la rimuovi. Estratti del documento, domande o temi inviati a OpenRouter raggiungono il provider del modello e le richieste possono comportare costi. Controlla le risposte prima di addestrare. Per leggere i Word `.docx` serve Python 3, per i PDF testuali `pdftotext`; i PDF scansionati richiedono prima OCR. Il Fine tuning non garantisce che il modello ricordi ogni dettaglio: se servono risposte esatte, consegna anche i documenti di riferimento.
 
 In **Modelli → Quantizza modello**, scegli un GGUF e il livello desiderato. L'app verifica una stima della RAM e lo spazio libero, mostra i byte scritti e permette di annullare. L'originale resta intatto; il risultato viene aggiunto alla libreria con un suffisso come `-Q3_K_M.gguf`. Una seconda quantizzazione può peggiorare molto la qualità e richiede una conferma esplicita. Per risultati migliori usa un originale F16/BF16/F32. I vecchi ZIP delle release potrebbero non includere ancora `llama-quantize`: crea il pacchetto dal sorgente aggiornato o scarica una nuova release che lo include. La Web autonoma offre un link alle versioni locali.
 

@@ -11,7 +11,222 @@ use std::{
 };
 
 const MAX_DATASET: usize = 2 * 1024 * 1024;
-const BASE_MODEL: &str = "Qwen/Qwen2.5-0.5B-Instruct";
+const MAX_DOCUMENT_UPLOAD: usize = 20 * 1024 * 1024;
+const MAX_DOCUMENT_TEXT: usize = 1024 * 1024;
+const OPENROUTER_MODELS_URL: &str = "https://openrouter.ai/api/v1/models";
+const OPENROUTER_CHAT_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
+
+fn valid_openrouter_key(key: &str) -> bool {
+    (10..=256).contains(&key.len())
+        && key
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+}
+
+fn encode_query(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+            encoded.push(byte as char);
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    encoded
+}
+
+fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(path).map_err(|e| e.to_string())?;
+    file.write_all(bytes).map_err(|e| e.to_string())
+}
+
+fn openrouter_models(key: &str, query: &str) -> Result<Vec<Value>, String> {
+    if query.chars().count() < 2 || query.chars().count() > 160 {
+        return Err("openrouterSearchLength".into());
+    }
+    let url = format!(
+        "{OPENROUTER_MODELS_URL}?distillable=true&output_modalities=text&q={}",
+        encode_query(query)
+    );
+    let mut child = Command::new("curl")
+        .args([
+            "--silent",
+            "--show-error",
+            "--fail",
+            "--max-time",
+            "20",
+            "--max-filesize",
+            "2000000",
+            "--config",
+            "-",
+            "--url",
+            &url,
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| "openrouterCurlMissing")?;
+    let config = format!("header = \"Authorization: Bearer {key}\"\n");
+    child
+        .stdin
+        .take()
+        .ok_or("openrouterUnavailable")?
+        .write_all(config.as_bytes())
+        .map_err(|_| "openrouterUnavailable")?;
+    let output = child
+        .wait_with_output()
+        .map_err(|_| "openrouterUnavailable")?;
+    if !output.status.success() || output.stdout.len() > 2_000_000 {
+        return Err("openrouterUnavailable".into());
+    }
+    let value: Value =
+        serde_json::from_slice(&output.stdout).map_err(|_| "openrouterUnavailable")?;
+    Ok(value["data"]
+        .as_array()
+        .ok_or("openrouterUnavailable")?
+        .iter()
+        .filter_map(|model| {
+            let id = model["id"].as_str()?;
+            let name = model["name"].as_str()?;
+            if id.len() > 160
+                || !id.contains('/')
+                || !id.bytes().all(|b| {
+                    b.is_ascii_alphanumeric() || matches!(b, b'/' | b'.' | b'_' | b'-' | b':')
+                })
+            {
+                return None;
+            }
+            Some(json!({"id":id,"name":name}))
+        })
+        .take(30)
+        .collect())
+}
+
+fn openrouter_completion(
+    job: &Arc<Mutex<Job>>,
+    root: &Path,
+    key: &str,
+    model: &str,
+    prompt: &str,
+) -> Result<String, String> {
+    let token = id();
+    let body_path = root.join(format!("openrouter-{token}.request"));
+    let response_path = root.join(format!("openrouter-{token}.response"));
+    let status_path = root.join(format!("openrouter-{token}.status"));
+    let result = (|| -> Result<String, String> {
+        let body = json!({"model":model,"messages":[{"role":"user","content":prompt}],
+            "max_tokens":1800,"temperature":0.2,"stream":false});
+        write_private_file(&body_path, body.to_string().as_bytes())?;
+        write_private_file(&response_path, b"")?;
+        let status_file = fs::File::create(&status_path).map_err(|e| e.to_string())?;
+        let mut child = Command::new("curl")
+            .args([
+                "--silent",
+                "--show-error",
+                "--max-time",
+                "180",
+                "--connect-timeout",
+                "15",
+                "--max-filesize",
+                "2000000",
+                "--config",
+                "-",
+                "--header",
+                "Content-Type: application/json",
+                "--data-binary",
+            ])
+            .arg(format!("@{}", body_path.display()))
+            .arg("--output")
+            .arg(&response_path)
+            .args(["--write-out", "%{http_code}", "--url", OPENROUTER_CHAT_URL])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::from(status_file))
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|_| "openrouterCurlMissing")?;
+        let config = format!("header = \"Authorization: Bearer {key}\"\n");
+        if child
+            .stdin
+            .take()
+            .ok_or("openrouterUnavailable")?
+            .write_all(config.as_bytes())
+            .is_err()
+        {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("openrouterUnavailable".into());
+        }
+        {
+            let mut guard = job.lock().unwrap();
+            if guard.cancelled {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("openrouterCancelled".into());
+            }
+            guard.child = Some(child);
+        }
+        loop {
+            let mut guard = job.lock().unwrap();
+            let done = guard
+                .child
+                .as_mut()
+                .ok_or("openrouterUnavailable")?
+                .try_wait()
+                .map_err(|_| "openrouterUnavailable")?;
+            if guard.cancelled {
+                if let Some(mut child) = guard.child.take() {
+                    let _ = child.wait();
+                }
+                return Err("openrouterCancelled".into());
+            }
+            if let Some(status) = done {
+                guard.child = None;
+                if !status.success() {
+                    return Err("openrouterUnavailable".into());
+                }
+                break;
+            }
+            drop(guard);
+            thread::sleep(Duration::from_millis(200));
+        }
+        let http_status = fs::read_to_string(&status_path).map_err(|_| "openrouterUnavailable")?;
+        match http_status.trim() {
+            "200" => {}
+            "401" | "403" => return Err("openrouterUnauthorized".into()),
+            "429" => return Err("openrouterRateLimit".into()),
+            _ => return Err("openrouterUnavailable".into()),
+        }
+        if fs::metadata(&response_path)
+            .map_err(|_| "openrouterUnavailable")?
+            .len()
+            > 2_000_000
+        {
+            return Err("openrouterUnavailable".into());
+        }
+        let response: Value =
+            serde_json::from_slice(&fs::read(&response_path).map_err(|_| "openrouterUnavailable")?)
+                .map_err(|_| "openrouterUnavailable")?;
+        response["choices"][0]["message"]["content"]
+            .as_str()
+            .filter(|value| !value.trim().is_empty())
+            .map(str::to_owned)
+            .ok_or_else(|| "openrouterEmptyResponse".into())
+    })();
+    let _ = fs::remove_file(body_path);
+    let _ = fs::remove_file(response_path);
+    let _ = fs::remove_file(status_path);
+    result
+}
+const DEFAULT_STUDENT: &str = "Qwen/Qwen2.5-0.5B-Instruct";
+const STUDENT_MODELS: [&str; 2] = [DEFAULT_STUDENT, "Qwen/Qwen2.5-1.5B-Instruct"];
 
 #[derive(Clone, Debug)]
 struct Example {
@@ -84,6 +299,96 @@ fn write_examples(path: &Path, examples: &[Example]) -> Result<(), String> {
 
 fn read_examples(path: &Path) -> Result<Vec<Example>, String> {
     parse_examples(&fs::read(path).map_err(|e| e.to_string())?)
+}
+
+fn document_text(name: &str, bytes: &[u8], root: &Path) -> Result<String, String> {
+    if name.is_empty()
+        || name.len() > 160
+        || name.starts_with('.')
+        || name.contains('/')
+        || name.contains('\\')
+        || bytes.is_empty()
+    {
+        return Err("documentInvalidFile".into());
+    }
+    if bytes.len() > MAX_DOCUMENT_UPLOAD {
+        return Err("documentTooLarge".into());
+    }
+    let extension = Path::new(name)
+        .extension()
+        .and_then(|part| part.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let text = if matches!(extension.as_str(), "txt" | "md") {
+        std::str::from_utf8(bytes)
+            .map_err(|_| "documentInvalidText")?
+            .to_owned()
+    } else if extension == "pdf" || extension == "docx" {
+        fs::create_dir_all(root).map_err(|e| e.to_string())?;
+        let token = id();
+        let temporary = root.join(format!("document-{token}.{extension}"));
+        fs::write(&temporary, bytes).map_err(|e| e.to_string())?;
+        if extension == "pdf" {
+            let extracted = root.join(format!("document-{token}.txt"));
+            let status = Command::new(tool_path("PDFTOTEXT", "pdftotext"))
+                .arg("-layout")
+                .arg(&temporary)
+                .arg(&extracted)
+                .status();
+            let _ = fs::remove_file(&temporary);
+            let status = status.map_err(|_| "documentExtractorMissing")?;
+            if !status.success() {
+                let _ = fs::remove_file(&extracted);
+                return Err("documentUnreadable".into());
+            }
+            let size = fs::metadata(&extracted)
+                .map_err(|_| "documentUnreadable")?
+                .len();
+            if size > MAX_DOCUMENT_TEXT as u64 {
+                let _ = fs::remove_file(&extracted);
+                return Err("documentTextTooLong".into());
+            }
+            let text = fs::read_to_string(&extracted);
+            let _ = fs::remove_file(&extracted);
+            text.map_err(|_| "documentUnreadable")?
+        } else {
+            const DOCX_TEXT: &str = r#"import sys, zipfile, xml.etree.ElementTree as ET
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    info = archive.getinfo('word/document.xml')
+    if info.file_size > 8 * 1024 * 1024:
+        raise ValueError('document XML too large')
+    root = ET.fromstring(archive.read(info))
+    ns = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+    for paragraph in root.iter(ns + 'p'):
+        line = ''.join(node.text or '' for node in paragraph.iter(ns + 't'))
+        if line.strip():
+            print(line)
+"#;
+            let output = Command::new("python3")
+                .args(["-c", DOCX_TEXT])
+                .arg(&temporary)
+                .output();
+            let _ = fs::remove_file(&temporary);
+            let output = output.map_err(|_| "documentExtractorMissing")?;
+            if !output.status.success() {
+                return Err("documentUnreadable".into());
+            }
+            if output.stdout.len() > MAX_DOCUMENT_TEXT {
+                return Err("documentTextTooLong".into());
+            }
+            String::from_utf8(output.stdout).map_err(|_| "documentInvalidText")?
+        }
+    } else {
+        return Err("documentUnsupported".into());
+    };
+    let text = text.replace('\0', "").replace("\r\n", "\n");
+    if text.trim().is_empty() {
+        return Err("documentNoText".into());
+    }
+    if text.len() > MAX_DOCUMENT_TEXT {
+        return Err("documentTextTooLong".into());
+    }
+    Ok(text.trim().to_owned())
 }
 
 pub struct Job {
@@ -174,19 +479,165 @@ pub struct Service {
 }
 
 impl Service {
+    fn openrouter_key(&self) -> Result<String, String> {
+        let key = fs::read_to_string(self.root.join("openrouter-key.txt"))
+            .map_err(|_| "openrouterKeyMissing")?;
+        let key = key.trim().to_owned();
+        if !valid_openrouter_key(&key) {
+            return Err("openrouterKeyMissing".into());
+        }
+        Ok(key)
+    }
+
+    pub fn save_openrouter_key(&mut self, key: &str) -> Result<Value, String> {
+        if self.busy() {
+            return Err("Wait for the current lab job to finish".into());
+        }
+        let key = key.trim();
+        if !valid_openrouter_key(key) {
+            return Err("openrouterInvalidKey".into());
+        }
+        fs::create_dir_all(&self.root).map_err(|e| e.to_string())?;
+        let temporary = self.root.join(format!("openrouter-key.{}.part", id()));
+        write_private_file(&temporary, key.as_bytes())?;
+        let file = fs::File::open(&temporary).map_err(|e| e.to_string())?;
+        file.sync_all().map_err(|e| e.to_string())?;
+        let target = self.root.join("openrouter-key.txt");
+        let backup = self.root.join(format!("openrouter-key.{}.backup", id()));
+        let had_target = target.is_file();
+        if had_target {
+            fs::rename(&target, &backup).map_err(|e| e.to_string())?;
+        }
+        if let Err(error) = fs::rename(&temporary, &target) {
+            if had_target {
+                let _ = fs::rename(&backup, &target);
+            }
+            let _ = fs::remove_file(&temporary);
+            return Err(error.to_string());
+        }
+        let _ = fs::remove_file(backup);
+        Ok(self.status())
+    }
+
+    pub fn remove_openrouter_key(&mut self) -> Result<Value, String> {
+        if self.busy() {
+            return Err("Wait for the current lab job to finish".into());
+        }
+        let path = self.root.join("openrouter-key.txt");
+        if path.is_file() {
+            fs::remove_file(path).map_err(|e| e.to_string())?;
+        }
+        Ok(self.status())
+    }
+
+    pub fn search_openrouter_models(&self, query: &str) -> Result<Value, String> {
+        let key = self.openrouter_key()?;
+        Ok(json!({"models":openrouter_models(&key, query)?}))
+    }
+
+    fn document_meta(&self) -> Option<Value> {
+        serde_json::from_slice(&fs::read(self.root.join("document.json")).ok()?).ok()
+    }
+
+    fn document_source(&self) -> Result<String, String> {
+        let meta = self.document_meta().ok_or("documentMissing")?;
+        let file = meta["file"].as_str().ok_or("documentMissing")?;
+        if !file.starts_with("source-")
+            || !file.ends_with(".txt")
+            || file.contains('/')
+            || file.contains('\\')
+        {
+            return Err("documentMissing".into());
+        }
+        let text = fs::read_to_string(self.root.join(file)).map_err(|_| "documentMissing")?;
+        if text.is_empty() || text.len() > MAX_DOCUMENT_TEXT {
+            return Err("documentMissing".into());
+        }
+        Ok(text)
+    }
+
+    pub fn upload_document(&mut self, name: &str, bytes: &[u8]) -> Result<Value, String> {
+        if self.busy() {
+            return Err("Wait for the current lab job to finish".into());
+        }
+        let text = document_text(name, bytes, &self.root)?;
+        fs::create_dir_all(&self.root).map_err(|e| e.to_string())?;
+        let file = format!("source-{}.txt", id());
+        let old = self.document_meta();
+        fs::write(self.root.join(&file), &text).map_err(|e| e.to_string())?;
+        let metadata = json!({"name":name,"file":file,"characters":text.chars().count()});
+        let temporary = self.root.join("document.json.part");
+        let target = self.root.join("document.json");
+        fs::write(&temporary, metadata.to_string()).map_err(|e| e.to_string())?;
+        let backup = self.root.join(format!("document.{}.backup", id()));
+        let had_target = target.is_file();
+        if had_target {
+            fs::rename(&target, &backup).map_err(|e| e.to_string())?;
+        }
+        if let Err(error) = fs::rename(&temporary, &target) {
+            if had_target {
+                let _ = fs::rename(&backup, &target);
+            }
+            let _ = fs::remove_file(self.root.join(&file));
+            return Err(error.to_string());
+        }
+        let _ = fs::remove_file(backup);
+        if let Some(old_file) = old.and_then(|meta| meta["file"].as_str().map(str::to_owned)) {
+            if old_file.starts_with("source-")
+                && old_file.ends_with(".txt")
+                && !old_file.contains('/')
+                && !old_file.contains('\\')
+            {
+                let _ = fs::remove_file(self.root.join(old_file));
+            }
+        }
+        Ok(self.status())
+    }
+
+    fn student_model(&self) -> &'static str {
+        let saved = fs::read_to_string(self.root.join("student-model.txt")).unwrap_or_default();
+        STUDENT_MODELS
+            .iter()
+            .copied()
+            .find(|model| *model == saved.trim())
+            .unwrap_or(DEFAULT_STUDENT)
+    }
+
+    pub fn select_student(&mut self, model: &str) -> Result<Value, String> {
+        if self.busy() {
+            return Err("A lab job is already running".into());
+        }
+        if !STUDENT_MODELS.contains(&model) {
+            return Err("Unsupported student model".into());
+        }
+        fs::create_dir_all(&self.root).map_err(|e| e.to_string())?;
+        let temporary = self.root.join("student-model.txt.part");
+        fs::write(&temporary, model).map_err(|e| e.to_string())?;
+        fs::rename(&temporary, self.root.join("student-model.txt")).map_err(|e| e.to_string())?;
+        Ok(self.status())
+    }
+
     fn latest_adapter(&self) -> Option<PathBuf> {
+        let student = self.student_model();
         fs::read_dir(self.root.join("runs"))
             .ok()?
             .filter_map(Result::ok)
             .map(|entry| entry.path().join("adapter"))
             .filter(|path| {
                 let eligible = path.parent().is_some_and(|run| {
+                    let manifest = fs::read(run.join("manifest.json"))
+                        .ok()
+                        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok());
+                    if !manifest
+                        .as_ref()
+                        .is_some_and(|manifest| manifest["baseModel"] == student)
+                    {
+                        return false;
+                    }
                     if run.join(".complete").is_file() {
                         return true;
                     }
-                    fs::read(run.join("manifest.json"))
-                        .ok()
-                        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+                    manifest
                         .and_then(|manifest| manifest["validationExamples"].as_u64())
                         .is_some_and(|count| count > 0)
                 });
@@ -227,7 +678,7 @@ impl Service {
         }
         let manifest: Value =
             serde_json::from_slice(&fs::read(run.join("manifest.json")).ok()?).ok()?;
-        if manifest["baseModel"] != BASE_MODEL
+        if manifest["baseModel"] != self.student_model()
             || manifest["method"] != "LoRA"
             || manifest["validationExamples"].as_u64() != Some(0)
         {
@@ -293,8 +744,8 @@ impl Service {
         let distilled_count = self.rows("distilled").map_or(0, |rows| rows.len());
         json!({"trainingCount":training_count,"promptCount":prompt_count,"distilledCount":distilled_count,
             "job":self.job.as_ref().map(|job|job.lock().unwrap().status()),
-            "baseModel":BASE_MODEL,"trainSupported":cfg!(all(target_os="macos", target_arch="aarch64")),
-            "workspace":self.root,"adapter":self.latest_adapter(),"adapterFresh":self.adapter_fresh(),
+            "baseModel":self.student_model(),"studentModels":STUDENT_MODELS,"trainSupported":cfg!(all(target_os="macos", target_arch="aarch64")),
+            "workspace":self.root,"document":self.document_meta(),"openrouterConfigured":self.openrouter_key().is_ok(),"adapter":self.latest_adapter(),"adapterFresh":self.adapter_fresh(),
             "canContinue":self.continuation_adapter(&training).is_some()})
     }
 
@@ -321,6 +772,102 @@ impl Service {
             None => json!({"prompt":row.prompt}),
         }).collect::<Vec<_>>() }),
         )
+    }
+
+    fn save_auto_pairs(&mut self, pairs: &[Example]) -> Result<(), String> {
+        if pairs.len() != 5 || pairs.iter().any(|pair| pair.completion.is_none()) {
+            return Err("Five complete examples are required".into());
+        }
+        let questions = pairs
+            .iter()
+            .map(|pair| Example {
+                prompt: pair.prompt.clone(),
+                completion: None,
+            })
+            .collect::<Vec<_>>();
+        fs::create_dir_all(&self.root).map_err(|e| e.to_string())?;
+        let suffix = id();
+        let prompt_path = self.root.join("prompts.jsonl");
+        let answer_path = self.root.join("distilled.jsonl");
+        let prompt_part = self.root.join(format!("prompts.{suffix}.part"));
+        let answer_part = self.root.join(format!("distilled.{suffix}.part"));
+        write_examples(&prompt_part, &questions)?;
+        write_examples(&answer_part, pairs)?;
+        let prompt_backup = self.root.join(format!("prompts.{suffix}.backup"));
+        let answer_backup = self.root.join(format!("distilled.{suffix}.backup"));
+        let had_prompts = prompt_path.is_file();
+        let had_answers = answer_path.is_file();
+        let result = (|| -> Result<(), String> {
+            if had_prompts {
+                fs::rename(&prompt_path, &prompt_backup).map_err(|e| e.to_string())?;
+            }
+            if had_answers {
+                fs::rename(&answer_path, &answer_backup).map_err(|e| e.to_string())?;
+            }
+            fs::rename(&answer_part, &answer_path).map_err(|e| e.to_string())?;
+            fs::rename(&prompt_part, &prompt_path).map_err(|e| e.to_string())?;
+            Ok(())
+        })();
+        if let Err(error) = result {
+            if !had_prompts || prompt_backup.is_file() {
+                let _ = fs::remove_file(&prompt_path);
+            }
+            if !had_answers || answer_backup.is_file() {
+                let _ = fs::remove_file(&answer_path);
+            }
+            if had_prompts && prompt_backup.is_file() {
+                let _ = fs::rename(&prompt_backup, &prompt_path);
+            }
+            if had_answers && answer_backup.is_file() {
+                let _ = fs::rename(&answer_backup, &answer_path);
+            }
+            let _ = fs::remove_file(&prompt_part);
+            let _ = fs::remove_file(&answer_part);
+            return Err(error);
+        }
+        let _ = fs::remove_file(prompt_backup);
+        let _ = fs::remove_file(answer_backup);
+        self.prompts = Some(prompt_path);
+        Ok(())
+    }
+
+    fn append_document_pairs(&mut self, pairs: &[Example]) -> Result<(), String> {
+        if pairs.is_empty() || pairs.iter().any(|pair| pair.completion.is_none()) {
+            return Err("documentNoExamples".into());
+        }
+        let mut combined = self.rows("training")?;
+        if combined.len() + pairs.len() > 200 {
+            return Err("documentExampleLimit".into());
+        }
+        let mut seen = combined
+            .iter()
+            .map(|row| row.prompt.to_lowercase())
+            .collect::<std::collections::HashSet<_>>();
+        for pair in pairs {
+            if !seen.insert(pair.prompt.to_lowercase()) {
+                return Err("documentDuplicateQuestion".into());
+            }
+            combined.push(pair.clone());
+        }
+        fs::create_dir_all(&self.root).map_err(|e| e.to_string())?;
+        let target = self.root.join("training.jsonl");
+        let temporary = self.root.join(format!("training.{}.part", id()));
+        write_examples(&temporary, &combined)?;
+        let backup = self.root.join(format!("training.{}.backup", id()));
+        let had_target = target.is_file();
+        if had_target {
+            fs::rename(&target, &backup).map_err(|e| e.to_string())?;
+        }
+        if let Err(error) = fs::rename(&temporary, &target) {
+            if had_target {
+                let _ = fs::rename(&backup, &target);
+            }
+            let _ = fs::remove_file(&temporary);
+            return Err(error.to_string());
+        }
+        let _ = fs::remove_file(backup);
+        self.training = Some(target);
+        Ok(())
     }
 
     pub fn save(&mut self, kind: &str, rows: &Value) -> Result<Value, String> {
@@ -443,7 +990,7 @@ pub fn start_preview(service: Arc<Mutex<Service>>, prompt: &str) -> Result<Value
     if prompt.trim().is_empty() || prompt.chars().count() > 1000 {
         return Err("Preview prompt must be between 1 and 1000 characters".into());
     }
-    let (adapter, root, job) = {
+    let (adapter, student, root, job) = {
         let mut lab = service.lock().unwrap();
         if lab.busy() {
             return Err("A lab job is already running".into());
@@ -452,9 +999,10 @@ pub fn start_preview(service: Arc<Mutex<Service>>, prompt: &str) -> Result<Value
             return Err("Retrain the model with the current examples before previewing".into());
         }
         let adapter = lab.latest_adapter().ok_or("Train an adapter first")?;
+        let student = lab.student_model();
         let job = Arc::new(Mutex::new(Job::new("preview", 1)));
         lab.job = Some(job.clone());
-        (adapter, lab.root.clone(), job)
+        (adapter, student, lab.root.clone(), job)
     };
     let prompt = prompt.trim().to_owned();
     thread::spawn(move || {
@@ -470,7 +1018,7 @@ pub fn start_preview(service: Arc<Mutex<Service>>, prompt: &str) -> Result<Value
             let log = fs::File::create(&log_path).map_err(|e| e.to_string())?;
             let answer = fs::File::create(&answer_path).map_err(|e| e.to_string())?;
             let child = Command::new(tool_path("MLX_LM_GENERATE", "mlx_lm.generate"))
-                .args(["--model", BASE_MODEL, "--adapter-path"])
+                .args(["--model", student, "--adapter-path"])
                 .arg(adapter)
                 .args([
                     "--prompt",
@@ -552,14 +1100,10 @@ pub fn start_preview(service: Arc<Mutex<Service>>, prompt: &str) -> Result<Value
 pub fn start_distill(
     service: Arc<Mutex<Service>>,
     app: Arc<Mutex<App>>,
+    provider: &str,
     teacher: &str,
 ) -> Result<Value, String> {
-    let teacher_path = {
-        let guard = app
-            .try_lock()
-            .map_err(|_| "Chat is busy; try again when it finishes")?;
-        guard.model_path(teacher)?
-    };
+    let teacher_source = resolve_teacher(&service, &app, provider, teacher)?;
     let (examples, root, job) = {
         let mut lab = service.lock().unwrap();
         if lab.busy() {
@@ -578,6 +1122,7 @@ pub fn start_distill(
     };
     thread::spawn(move || {
         let result = (|| -> Result<(), String> {
+            verify_cloud_teacher(&teacher_source, &job)?;
             fs::create_dir_all(&root).map_err(|e| e.to_string())?;
             let output = root.join("distilled.jsonl.part");
             let mut completed = Vec::new();
@@ -585,20 +1130,7 @@ pub fn start_distill(
                 if job.lock().unwrap().cancelled {
                     return Ok(());
                 }
-                let generation = Arc::new(ActiveGeneration::new("lab".into(), id()));
-                {
-                    let mut guard = job.lock().unwrap();
-                    guard.phase = "running";
-                    guard.generation = Some(generation.clone());
-                }
-                let answer = {
-                    let mut app = app.lock().unwrap();
-                    app.infer_stream(&teacher_path, &example.prompt, &mut |_| Ok(()), &generation)
-                        .map(|(answer, _)| answer)
-                }?;
-                {
-                    job.lock().unwrap().generation = None;
-                }
+                let answer = teacher_answer(&teacher_source, &job, &app, &root, &example.prompt)?;
                 if job.lock().unwrap().cancelled {
                     return Ok(());
                 }
@@ -619,6 +1151,290 @@ pub fn start_distill(
         })();
         let mut guard = job.lock().unwrap();
         guard.generation = None;
+        guard.child = None;
+        guard.phase = if guard.cancelled {
+            "cancelled"
+        } else if result.is_ok() {
+            "complete"
+        } else {
+            "failed"
+        };
+        guard.error = result.err();
+    });
+    Ok(service.lock().unwrap().status())
+}
+
+fn parse_generated_pairs(output: &str) -> Result<Vec<Example>, String> {
+    let start = output.find('[').ok_or("teacherInvalidList")?;
+    let end = output.rfind(']').ok_or("teacherInvalidList")?;
+    if end < start {
+        return Err("teacherInvalidList".into());
+    }
+    let value: Value =
+        serde_json::from_str(&output[start..=end]).map_err(|_| "teacherInvalidJson")?;
+    let array = value.as_array().ok_or("teacherInvalidList")?;
+    if array.len() < 5 {
+        return Err("teacherTooFew".into());
+    }
+    let mut seen = std::collections::HashSet::new();
+    array
+        .iter()
+        .take(5)
+        .map(|row| {
+            let prompt = row["prompt"]
+                .as_str()
+                .map(str::trim)
+                .filter(|value| !value.is_empty() && value.chars().count() <= 2000)
+                .ok_or("teacherBadQuestion")?;
+            let completion = row["completion"]
+                .as_str()
+                .map(str::trim)
+                .filter(|value| !value.is_empty() && value.chars().count() <= 4000)
+                .ok_or("teacherBadAnswer")?;
+            if !seen.insert(prompt.to_lowercase()) {
+                return Err("teacherDuplicate".into());
+            }
+            Ok(Example {
+                prompt: prompt.to_owned(),
+                completion: Some(completion.to_owned()),
+            })
+        })
+        .collect()
+}
+
+fn document_excerpt(text: &str, batch: usize, batches: usize) -> String {
+    let characters = text.chars().collect::<Vec<_>>();
+    let window = 4000.min(characters.len());
+    let start = if batches <= 1 || characters.len() <= window {
+        0
+    } else {
+        (characters.len() - window) * batch / (batches - 1)
+    };
+    characters[start..start + window].iter().collect()
+}
+
+enum DocumentTeacher {
+    Local(PathBuf),
+    OpenRouter { model: String, key: String },
+}
+
+fn resolve_teacher(
+    service: &Arc<Mutex<Service>>,
+    app: &Arc<Mutex<App>>,
+    provider: &str,
+    teacher: &str,
+) -> Result<DocumentTeacher, String> {
+    match provider {
+        "local" => {
+            let guard = app
+                .try_lock()
+                .map_err(|_| "Chat is busy; try again when it finishes")?;
+            Ok(DocumentTeacher::Local(guard.model_path(teacher)?))
+        }
+        "openrouter" => {
+            if teacher.len() > 160
+                || !teacher.contains('/')
+                || !teacher.bytes().all(|b| {
+                    b.is_ascii_alphanumeric() || matches!(b, b'/' | b'.' | b'_' | b'-' | b':')
+                })
+            {
+                return Err("openrouterInvalidModel".into());
+            }
+            let key = service.lock().unwrap().openrouter_key()?;
+            Ok(DocumentTeacher::OpenRouter {
+                model: teacher.to_owned(),
+                key,
+            })
+        }
+        _ => Err("documentInvalidTeacher".into()),
+    }
+}
+
+fn verify_cloud_teacher(teacher: &DocumentTeacher, job: &Arc<Mutex<Job>>) -> Result<(), String> {
+    if let DocumentTeacher::OpenRouter { model, key } = teacher {
+        job.lock().unwrap().phase = "running";
+        if !openrouter_models(key, model)?
+            .iter()
+            .any(|candidate| candidate["id"] == model.as_str())
+        {
+            return Err("openrouterInvalidModel".into());
+        }
+    }
+    Ok(())
+}
+
+fn teacher_answer(
+    teacher: &DocumentTeacher,
+    job: &Arc<Mutex<Job>>,
+    app: &Arc<Mutex<App>>,
+    root: &Path,
+    request: &str,
+) -> Result<String, String> {
+    match teacher {
+        DocumentTeacher::Local(path) => {
+            let generation = Arc::new(ActiveGeneration::new("lab".into(), id()));
+            {
+                let mut guard = job.lock().unwrap();
+                guard.phase = "running";
+                guard.generation = Some(generation.clone());
+            }
+            let mut app = app.lock().unwrap();
+            let answer = app
+                .infer_stream(path, request, &mut |_| Ok(()), &generation)
+                .map(|(answer, _)| answer)?;
+            job.lock().unwrap().generation = None;
+            Ok(answer)
+        }
+        DocumentTeacher::OpenRouter { model, key } => {
+            openrouter_completion(job, root, key, model, request)
+        }
+    }
+}
+
+pub fn start_document_examples(
+    service: Arc<Mutex<Service>>,
+    app: Arc<Mutex<App>>,
+    provider: &str,
+    teacher: &str,
+    count: usize,
+) -> Result<Value, String> {
+    if !matches!(count, 5 | 10 | 20) {
+        return Err("documentInvalidCount".into());
+    }
+    let teacher_source = resolve_teacher(&service, &app, provider, teacher)?;
+    let (source, existing, root, job) = {
+        let mut lab = service.lock().unwrap();
+        if lab.busy() {
+            return Err("A lab job is already running".into());
+        }
+        let source = lab.document_source()?;
+        let existing = lab.rows("training")?;
+        if existing.len() + count > 200 {
+            return Err("documentExampleLimit".into());
+        }
+        let job = Arc::new(Mutex::new(Job::new("document", count)));
+        lab.job = Some(job.clone());
+        (source, existing, lab.root.clone(), job)
+    };
+    let worker_service = service.clone();
+    thread::spawn(move || {
+        let result = (|| -> Result<(), String> {
+            verify_cloud_teacher(&teacher_source, &job)?;
+            let batches = count / 5;
+            let mut generated = Vec::with_capacity(count);
+            let mut seen = existing
+                .iter()
+                .map(|row| row.prompt.to_lowercase())
+                .collect::<std::collections::HashSet<_>>();
+            for batch in 0..batches {
+                if job.lock().unwrap().cancelled {
+                    return Ok(());
+                }
+                let excerpt = document_excerpt(&source, batch, batches);
+                let previous = generated
+                    .iter()
+                    .map(|row: &Example| row.prompt.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" | ");
+                let request = format!(
+                    "Use ONLY the source text below to create exactly 5 different question-answer examples. Questions must test specific information actually stated in the text. Answers must be concise, accurate, and in the same language as the text. Do not invent facts or ask about information missing from the text. Avoid these previous questions: {previous}\nReply ONLY with a JSON array of 5 objects, each with string fields \"prompt\" and \"completion\". No Markdown or extra text.\n\nSOURCE TEXT:\n{excerpt}"
+                );
+                let answer = teacher_answer(&teacher_source, &job, &app, &root, &request)?;
+                if job.lock().unwrap().cancelled {
+                    return Ok(());
+                }
+                for pair in parse_generated_pairs(&answer)? {
+                    if !seen.insert(pair.prompt.to_lowercase()) {
+                        return Err("documentDuplicateQuestion".into());
+                    }
+                    generated.push(pair);
+                }
+                job.lock().unwrap().done = generated.len();
+            }
+            let mut lab = worker_service.lock().unwrap();
+            if job.lock().unwrap().cancelled {
+                return Ok(());
+            }
+            lab.append_document_pairs(&generated)?;
+            job.lock().unwrap().output = Some(format!("{} examples", generated.len()));
+            Ok(())
+        })();
+        let mut guard = job.lock().unwrap();
+        guard.generation = None;
+        guard.child = None;
+        guard.phase = if guard.cancelled {
+            "cancelled"
+        } else if result.is_ok() {
+            "complete"
+        } else {
+            "failed"
+        };
+        guard.error = result.err();
+    });
+    Ok(service.lock().unwrap().status())
+}
+
+pub fn start_auto_distill(
+    service: Arc<Mutex<Service>>,
+    app: Arc<Mutex<App>>,
+    provider: &str,
+    teacher: &str,
+    topic: &str,
+    replace: bool,
+) -> Result<Value, String> {
+    let topic = topic.trim();
+    if topic.is_empty() || topic.chars().count() > 500 {
+        return Err("Enter a question or topic of at most 500 characters".into());
+    }
+    let teacher_source = resolve_teacher(&service, &app, provider, teacher)?;
+    let (root, job) = {
+        let mut lab = service.lock().unwrap();
+        if lab.busy() {
+            return Err("A lab job is already running".into());
+        }
+        if !replace && (!lab.rows("prompts")?.is_empty() || !lab.rows("distilled")?.is_empty()) {
+            return Err(
+                "Existing distillation examples would be replaced. Confirm replacement first"
+                    .into(),
+            );
+        }
+        let job = Arc::new(Mutex::new(Job::new("auto", 5)));
+        lab.job = Some(job.clone());
+        (lab.root.clone(), job)
+    };
+    let topic = topic.to_owned();
+    let worker_service = service.clone();
+    thread::spawn(move || {
+        let result = (|| -> Result<(), String> {
+            verify_cloud_teacher(&teacher_source, &job)?;
+            let request = format!(
+                "Create exactly 5 different question-answer examples about this topic or question: {topic}\n\nIf the input is a question, include it as one example. Make the other questions explore different aspects of the same narrow topic, not simple rewordings. Give short, accurate answers. If a fact is uncertain, say so rather than inventing it. Reply ONLY with a JSON array of 5 objects, each with string fields \"prompt\" and \"completion\". No Markdown or extra text."
+            );
+            {
+                let mut guard = job.lock().unwrap();
+                if guard.cancelled {
+                    return Ok(());
+                }
+                guard.phase = "running";
+            }
+            let answer = teacher_answer(&teacher_source, &job, &app, &root, &request)?;
+            if job.lock().unwrap().cancelled {
+                return Ok(());
+            }
+            let pairs = parse_generated_pairs(&answer)?;
+            let mut lab = worker_service.lock().unwrap();
+            if job.lock().unwrap().cancelled {
+                return Ok(());
+            }
+            lab.save_auto_pairs(&pairs)?;
+            let mut guard = job.lock().unwrap();
+            guard.done = 5;
+            guard.output = Some(lab.root.join("distilled.jsonl").display().to_string());
+            Ok(())
+        })();
+        let mut guard = job.lock().unwrap();
+        guard.generation = None;
+        guard.child = None;
         guard.phase = if guard.cancelled {
             "cancelled"
         } else if result.is_ok() {
@@ -634,6 +1450,7 @@ pub fn start_distill(
 fn prepare_training_data(
     run: &Path,
     examples: &[Example],
+    student: &str,
     iters: u64,
     resumed_from: Option<&Path>,
 ) -> Result<PathBuf, String> {
@@ -642,7 +1459,7 @@ fn prepare_training_data(
     write_examples(&data.join("train.jsonl"), examples)?;
     fs::write(
         run.join("manifest.json"),
-        json!({"baseModel":BASE_MODEL,"iterations":iters,"resumedFrom":resumed_from,
+        json!({"baseModel":student,"iterations":iters,"resumedFrom":resumed_from,
             "trainingExamples":examples.len(),"validationExamples":0,"method":"LoRA"})
         .to_string(),
     )
@@ -664,7 +1481,7 @@ pub fn start_train(
     let mut app_guard = app
         .try_lock()
         .map_err(|_| "Chat is busy; try again when it finishes")?;
-    let (examples, root, resume, job) = {
+    let (examples, student, root, resume, job) = {
         let mut lab = service.lock().unwrap();
         if lab.busy() {
             return Err("A lab job is already running".into());
@@ -682,8 +1499,9 @@ pub fn start_train(
         }
         let job = Arc::new(Mutex::new(Job::new("train", iters as usize)));
         let resume = lab.continuation_adapter(&examples);
+        let student = lab.student_model();
         lab.job = Some(job.clone());
-        (examples, lab.root.clone(), resume, job)
+        (examples, student, lab.root.clone(), resume, job)
     };
     app_guard.inference = None;
     drop(app_guard);
@@ -693,7 +1511,7 @@ pub fn start_train(
                 return Ok(String::new());
             }
             let run = root.join("runs").join(id());
-            let data = prepare_training_data(&run, &examples, iters, resume.as_deref())?;
+            let data = prepare_training_data(&run, &examples, student, iters, resume.as_deref())?;
             let adapter = run.join("adapter");
             let log_path = run.join("train.log");
             let log = fs::File::create(&log_path).map_err(|e| e.to_string())?;
@@ -701,7 +1519,7 @@ pub fn start_train(
             let executable = tool_path("MLX_LM_LORA", "mlx_lm.lora");
             let mut command = Command::new(&executable);
             command
-                .args(["--model", BASE_MODEL, "--train", "--data"])
+                .args(["--model", student, "--train", "--data"])
                 .arg(&data)
                 .arg("--adapter-path")
                 .arg(&adapter);
@@ -828,10 +1646,10 @@ fn mlx_python(fuse_tool: &Path) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("python3"))
 }
 
-fn cached_base_model(python: &Path) -> Result<PathBuf, String> {
+fn cached_base_model(python: &Path, student: &str) -> Result<PathBuf, String> {
     const FIND_SNAPSHOT: &str = "import sys; from pathlib import Path; from huggingface_hub import hf_hub_download; print(Path(hf_hub_download(sys.argv[1], filename='config.json', local_files_only=True)).parent)";
     let output = Command::new(python)
-        .args(["-c", FIND_SNAPSHOT, BASE_MODEL])
+        .args(["-c", FIND_SNAPSHOT, student])
         .output()
         .map_err(|e| format!("Cannot locate the cached base model: {e}"))?;
     if !output.status.success() {
@@ -937,7 +1755,7 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
         .map_err(|_| "Chat is busy; try again when it finishes")?
         .models
         .clone();
-    let (adapter, job) = {
+    let (adapter, student, job) = {
         let mut lab = service.lock().unwrap();
         if lab.busy() {
             return Err("A lab job is already running".into());
@@ -946,17 +1764,19 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
             return Err("Fine tune with the current examples before creating a model".into());
         }
         let adapter = lab.latest_adapter().ok_or("Train an adapter first")?;
+        let student = lab.student_model();
         let job = Arc::new(Mutex::new(Job::new("export", 3)));
         lab.job = Some(job.clone());
-        (adapter, job)
+        (adapter, student, job)
     };
     thread::spawn(move || {
         let run = adapter.parent().unwrap().to_path_buf();
         let export = run.join("export");
         let fused = export.join("fused");
         let f16 = export.join("model-f16.gguf");
+        let short_name = student.rsplit('/').next().unwrap_or("Qwen");
         let final_name = format!(
-            "LlamaNest-Qwen2.5-0.5B-{}-Q4_K_M.gguf",
+            "LlamaNest-{short_name}-{}-Q4_K_M.gguf",
             run.file_name().unwrap().to_string_lossy()
         );
         let part = models.join(format!(".{final_name}.part"));
@@ -981,14 +1801,15 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
                 .and_then(|line| line.split_whitespace().nth(3))
                 .and_then(|value| value.parse::<u64>().ok())
                 .ok_or("Cannot check free disk space")?;
-            if kib < 3 * 1024 * 1024 {
-                return Err(
-                    "At least 3 GB of free disk space is needed to create the model".into(),
-                );
+            let needed_gb = if student == DEFAULT_STUDENT { 3 } else { 8 };
+            if kib < needed_gb * 1024 * 1024 {
+                return Err(format!(
+                    "At least {needed_gb} GB of free disk space is needed to create the model"
+                ));
             }
             let fuse_tool = resolved_tool("MLX_LM_FUSE", "mlx_lm.fuse");
             let python = mlx_python(&fuse_tool);
-            let base = cached_base_model(&python)?;
+            let base = cached_base_model(&python, student)?;
             let mut fuse = Command::new(&fuse_tool);
             fuse.arg("--model")
                 .arg(&base)
@@ -1168,7 +1989,8 @@ mod tests {
         fs::create_dir_all(&adapter).unwrap();
         fs::write(
             adapter.parent().unwrap().join("manifest.json"),
-            json!({"trainingExamples":0,"validationExamples":1}).to_string(),
+            json!({"baseModel":DEFAULT_STUDENT,"trainingExamples":0,"validationExamples":1})
+                .to_string(),
         )
         .unwrap();
         thread::sleep(Duration::from_millis(20));
@@ -1177,7 +1999,8 @@ mod tests {
         assert_eq!(service.status()["adapterFresh"], false);
         fs::write(
             adapter.parent().unwrap().join("manifest.json"),
-            json!({"trainingExamples":1,"validationExamples":0}).to_string(),
+            json!({"baseModel":DEFAULT_STUDENT,"trainingExamples":1,"validationExamples":0})
+                .to_string(),
         )
         .unwrap();
         fs::write(adapter.parent().unwrap().join(".complete"), b"ok\n").unwrap();
@@ -1194,6 +2017,209 @@ mod tests {
     }
 
     #[test]
+    fn student_selection_persists_and_keeps_adapters_separate() {
+        let dir = std::env::temp_dir().join(format!("llamanest-student-{}", id()));
+        let mut service = Service::new(dir.clone());
+        service
+            .save("training", &json!([{"prompt":"a","completion":"b"}]))
+            .unwrap();
+        let adapter = dir.join("runs/1/adapter");
+        fs::create_dir_all(&adapter).unwrap();
+        fs::write(
+            adapter.parent().unwrap().join("manifest.json"),
+            json!({"baseModel":DEFAULT_STUDENT,"trainingExamples":1,"validationExamples":0})
+                .to_string(),
+        )
+        .unwrap();
+        fs::write(adapter.join("adapters.safetensors"), b"test").unwrap();
+        fs::write(adapter.parent().unwrap().join(".complete"), b"ok\n").unwrap();
+        assert_eq!(service.status()["adapterFresh"], true);
+
+        let larger = STUDENT_MODELS[1];
+        assert_eq!(service.select_student(larger).unwrap()["baseModel"], larger);
+        let reopened = Service::new(dir.clone());
+        assert_eq!(reopened.status()["baseModel"], larger);
+        assert_eq!(reopened.status()["adapter"], Value::Null);
+        assert_eq!(reopened.status()["adapterFresh"], false);
+        assert_eq!(
+            service.select_student("unknown").unwrap_err(),
+            "Unsupported student model"
+        );
+        assert_eq!(Service::new(dir.clone()).status()["baseModel"], larger);
+        service.select_student(DEFAULT_STUDENT).unwrap();
+        assert_eq!(service.status()["adapterFresh"], true);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn automatic_examples_are_validated_and_saved_for_review() {
+        let dir = std::env::temp_dir().join(format!("llamanest-auto-{}", id()));
+        let mut service = Service::new(dir.clone());
+        service
+            .save("training", &json!([{"prompt":"keep","completion":"this"}]))
+            .unwrap();
+        service
+            .save("prompts", &json!([{"prompt":"old?"}]))
+            .unwrap();
+        service
+            .save(
+                "distilled",
+                &json!([{"prompt":"old?","completion":"old answer"}]),
+            )
+            .unwrap();
+        let response = format!(
+            "```json\n{}\n```",
+            json!((0..5)
+                .map(|index| json!({"prompt":format!("Question {index}?"),"completion":format!("Answer {index}.")}))
+                .collect::<Vec<_>>())
+        );
+        let pairs = parse_generated_pairs(&response).unwrap();
+        service.save_auto_pairs(&pairs).unwrap();
+        let reopened = Service::new(dir.clone());
+        assert_eq!(reopened.status()["promptCount"], 5);
+        assert_eq!(reopened.status()["distilledCount"], 5);
+        assert_eq!(reopened.status()["trainingCount"], 1);
+        assert_eq!(
+            reopened.examples("prompts").unwrap()["examples"][0]["prompt"],
+            "Question 0?"
+        );
+        assert_eq!(
+            reopened.examples("distilled").unwrap()["examples"][0]["completion"],
+            "Answer 0."
+        );
+        assert!(
+            parse_generated_pairs("[{\"prompt\":\"one\",\"completion\":\"answer\"}]")
+                .unwrap_err()
+                .contains("teacherTooFew")
+        );
+        let repeated = json!((0..5)
+            .map(|_| json!({"prompt":"same?","completion":"answer"}))
+            .collect::<Vec<_>>());
+        assert!(parse_generated_pairs(&repeated.to_string())
+            .unwrap_err()
+            .contains("teacherDuplicate"));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn document_upload_and_generated_examples_persist_without_replacing_existing_pairs() {
+        let dir = std::env::temp_dir().join(format!("llamanest-document-{}", id()));
+        let mut service = Service::new(dir.clone());
+        service
+            .save(
+                "training",
+                &json!([{"prompt":"existing?","completion":"yes"}]),
+            )
+            .unwrap();
+        service
+            .upload_document(
+                "guide.txt",
+                b"The office opens at nine. Visitors sign in at reception.",
+            )
+            .unwrap();
+        assert_eq!(service.status()["document"]["name"], "guide.txt");
+        assert!(service
+            .document_source()
+            .unwrap()
+            .contains("Visitors sign in"));
+        assert_eq!(
+            service
+                .upload_document("../secret.txt", b"bad")
+                .unwrap_err(),
+            "documentInvalidFile"
+        );
+        let pairs = vec![Example {
+            prompt: "When does the office open?".into(),
+            completion: Some("At nine.".into()),
+        }];
+        service.append_document_pairs(&pairs).unwrap();
+        let reopened = Service::new(dir.clone());
+        assert_eq!(reopened.status()["trainingCount"], 2);
+        assert_eq!(reopened.status()["document"]["name"], "guide.txt");
+        assert_eq!(
+            reopened.examples("training").unwrap()["examples"][0]["prompt"],
+            "existing?"
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn openrouter_key_persists_without_leaking_into_status() {
+        let dir = std::env::temp_dir().join(format!("llamanest-openrouter-{}", id()));
+        let mut service = Service::new(dir.clone());
+        let key = "sk-or-v1-testsecret123456789";
+        assert_eq!(
+            service.save_openrouter_key("short").unwrap_err(),
+            "openrouterInvalidKey"
+        );
+        let status = service.save_openrouter_key(key).unwrap();
+        assert_eq!(status["openrouterConfigured"], true);
+        assert!(!status.to_string().contains(key));
+        assert_eq!(
+            fs::read_to_string(dir.join("openrouter-key.txt")).unwrap(),
+            key
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(dir.join("openrouter-key.txt"))
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
+        let mut reopened = Service::new(dir.clone());
+        assert_eq!(reopened.status()["openrouterConfigured"], true);
+        reopened
+            .save_openrouter_key("sk-or-v1-replacement123")
+            .unwrap();
+        assert_eq!(
+            fs::read_to_string(dir.join("openrouter-key.txt")).unwrap(),
+            "sk-or-v1-replacement123"
+        );
+        assert_eq!(
+            reopened.remove_openrouter_key().unwrap()["openrouterConfigured"],
+            false
+        );
+        assert!(!dir.join("openrouter-key.txt").exists());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn openrouter_search_query_is_percent_encoded() {
+        assert_eq!(encode_query("Qwen 3.5/0.5B"), "Qwen%203.5%2F0.5B");
+        assert!(!valid_openrouter_key("bad\nheader"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn word_document_text_is_extracted_without_retaining_the_original_file() {
+        let dir = std::env::temp_dir().join(format!("llamanest-docx-{}", id()));
+        fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("sample.docx");
+        let script = r#"import sys, zipfile
+with zipfile.ZipFile(sys.argv[1], 'w') as archive:
+    archive.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Hello colleague</w:t></w:r></w:p></w:body></w:document>')
+"#;
+        assert!(Command::new("python3")
+            .args(["-c", script])
+            .arg(&source)
+            .status()
+            .unwrap()
+            .success());
+        let bytes = fs::read(&source).unwrap();
+        assert_eq!(
+            document_text("sample.docx", &bytes, &dir).unwrap(),
+            "Hello colleague"
+        );
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn training_includes_the_first_example() {
         let dir = std::env::temp_dir().join(format!("llamanest-lab-{}", id()));
         let examples = (0..5)
@@ -1202,7 +2228,7 @@ mod tests {
                 completion: Some(format!("answer {index}")),
             })
             .collect::<Vec<_>>();
-        let data = prepare_training_data(&dir, &examples, 20, None).unwrap();
+        let data = prepare_training_data(&dir, &examples, DEFAULT_STUDENT, 20, None).unwrap();
         let saved = read_examples(&data.join("train.jsonl")).unwrap();
         assert_eq!(saved.len(), 5);
         assert_eq!(saved[0].prompt, "question 0");
@@ -1249,7 +2275,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
         let run = dir.join("runs/1");
-        prepare_training_data(&run, &original, 20, None).unwrap();
+        prepare_training_data(&run, &original, DEFAULT_STUDENT, 20, None).unwrap();
         let adapter = run.join("adapter/adapters.safetensors");
         fs::create_dir_all(adapter.parent().unwrap()).unwrap();
         fs::write(&adapter, b"adapter").unwrap();
@@ -1261,7 +2287,7 @@ mod tests {
             Some(adapter.clone())
         );
         let continued = dir.join("runs/2");
-        prepare_training_data(&continued, &corrected, 80, Some(&adapter)).unwrap();
+        prepare_training_data(&continued, &corrected, DEFAULT_STUDENT, 80, Some(&adapter)).unwrap();
         let manifest: Value =
             serde_json::from_slice(&fs::read(continued.join("manifest.json")).unwrap()).unwrap();
         assert_eq!(manifest["resumedFrom"], adapter.to_string_lossy().as_ref());

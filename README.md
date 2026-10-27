@@ -36,11 +36,14 @@ have their own licenses.
 - Quantize a local GGUF to Q8_0, Q4_K_M, Q3_K_M, or Q2_K in the Mac and Windows app using bundled `llama-quantize`.
 - Import text PDFs, TXT, and Markdown files (up to 20 MB each).
 - Search documents by keyword, with excerpts and PDF page numbers.
+- In the local Laboratory, generate reviewable training examples from text PDFs, Word `.docx`, TXT, or Markdown documents, then fine tune a supported Qwen student and export a GGUF for the desktop chat.
 - Save conversations and export them as Markdown.
 - Choose among curated 0.5B, 3B, 7B, and 9B models with guidance based on your computer's RAM and CPU cores.
 - Use the interface in English by default, or select Italian, German, French, or Spanish in the sidebar. The saved choice also guides the language of model responses unless you ask for another language.
 
 The app normally opens at `http://127.0.0.1:48157`. If that port is busy, it picks a free port through `48167` and opens the right address. The server listens only on your computer. Data is stored **without encryption** in `PocketAI-data/`.
+
+Laboratory training and GGUF export currently require an Apple Silicon Mac and an installed MLX-LM toolchain. In both Fine tuning document generation and Distillation, the teacher can be a local GGUF (offline) or an OpenRouter model that permits distillation. OpenRouter can answer saved questions or generate five examples from a topic. Enter an OpenRouter API key in either Laboratory tab, type part of a model name, and choose one of the suggestions. The same key works in both tabs and stays in the unencrypted local workspace until removed. Document excerpts, questions, or topics sent to OpenRouter reach the model provider, and requests may incur charges. Review all generated examples before training. Word `.docx` extraction uses Python 3; text PDF extraction uses `pdftotext`. Scanned PDFs need OCR first. Training on examples does not guarantee that the model will recall every detail in a document; include source documents when exact answers matter.
 
 Open **Models → Quantize Model** in a build that includes `llama-quantize`. Choose a local GGUF and a target precision. The app estimates RAM and free disk space before starting, writes progress in the background, and lets you cancel. It keeps the source file and adds the completed result to the model library with a suffix such as `-Q3_K_M.gguf`. Quantizing an already quantized model can significantly reduce quality; it requires explicit confirmation. Prefer an F16/BF16/F32 source. Older release ZIPs may not yet contain `llama-quantize`; build the current source or use a newly published package that includes it. The standalone Web app links to the desktop releases for this feature.
 

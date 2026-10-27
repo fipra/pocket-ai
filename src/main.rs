@@ -833,7 +833,9 @@ fn is_lab_qwen_model(model: &Path) -> bool {
         .file_name()
         .and_then(|name| name.to_str())
         .is_some_and(|name| {
-            name.starts_with("LlamaNest-Qwen2.5-0.5B-") && name.ends_with("-Q4_K_M.gguf")
+            (name.starts_with("LlamaNest-Qwen2.5-0.5B-")
+                || name.starts_with("LlamaNest-Qwen2.5-1.5B-"))
+                && name.ends_with("-Q4_K_M.gguf")
         })
 }
 
@@ -2459,7 +2461,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     b"{\"error\":\"Origin not authorized\"}".to_vec(),
                 )
             } else {
-                let limit = 2 * 1024 * 1024;
+                let limit = if url.starts_with("/lab/document-upload/") {
+                    20 * 1024 * 1024
+                } else {
+                    2 * 1024 * 1024
+                };
                 let mut bytes = Vec::new();
                 let result = if request
                     .as_reader()
@@ -2471,11 +2477,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Err("Lab request too large".to_owned())
                 } else if url == "/lab/upload" {
                     lab_service.lock().unwrap().upload(&bytes)
+                } else if let Some(raw_name) = url.strip_prefix("/lab/document-upload/") {
+                    decode_name(raw_name)
+                        .and_then(|name| lab_service.lock().unwrap().upload_document(&name, &bytes))
                 } else if url == "/lab/api" {
                     serde_json::from_slice::<Value>(&bytes)
                         .map_err(|e| e.to_string())
                         .and_then(|data| match data["action"].as_str().unwrap_or("") {
                             "status" => Ok(lab_service.lock().unwrap().status()),
+                            "save_openrouter_key" => {
+                                let key = data["key"].as_str().ok_or("openrouterInvalidKey")?;
+                                lab_service.lock().unwrap().save_openrouter_key(key)
+                            }
+                            "remove_openrouter_key" => {
+                                lab_service.lock().unwrap().remove_openrouter_key()
+                            }
+                            "openrouter_models" => {
+                                let query =
+                                    data["query"].as_str().ok_or("openrouterSearchLength")?;
+                                lab_service.lock().unwrap().search_openrouter_models(query)
+                            }
+                            "select_student" => {
+                                let model =
+                                    data["model"].as_str().ok_or("Choose a student model")?;
+                                lab_service.lock().unwrap().select_student(model)
+                            }
                             "examples" => {
                                 let kind = data["kind"].as_str().unwrap_or("training");
                                 lab_service.lock().unwrap().examples(kind)
@@ -2491,10 +2517,47 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             "use_distilled" => lab_service.lock().unwrap().use_distilled(),
                             "cancel" => Ok(lab_service.lock().unwrap().cancel()),
                             "distill" => {
-                                let teacher = data["teacher"]
-                                    .as_str()
-                                    .ok_or("Choose a local teacher model")?;
-                                lab::start_distill(lab_service.clone(), app.clone(), teacher)
+                                let provider =
+                                    data["provider"].as_str().ok_or("documentInvalidTeacher")?;
+                                let teacher =
+                                    data["teacher"].as_str().ok_or("documentInvalidTeacher")?;
+                                lab::start_distill(
+                                    lab_service.clone(),
+                                    app.clone(),
+                                    provider,
+                                    teacher,
+                                )
+                            }
+                            "auto_distill" => {
+                                let provider =
+                                    data["provider"].as_str().ok_or("documentInvalidTeacher")?;
+                                let teacher =
+                                    data["teacher"].as_str().ok_or("documentInvalidTeacher")?;
+                                let topic =
+                                    data["topic"].as_str().ok_or("Enter a question or topic")?;
+                                let replace = data["replace"].as_bool().unwrap_or(false);
+                                lab::start_auto_distill(
+                                    lab_service.clone(),
+                                    app.clone(),
+                                    provider,
+                                    teacher,
+                                    topic,
+                                    replace,
+                                )
+                            }
+                            "document_examples" => {
+                                let provider =
+                                    data["provider"].as_str().ok_or("documentInvalidTeacher")?;
+                                let teacher =
+                                    data["teacher"].as_str().ok_or("documentInvalidTeacher")?;
+                                let count = data["count"].as_u64().ok_or("documentInvalidCount")?;
+                                lab::start_document_examples(
+                                    lab_service.clone(),
+                                    app.clone(),
+                                    provider,
+                                    teacher,
+                                    count as usize,
+                                )
                             }
                             "train" => {
                                 let iters = data["iterations"]
@@ -3040,6 +3103,9 @@ mod tests {
     fn exported_qwen_uses_its_chat_template() {
         assert!(is_lab_qwen_model(Path::new(
             "LlamaNest-Qwen2.5-0.5B-run-Q4_K_M.gguf"
+        )));
+        assert!(is_lab_qwen_model(Path::new(
+            "LlamaNest-Qwen2.5-1.5B-run-Q4_K_M.gguf"
         )));
         assert!(!is_lab_qwen_model(Path::new("other-qwen.gguf")));
         assert_eq!(

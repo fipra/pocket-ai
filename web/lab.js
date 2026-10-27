@@ -10,6 +10,8 @@
   let distilled = [];
   let models = [];
   let saving = false;
+  let savingTarget = null;
+  let pendingAction = null;
   let editingPair = null;
   let editingPrompt = null;
   let answerEditing = false;
@@ -17,6 +19,11 @@
   let correctionRecorded = false;
   let activeTab = 'train';
   let wasDistilling = false;
+  let wasDocumentGenerating = false;
+  const openrouterModels = {doc:[], distill:[]};
+  const modelSearchTimer = {doc:null, distill:null};
+  const modelSearchSerial = {doc:0, distill:0};
+  const modelSearching = {doc:false, distill:false};
 
   async function api(action, data = {}) {
     const response = await fetch(action === 'state' ? '/api' : '/lab/api', {
@@ -32,6 +39,15 @@
     node.textContent = text;
     node.classList.toggle('error', error);
   }
+  const localError = error => tr(error.message);
+
+  async function withPending(buttonId, action) {
+    if (pendingAction) return;
+    pendingAction = buttonId;
+    render();
+    try { return await action(); }
+    finally { pendingAction = null; render(); }
+  }
 
   function translate() {
     document.documentElement.lang = language;
@@ -43,6 +59,8 @@
     $('guide-json').textContent = JSON.stringify({format:'llamanest-lab-v1',kind:'training',examples:[
       {prompt:tr('guideSamplePrompt'),completion:tr('guideSampleAnswer')}
     ]}, null, 2);
+    $('openrouter-search').placeholder = tr('openrouterSearchHint');
+    $('distill-openrouter-search').placeholder = tr('openrouterSearchHint');
   }
 
   function tab(name) {
@@ -189,15 +207,19 @@
     const kind = tr(`job${job.kind[0].toUpperCase()}${job.kind.slice(1)}`);
     const phase = tr(`job${job.phase[0].toUpperCase()}${job.phase.slice(1)}`);
     $('job-title').textContent = `${kind} · ${phase}`;
-    $('job-detail').textContent = job.error || (job.kind === 'distill' ? `${job.done}/${job.total} ${tr('jobProgress')}` : '');
-    $('cancel-job').disabled = !job.active;
-    if (job.kind === 'distill' && job.total) $('job-progress').value = Math.round(job.done / job.total * 100);
+    $('job-title').classList.toggle('loading', job.active);
+    $('job').setAttribute('aria-busy', String(job.active));
+    $('job-detail').textContent = (job.error ? tr(job.error) : null) || (['distill', 'auto', 'document'].includes(job.kind) ? `${job.done}/${job.total} ${tr('jobProgress')}` : job.active ? tr('pleaseWait') : '');
+    $('cancel-job').disabled = !job.active || pendingAction === 'cancel-job';
+    if (['distill', 'auto', 'document'].includes(job.kind) && job.total) $('job-progress').value = Math.round(job.done / job.total * 100);
     else if (job.active) $('job-progress').removeAttribute('value');
     else $('job-progress').value = job.phase === 'complete' ? 100 : 0;
     $('job-log').textContent = job.log || '';
     if (job.kind === 'train' && !job.active) message('train-message', job.error || phase, job.phase === 'failed');
     if (job.kind === 'export' && !job.active) message('export-message', job.error || (job.phase === 'complete' ? `${tr('modelReady')} ${job.output}` : phase), job.phase === 'failed');
     if (job.kind === 'distill' && !job.active) message('generate-message', job.error || phase, job.phase === 'failed');
+    if (job.kind === 'auto' && !job.active) message('auto-message', job.error ? tr(job.error) : (job.phase === 'complete' ? tr('autoReady') : phase), job.phase === 'failed');
+    if (job.kind === 'document' && !job.active) message('doc-message', job.error ? tr(job.error) : job.phase === 'complete' ? tr('documentReady') : phase, job.phase === 'failed');
     if (job.kind === 'preview' && !job.active) {
       message('preview-message', job.error || phase, job.phase === 'failed');
       $('preview-output').hidden = job.phase !== 'complete';
@@ -208,11 +230,62 @@
 
   function render() {
     if (!status) return;
-    const busy = saving || status.job?.active === true;
+    const busy = saving || Boolean(pendingAction) || status.job?.active === true;
+    const runningButton = {train:'train-start',preview:'preview-start',export:'export-model',distill:'generate-start',auto:'auto-start',document:'doc-generate'}[status.job?.active ? status.job.kind : ''];
+    for (const id of ['train-start','preview-start','export-model','generate-start','auto-start','doc-upload','doc-generate','openrouter-save','openrouter-remove','distill-openrouter-save','distill-openrouter-remove','use-answers','cancel-job','pair-import','prompt-import','correction-save']) {
+      const loading = id === pendingAction || id === runningButton;
+      $(id).classList.toggle('loading', loading);
+      $(id).setAttribute('aria-busy', String(loading));
+    }
+    for (const id of ['student-train','student-distill']) $(id + '-wait').hidden = pendingAction !== id;
+    for (const id of ['pair-message','prompt-message','answer-message']) $(id).classList.toggle('loading', id === savingTarget);
+    for (const id of ['student-train', 'student-distill']) {
+      const selector = $(id);
+      const models = status.studentModels || [];
+      if (selector.options.length !== models.length || models.some((model, index) => selector.options[index]?.value !== model)) {
+        selector.replaceChildren(...models.map(model => {
+          const option = document.createElement('option');
+          option.value = model;
+          option.textContent = model.replace('Qwen/', '');
+          return option;
+        }));
+      }
+      selector.value = status.baseModel || '';
+      selector.disabled = busy;
+    }
     $('pair-count').textContent = `${training.length < 5 ? `${training.length}/5` : training.length} ${tr('pairCount')}`;
+    $('doc-name').textContent = status.document?.name || tr('documentNone');
+    const cloud = $('doc-provider').value === 'openrouter';
+    $('doc-local-options').hidden = cloud;
+    $('doc-openrouter-options').hidden = !cloud;
+    $('doc-provider').disabled = busy;
+    $('doc-upload').disabled = busy;
+    $('doc-teacher').disabled = busy;
+    $('doc-count').disabled = busy;
+    $('openrouter-key').disabled = busy;
+    $('openrouter-save').disabled = busy || !$('openrouter-key').value.trim();
+    $('openrouter-remove').disabled = busy || !status.openrouterConfigured;
+    $('openrouter-search').disabled = busy || !status.openrouterConfigured;
+    $('openrouter-key-status').textContent = tr(status.openrouterConfigured ? 'openrouterKeySaved' : 'openrouterKeyMissing');
+    $('openrouter-search-status').classList.toggle('loading', modelSearching.doc);
+    const chosenCloudModel = openrouterModels.doc.some(model => model.id === $('openrouter-search').value.trim());
+    $('doc-generate').disabled = busy || !status.document || (cloud ? !status.openrouterConfigured || !chosenCloudModel : !models.length) || training.length + Number($('doc-count').value) > 200;
+    const distillCloud = $('distill-provider').value === 'openrouter';
+    $('distill-local-options').hidden = distillCloud;
+    $('distill-openrouter-options').hidden = !distillCloud;
+    $('distill-provider').disabled = busy;
+    $('teacher').disabled = busy;
+    $('distill-openrouter-key').disabled = busy;
+    $('distill-openrouter-save').disabled = busy || !$('distill-openrouter-key').value.trim();
+    $('distill-openrouter-remove').disabled = busy || !status.openrouterConfigured;
+    $('distill-openrouter-search').disabled = busy || !status.openrouterConfigured;
+    $('distill-openrouter-key-status').textContent = tr(status.openrouterConfigured ? 'openrouterKeySaved' : 'openrouterKeyMissing');
+    $('distill-openrouter-search-status').classList.toggle('loading', modelSearching.distill);
+    const chosenDistillModel = openrouterModels.distill.some(model => model.id === $('distill-openrouter-search').value.trim());
+    const teacherReady = distillCloud ? status.openrouterConfigured && chosenDistillModel : models.length > 0;
     $('prompt-count').textContent = `${prompts.length}/30 ${tr('promptCount')}`;
     for (const id of ['pair-add', 'pair-example', 'pair-clear', 'prompt-add', 'prompt-example', 'prompt-clear']) $(id).disabled = busy;
-    for (const id of ['pair-prompt', 'pair-answer', 'teacher-prompt', 'pair-cancel', 'prompt-cancel']) $(id).disabled = busy;
+    for (const id of ['pair-prompt', 'pair-answer', 'teacher-prompt', 'auto-topic', 'pair-cancel', 'prompt-cancel']) $(id).disabled = busy;
     document.querySelectorAll('#pair-list button, #prompt-list button, #answer-list button').forEach(node => { node.disabled = busy; });
     const pendingPair = Boolean($('pair-prompt').value.trim() || $('pair-answer').value.trim());
     const pendingPrompt = Boolean($('teacher-prompt').value.trim());
@@ -223,7 +296,8 @@
     $('iterations-label').textContent = tr(status.canContinue ? 'additionalIterations' : 'iterations');
     $('train-mode').hidden = !status.canContinue;
     $('train-mode').textContent = status.canContinue ? tr('continueHelp') : '';
-    $('generate-start').disabled = busy || pendingPrompt || prompts.length === 0 || !models.length;
+    $('generate-start').disabled = busy || pendingPrompt || prompts.length === 0 || !teacherReady;
+    $('auto-start').disabled = busy || !$('auto-topic').value.trim() || !teacherReady;
     $('preview-start').disabled = busy || !status.adapterFresh;
     $('export-model').disabled = busy || !status.adapterFresh || !status.trainSupported;
     $('correction-save').disabled = busy || !lastPreviewPrompt;
@@ -238,10 +312,12 @@
     else if ($('answer-message').textContent === tr('staleAnswers')) message('answer-message');
     $('base-model').textContent = status.baseModel || '';
     $('workspace').textContent = status.workspace || '';
-    if (!models.length) message('generate-message', tr('noModels'));
+    if (!models.length && !distillCloud) message('generate-message', tr('noModels'));
     else if (pendingPrompt) message('generate-message', tr('pendingPrompt'));
     else if (prompts.length === 0) message('generate-message', tr('needQuestion'));
     else if (status.job?.kind !== 'distill') message('generate-message');
+    if (!models.length && !distillCloud) message('auto-message', tr('noModels'));
+    else if (status.job?.kind !== 'auto') message('auto-message');
     if (pendingPair) message('train-message', tr('pendingPair'));
     else if (longTraining) message('train-message', tr('shortenAnswer'));
     else if (training.length < 5) message('train-message', tr('trainNeedFive'));
@@ -256,6 +332,7 @@
     if (saving) return;
     saving = true;
     const messageId = kind === 'training' ? 'pair-message' : kind === 'prompts' ? 'prompt-message' : 'answer-message';
+    savingTarget = messageId;
     message(messageId, tr('saving'));
     render();
     try {
@@ -271,6 +348,7 @@
       throw error;
     } finally {
       saving = false;
+      savingTarget = null;
       render();
     }
   }
@@ -336,6 +414,8 @@
     if (!window.confirm(tr(trainingPath ? 'resetTrainingConfirm' : 'resetPromptsConfirm'))) return;
     const messageId = trainingPath ? 'pair-message' : 'prompt-message';
     saving = true;
+    savingTarget = messageId;
+    message(messageId, tr('saving'));
     render();
     try {
       status = await api('reset', {kind});
@@ -364,20 +444,127 @@
       message(messageId, error.message, true);
     } finally {
       saving = false;
+      savingTarget = null;
       render();
     }
   }
 
   $('tab-train').onclick = () => tab('train');
   $('tab-distill').onclick = () => tab('distill');
+  for (const id of ['student-train', 'student-distill']) $(id).onchange = async event => {
+    const chosen = event.target.value;
+    try { await withPending(id, async () => { status = await api('select_student', {model: chosen}); render(); }); }
+    catch (error) { render(); message(activeTab === 'train' ? 'train-message' : 'generate-message', error.message, true); }
+  };
   $('pair-reset').onclick = () => resetPath('training');
   $('prompt-reset').onclick = () => resetPath('prompts');
+  $('doc-provider').onchange = render;
+  $('distill-provider').onchange = render;
+  const routerPanels = [
+    {kind:'doc', prefix:'openrouter-', feedback:'doc-message'},
+    {kind:'distill', prefix:'distill-openrouter-', feedback:'generate-message'}
+  ];
+  function clearRouterChoices() {
+    for (const {kind, prefix} of routerPanels) {
+      clearTimeout(modelSearchTimer[kind]);
+      modelSearchSerial[kind]++;
+      modelSearching[kind] = false;
+      openrouterModels[kind] = [];
+      $(`${prefix}key`).value = '';
+      $(`${prefix}search`).value = '';
+      $(`${prefix}models`).replaceChildren();
+      message(`${prefix}search-status`);
+    }
+  }
+  for (const {kind, prefix, feedback} of routerPanels) {
+    $(`${prefix}key`).oninput = render;
+    $(`${prefix}save`).onclick = async () => {
+      const key = $(`${prefix}key`).value.trim();
+      try { await withPending(`${prefix}save`, async () => {
+        status = await api('save_openrouter_key', {key});
+        clearRouterChoices();
+        message(feedback, tr('openrouterKeySaved'));
+      }); } catch (error) { message(feedback, localError(error), true); }
+    };
+    $(`${prefix}remove`).onclick = async () => {
+      try { await withPending(`${prefix}remove`, async () => {
+        status = await api('remove_openrouter_key');
+        clearRouterChoices();
+        message(feedback, tr('openrouterKeyRemoved'));
+      }); } catch (error) { message(feedback, localError(error), true); }
+    };
+    $(`${prefix}search`).oninput = () => {
+      clearTimeout(modelSearchTimer[kind]);
+      const serial = ++modelSearchSerial[kind];
+      const query = $(`${prefix}search`).value.trim();
+      if (openrouterModels[kind].some(model => model.id === query)) {
+        modelSearching[kind] = false;
+        message(`${prefix}search-status`, tr('openrouterChooseModel'));
+        render();
+        return;
+      }
+      openrouterModels[kind] = [];
+      $(`${prefix}models`).replaceChildren();
+      modelSearching[kind] = false;
+      if (query.length < 2 || !status?.openrouterConfigured) {
+        message(`${prefix}search-status`, tr('openrouterSearchHint'));
+        render();
+        return;
+      }
+      modelSearchTimer[kind] = setTimeout(async () => {
+        modelSearching[kind] = true;
+        message(`${prefix}search-status`, tr('openrouterSearching'));
+        render();
+        try {
+          const result = await api('openrouter_models', {query});
+          if (serial !== modelSearchSerial[kind]) return;
+          openrouterModels[kind] = result.models || [];
+          $(`${prefix}models`).replaceChildren(...openrouterModels[kind].map(model => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.label = model.name;
+            return option;
+          }));
+          message(`${prefix}search-status`, tr(openrouterModels[kind].length ? 'openrouterChooseModel' : 'openrouterNoModels'));
+        } catch (error) {
+          if (serial === modelSearchSerial[kind]) message(`${prefix}search-status`, localError(error), true);
+        } finally {
+          if (serial === modelSearchSerial[kind]) { modelSearching[kind] = false; render(); }
+        }
+      }, 350);
+      render();
+    };
+  }
+  $('doc-upload').onclick = () => $('doc-file').click();
+  $('doc-file').onchange = async event => {
+    const file = event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) return message('doc-message', tr('documentTooLarge'), true);
+    try { await withPending('doc-upload', async () => {
+      const response = await fetch('/lab/document-upload/' + encodeURIComponent(file.name), {method:'POST', body:file});
+      const result = await response.json();
+      if (!response.ok) throw Error(result.error || `HTTP ${response.status}`);
+      status = result;
+      render();
+      message('doc-message', tr('documentLoaded'));
+    }); } catch (error) { message('doc-message', localError(error), true); }
+  };
+  $('doc-generate').onclick = async () => {
+    try { await withPending('doc-generate', async () => {
+      const provider = $('doc-provider').value;
+      const teacher = provider === 'openrouter' ? $('openrouter-search').value.trim() : $('doc-teacher').value;
+      status = await api('document_examples', {provider, teacher, count:Number($('doc-count').value)});
+      wasDocumentGenerating = true;
+      render();
+    }); } catch (error) { message('doc-message', localError(error), true); }
+  };
   for (const [kind, prefix] of [['training','pair'],['prompts','prompt']]) {
     $(`${prefix}-export`).onclick = () => exportCopy(kind);
     $(`${prefix}-import`).onclick = () => $(`${prefix}-file`).click();
     $(`${prefix}-file`).addEventListener('change', async event => {
       const file = event.target.files[0];
-      if (file) await importCopy(kind, file);
+      if (file) await withPending(`${prefix}-import`, () => importCopy(kind, file));
       event.target.value = '';
     });
   }
@@ -387,13 +574,14 @@
     $('pair-prompt').focus();
   };
   $('prompt-example').onclick = () => { $('teacher-prompt').value = tr('promptExample'); $('teacher-prompt').focus(); };
+  $('auto-topic').addEventListener('input', render);
   $('pair-cancel').onclick = clearPairForm;
   $('prompt-cancel').onclick = clearPromptForm;
   $('pair-clear').onclick = clearPairForm;
   $('prompt-clear').onclick = clearPromptForm;
   for (const id of ['pair-prompt','pair-answer','teacher-prompt']) $(id).addEventListener('input', render);
   window.addEventListener('beforeunload', event => {
-    if ($('pair-prompt').value.trim() || $('pair-answer').value.trim() || $('teacher-prompt').value.trim() || $('correction-answer').value.trim() || answerEditing) {
+    if ($('pair-prompt').value.trim() || $('pair-answer').value.trim() || $('teacher-prompt').value.trim() || $('auto-topic').value.trim() || $('correction-answer').value.trim() || answerEditing) {
       event.preventDefault(); event.returnValue = '';
     }
   });
@@ -421,21 +609,33 @@
     catch (_) { /* Keep the entered text for another attempt. */ }
   };
   $('train-start').onclick = async () => {
-    try { status = await api('train', {iterations:Number($('iterations').value)}); correctionRecorded = false; $('correction').hidden = true; render(); }
+    try { await withPending('train-start', async () => { status = await api('train', {iterations:Number($('iterations').value)}); correctionRecorded = false; $('correction').hidden = true; render(); }); }
     catch (error) { message('train-message', error.message, true); }
   };
   $('export-model').onclick = async () => {
-    try { status = await api('export_model'); render(); }
+    try { await withPending('export-model', async () => { status = await api('export_model'); render(); }); }
     catch (error) { message('export-message', error.message, true); }
   };
   $('generate-start').onclick = async () => {
-    try { status = await api('distill', {teacher:$('teacher').value}); wasDistilling = true; render(); }
+    const provider = $('distill-provider').value;
+    const teacher = provider === 'openrouter' ? $('distill-openrouter-search').value.trim() : $('teacher').value;
+    try { await withPending('generate-start', async () => { status = await api('distill', {provider, teacher}); wasDistilling = true; render(); }); }
     catch (error) { message('generate-message', error.message, true); }
+  };
+  $('auto-start').onclick = async () => {
+    const provider = $('distill-provider').value;
+    const teacher = provider === 'openrouter' ? $('distill-openrouter-search').value.trim() : $('teacher').value;
+    const topic = $('auto-topic').value.trim();
+    if (!topic) return message('auto-message', tr('autoNeedTopic'), true);
+    const replace = prompts.length > 0 || distilled.length > 0;
+    if (replace && !window.confirm(tr('autoReplaceConfirm'))) return;
+    try { await withPending('auto-start', async () => { status = await api('auto_distill', {provider, teacher, topic, replace}); wasDistilling = true; render(); }); }
+    catch (error) { message('auto-message', error.message, true); }
   };
   $('preview-start').onclick = async () => {
     const prompt = $('preview-prompt').value.trim();
     if (!prompt) return message('preview-message', tr('previewNeed'), true);
-    try {
+    try { await withPending('preview-start', async () => {
       status = await api('preview', {prompt});
       lastPreviewPrompt = prompt;
       correctionRecorded = false;
@@ -444,7 +644,7 @@
       $('correction-answer').value = '';
       message('correction-message');
       render();
-    }
+    }); }
     catch (error) { message('preview-message', error.message, true); }
   };
   $('correction-save').onclick = async () => {
@@ -459,38 +659,52 @@
     const next = training.slice();
     if (index < 0) next.push({prompt:lastPreviewPrompt, completion});
     else next[index] = {prompt:lastPreviewPrompt, completion};
-    try {
+    try { await withPending('correction-save', async () => {
       await saveRows('training', next);
       lastPreviewPrompt = null;
       correctionRecorded = true;
       $('correction-answer').value = '';
       message('correction-message', tr('correctionSaved'));
       render();
-    } catch (error) { message('correction-message', `${tr('failedSave')} ${error.message}`, true); }
+    }); } catch (error) { message('correction-message', `${tr('failedSave')} ${error.message}`, true); }
   };
   $('use-answers').onclick = async () => {
     if (training.length && !window.confirm(tr('copyConfirm'))) return;
-    try {
+    try { await withPending('use-answers', async () => {
       status = await api('use_distilled');
       training = (await api('examples', {kind:'training'})).examples;
       clearPairForm(); renderList('training'); render(); tab('train');
       message('pair-message', tr('copied'));
       window.scrollTo({top:0,behavior:'smooth'});
-    } catch (error) { message('answer-message', error.message, true); }
+    }); } catch (error) { message('answer-message', error.message, true); }
   };
   $('cancel-job').onclick = async () => {
-    try { status = await api('cancel'); render(); }
+    try { await withPending('cancel-job', async () => { status = await api('cancel'); render(); }); }
     catch (error) { message('generate-message', error.message, true); }
   };
 
   async function refresh() {
     try {
       status = await api('status');
+      $('initial-loading').hidden = true;
       const job = status.job;
-      if (job?.kind === 'distill' && job.active) wasDistilling = true;
-      if (wasDistilling && job?.kind === 'distill' && !job.active) {
+      if (job?.kind === 'document' && job.active) wasDocumentGenerating = true;
+      if (wasDocumentGenerating && job?.kind === 'document' && !job.active) {
+        wasDocumentGenerating = false;
+        if (job.phase === 'complete') {
+          training = (await api('examples', {kind:'training'})).examples;
+          renderList('training');
+        }
+      }
+      if (['distill', 'auto'].includes(job?.kind) && job.active) wasDistilling = true;
+      if (wasDistilling && ['distill', 'auto'].includes(job?.kind) && !job.active) {
         wasDistilling = false;
         if (job.phase === 'complete') {
+          if (job.kind === 'auto') {
+            prompts = (await api('examples', {kind:'prompts'})).examples;
+            renderList('prompts');
+            $('auto-topic').value = '';
+          }
           distilled = (await api('examples', {kind:'distilled'})).examples;
           renderAnswers();
           message('answer-message');
@@ -507,28 +721,44 @@
       models = app.models || [];
     } catch (_) { /* The chat may be busy. */ }
     translate();
-    const selector = $('teacher');
-    selector.replaceChildren();
-    if (!models.length) {
-      const option = document.createElement('option');
-      option.textContent = tr('noModels');
-      selector.append(option);
-    } else models.forEach(name => {
-      const option = document.createElement('option');
-      option.value = name;
-      option.textContent = name;
-      selector.append(option);
-    });
+    for (const id of ['student-train','student-distill']) {
+      const note = document.createElement('span');
+      note.id = id + '-wait';
+      note.className = 'hint loading';
+      note.textContent = tr('saving');
+      note.hidden = true;
+      $(id).after(note);
+    }
+    for (const id of ['teacher','doc-teacher']) {
+      const selector = $(id);
+      selector.replaceChildren();
+      if (!models.length) {
+        const option = document.createElement('option');
+        option.textContent = tr('noModels');
+        selector.append(option);
+      } else models.forEach(name => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        selector.append(option);
+      });
+    }
     const loaded = await Promise.allSettled([
       api('status'), api('examples', {kind:'training'}),
       api('examples', {kind:'prompts'}), api('examples', {kind:'distilled'})
     ]);
     status = loaded[0].status === 'fulfilled' ? loaded[0].value : null;
+    $('initial-loading').hidden = Boolean(status);
+    if (!status) {
+      $('initial-loading').classList.remove('loading');
+      $('initial-loading').textContent = tr('loadFailed');
+    }
     training = loaded[1].status === 'fulfilled' ? loaded[1].value.examples : [];
     prompts = loaded[2].status === 'fulfilled' ? loaded[2].value.examples : [];
     distilled = loaded[3].status === 'fulfilled' ? loaded[3].value.examples : [];
     renderList('training'); renderList('prompts'); renderAnswers(); render();
-    if (status?.job?.kind === 'distill' && status.job.active) wasDistilling = true;
+    if (['distill', 'auto'].includes(status?.job?.kind) && status.job.active) wasDistilling = true;
+    if (status?.job?.kind === 'document' && status.job.active) wasDocumentGenerating = true;
     setInterval(refresh, 1500);
   })();
 })();
