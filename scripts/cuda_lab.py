@@ -11,26 +11,46 @@ from pathlib import Path
 
 
 def prompt_tokens(tokenizer, prompt):
-    if getattr(tokenizer, "chat_template", None):
-        return tokenizer.apply_chat_template(
-            [{"role": "user", "content": prompt}],
-            tokenize=True,
-            add_generation_prompt=True,
-        )
-    return tokenizer("User: " + prompt + "\nAssistant:", add_special_tokens=True).input_ids
+    if not getattr(tokenizer, "chat_template", None):
+        raise ValueError("This model has no chat template. Choose an instruct/chat GGUF with a chat template or a complete Hugging Face instruct model.")
+    return tokenizer.apply_chat_template(
+        [{"role": "user", "content": prompt}],
+        tokenize=True,
+        add_generation_prompt=True,
+    )
 
 
 def training_row(tokenizer, prompt, completion, max_length=1024):
     prefix = prompt_tokens(tokenizer, prompt)
-    answer = tokenizer(completion, add_special_tokens=False).input_ids
-    if tokenizer.eos_token_id is not None:
-        answer.append(tokenizer.eos_token_id)
+    full = tokenizer.apply_chat_template(
+        [{"role": "user", "content": prompt}, {"role": "assistant", "content": completion}],
+        tokenize=True,
+        add_generation_prompt=False,
+    )
+    common = 0
+    for expected, actual in zip(prefix, full):
+        if expected != actual:
+            break
+        common += 1
+    if common < len(prefix) - 8:
+        raise ValueError("This model's chat template cannot be masked for fine tuning")
+    prefix = full[:common]
+    answer = full[common:]
     if not answer:
         raise ValueError("Training answer produced no tokens")
     answer = answer[: max_length - 1]
     prefix = prefix[-(max_length - len(answer)) :]
     tokens = prefix + answer
     return {"input_ids": tokens, "attention_mask": [1] * len(tokens), "labels": [-100] * len(prefix) + answer}
+
+
+def response_stop_ids(tokenizer):
+    vocab = tokenizer.get_vocab()
+    values = [tokenizer.eos_token_id]
+    for marker in ("<|eot_id|>", "<|im_end|>"):
+        if marker in vocab:
+            values.append(vocab[marker])
+    return list(dict.fromkeys(value for value in values if isinstance(value, int) and value >= 0))
 
 
 def read_dataset(path, tokenizer):
@@ -61,6 +81,8 @@ def cuda_dependencies():
 
 def tokenizer_for(folder, tokenizer_class):
     tokenizer = tokenizer_class.from_pretrained(folder, local_files_only=True, trust_remote_code=False)
+    if not tokenizer.chat_template:
+        raise ValueError("This model has no chat template. Choose an instruct/chat model with a chat template.")
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
     return tokenizer
@@ -142,6 +164,9 @@ def preview(args):
             max_new_tokens=args.max_tokens,
             do_sample=False,
             pad_token_id=tokenizer.pad_token_id,
+            eos_token_id=response_stop_ids(tokenizer) or None,
+            repetition_penalty=1.1,
+            no_repeat_ngram_size=4,
         )
     print(tokenizer.decode(result[0, len(tokens) :], skip_special_tokens=True).strip(), end="")
 

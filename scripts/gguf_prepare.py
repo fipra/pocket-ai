@@ -17,10 +17,16 @@ def source_identity(path):
 
 def prepared(output, identity):
     try:
+        tokenizer_config = output / "tokenizer_config.json"
+        has_template = (output / "chat_template.jinja").is_file() or (
+            tokenizer_config.is_file()
+            and bool(json.loads(tokenizer_config.read_text(encoding="utf-8")).get("chat_template"))
+        )
         return (
             json.loads((output / "source.json").read_text(encoding="utf-8")) == identity
             and (output / "config.json").is_file()
             and any(output.glob("*.safetensors"))
+            and has_template
         )
     except (OSError, ValueError):
         return False
@@ -55,6 +61,8 @@ def prepare(source, output):
         tokenizer = AutoTokenizer.from_pretrained(
             str(source.parent), gguf_file=source.name, local_files_only=True, trust_remote_code=False
         )
+        if not tokenizer.chat_template:
+            raise ValueError("This GGUF has no chat template. Choose an instruct/chat GGUF that includes tokenizer.chat_template.")
         model = AutoModelForCausalLM.from_pretrained(
             str(source.parent), gguf_file=source.name, local_files_only=True,
             trust_remote_code=False, torch_dtype=torch.float16, device_map={"": "cpu"},

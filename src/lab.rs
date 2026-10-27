@@ -839,6 +839,7 @@ impl Service {
         if !manifest.is_some_and(|manifest| {
             manifest["validationExamples"].as_u64() == Some(0)
                 && manifest["trainingExamples"].as_u64() == Some(current_count)
+                && (!cfg!(windows) || manifest["formatVersion"].as_u64() == Some(2))
         }) {
             return false;
         }
@@ -861,6 +862,7 @@ impl Service {
         if manifest["baseModel"] != self.student_model()
             || manifest["method"] != "LoRA"
             || manifest["validationExamples"].as_u64() != Some(0)
+            || (cfg!(windows) && manifest["formatVersion"].as_u64() != Some(2))
         {
             return None;
         }
@@ -922,6 +924,15 @@ impl Service {
         let training_count = training.len();
         let prompt_count = self.rows("prompts").map_or(0, |rows| rows.len());
         let distilled_count = self.rows("distilled").map_or(0, |rows| rows.len());
+        let adapter_needs_format_upgrade = cfg!(windows)
+            && self.latest_adapter().is_some_and(|adapter| {
+                adapter.parent().is_some_and(|run| {
+                    fs::read(run.join("manifest.json"))
+                        .ok()
+                        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+                        .is_some_and(|manifest| manifest["formatVersion"].as_u64() != Some(2))
+                })
+            });
         json!({"trainingCount":training_count,"promptCount":prompt_count,"distilledCount":distilled_count,
             "job":self.job.as_ref().map(|job|job.lock().unwrap().status()),
             "baseModel":self.student_selection(),"resolvedBaseModel":self.student_model(),
@@ -930,7 +941,7 @@ impl Service {
             "localModelValid":self.local_model_path().is_some_and(|path|validate_local_model_path(&path).is_ok()),
             "chatTrainBases":CHAT_TRAIN_BASES,"selectionSaved":self.root.join("student-model.txt").is_file(),
             "trainSupported":cfg!(any(all(target_os="macos", target_arch="aarch64"), target_os="windows")),
-            "workspace":self.root,"document":self.document_meta(),"openrouterConfigured":self.openrouter_key().is_ok(),"adapter":self.latest_adapter(),"adapterFresh":self.adapter_fresh(),
+            "workspace":self.root,"document":self.document_meta(),"openrouterConfigured":self.openrouter_key().is_ok(),"adapter":self.latest_adapter(),"adapterFresh":self.adapter_fresh(),"adapterNeedsFormatUpgrade":adapter_needs_format_upgrade,
             "canContinue":self.continuation_adapter(&training).is_some()})
     }
 
@@ -1683,7 +1694,8 @@ fn prepare_training_data(
     fs::write(
         run.join("manifest.json"),
         json!({"baseModel":student,"iterations":iters,"resumedFrom":resumed_from,
-            "trainingExamples":examples.len(),"validationExamples":0,"method":"LoRA"})
+            "trainingExamples":examples.len(),"validationExamples":0,"method":"LoRA",
+            "formatVersion":if cfg!(windows) {2} else {1}})
         .to_string(),
     )
     .map_err(|e| e.to_string())?;

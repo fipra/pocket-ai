@@ -322,7 +322,7 @@
     else if (training.length < 5) message('train-message', tr('trainNeedFive'));
     else if (status.job?.kind !== 'train') message('train-message');
     if (!status.adapter && status.job?.kind !== 'preview') message('preview-message', tr('noAdapter'));
-    else if (status.adapter && !status.adapterFresh && status.job?.kind !== 'preview') message('preview-message', tr('needsRetrain'));
+    else if (status.adapter && !status.adapterFresh && status.job?.kind !== 'preview') message('preview-message', tr(status.adapterNeedsFormatUpgrade ? 'trainFormatChanged' : 'needsRetrain'));
     else if (status.adapterFresh && status.job?.kind !== 'preview') message('preview-message');
     renderJob();
   }
