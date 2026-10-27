@@ -2430,7 +2430,7 @@ mod tests {
         assert_eq!(service.status()["adapterFresh"], false);
         fs::write(
             adapter.parent().unwrap().join("manifest.json"),
-            json!({"baseModel":DEFAULT_STUDENT,"trainingExamples":1,"validationExamples":0})
+            json!({"baseModel":DEFAULT_STUDENT,"trainingExamples":1,"validationExamples":0,"formatVersion":2})
                 .to_string(),
         )
         .unwrap();
@@ -2458,7 +2458,7 @@ mod tests {
         fs::create_dir_all(&adapter).unwrap();
         fs::write(
             adapter.parent().unwrap().join("manifest.json"),
-            json!({"baseModel":DEFAULT_STUDENT,"trainingExamples":1,"validationExamples":0})
+            json!({"baseModel":DEFAULT_STUDENT,"trainingExamples":1,"validationExamples":0,"formatVersion":2})
                 .to_string(),
         )
         .unwrap();
