@@ -44,25 +44,6 @@ try {
     Get-ChildItem $gpuRuntime -Filter '*.dll' -File | Copy-Item -Destination $gpuBin -Force
     $openMpLicense = Join-Path $gpuRuntime 'LICENSE-LLVM-OpenMP'
     if (Test-Path $openMpLicense) { Copy-Item $openMpLicense $gpuBin }
-    @'
-@echo off
-setlocal
-set "GPU_SERVER=%~dp0bin\gpu\llama-server.exe"
-"%GPU_SERVER%" --list-devices 2>nul | findstr /C:"Vulkan" >nul
-if errorlevel 1 (
-  echo No Vulkan GPU detected. Starting with CPU.
-) else (
-  set "LLAMA_SERVER=%GPU_SERVER%"
-  echo Vulkan GPU detected. Starting with GPU acceleration.
-)
-"%~dp0bin\usb-ai-rust.exe"
-'@ | Set-Content (Join-Path $out 'Avvia LlamaNest GPU.cmd')
-    @'
-@echo off
-setlocal
-set "USB_AI_BIND_ADDR=0.0.0.0"
-call "%~dp0Avvia LlamaNest GPU.cmd"
-'@ | Set-Content (Join-Path $out 'Avvia LlamaNest LAN GPU.cmd')
   }
   Get-ChildItem (Join-Path $root 'models') -Filter '*.gguf' | ForEach-Object {
     $destination = Join-Path (Join-Path $out 'models') $_.Name
@@ -75,18 +56,29 @@ call "%~dp0Avvia LlamaNest GPU.cmd"
   foreach ($name in @('LICENSE','LICENSE-MIT-LEGACY','COMMERCIAL_LICENSE.md','LICENSING_HISTORY.md')) {
     Copy-Item (Join-Path $root $name) (Join-Path $out $name)
   }
-  '@echo off' + "`r`n" + '"%~dp0bin\usb-ai-rust.exe"' | Set-Content (Join-Path $out 'Avvia LlamaNest.cmd')
+  @'
+@echo off
+setlocal
+set "GPU_SERVER=%~dp0bin\gpu\llama-server.exe"
+if exist "%GPU_SERVER%" (
+  "%GPU_SERVER%" --list-devices 2>nul | findstr /C:"Vulkan" >nul
+  if not errorlevel 1 (
+    set "LLAMA_SERVER=%GPU_SERVER%"
+    echo Vulkan GPU detected. Starting with GPU acceleration.
+  )
+)
+"%~dp0bin\usb-ai-rust.exe"
+'@ | Set-Content (Join-Path $out 'Avvia LlamaNest.cmd')
   @'
 @echo off
 setlocal
 set "USB_AI_BIND_ADDR=0.0.0.0"
-"%~dp0bin\usb-ai-rust.exe"
+call "%~dp0Avvia LlamaNest.cmd"
 '@ | Set-Content (Join-Path $out 'Avvia LlamaNest LAN.cmd')
   @'
 Double-click Avvia LlamaNest.cmd. The browser opens at 127.0.0.1.
-If Avvia LlamaNest GPU.cmd is present, use it to try Vulkan GPU acceleration.
-The GPU launcher uses the CPU runtime when no Vulkan GPU is detected.
-To open LlamaNest from another computer, use Avvia LlamaNest LAN.cmd or Avvia LlamaNest LAN GPU.cmd when present.
+The launcher uses a Vulkan GPU when one is detected, otherwise the CPU.
+To open LlamaNest from another computer, use Avvia LlamaNest LAN.cmd.
 Then visit http://SERVER-NAME:48157/ or http://SERVER-IP:48157/ from that computer; use the port printed by the app if 48157 is busy.
 LAN mode has no login and uses HTTP. Allow inbound TCP 48157-48167 on the Windows firewall only for trusted networks.
 Keep the whole folder on the USB drive. Models and data stay here.

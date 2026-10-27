@@ -68,10 +68,10 @@ jobs:
           & scripts/package-windows.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Windows package failed' }
           $folder = 'release/USB-AI-Rust-Windows-x64'
-          foreach ($required in @('Avvia LlamaNest.cmd','Avvia LlamaNest GPU.cmd','Avvia LlamaNest LAN.cmd','Avvia LlamaNest LAN GPU.cmd','bin/usb-ai-rust.exe','bin/llama-cli.exe','bin/llama-server.exe','bin/llama-quantize.exe','bin/gpu/llama-server.exe','bin/gpu/ggml-vulkan.dll','bin/pdftotext.exe','models/catalog.json','PocketAI-data/workspace.json','LICENSE','LICENSING_HISTORY.md')) {
+          foreach ($required in @('Avvia LlamaNest.cmd','Avvia LlamaNest LAN.cmd','bin/usb-ai-rust.exe','bin/llama-cli.exe','bin/llama-server.exe','bin/llama-quantize.exe','bin/gpu/llama-server.exe','bin/gpu/ggml-vulkan.dll','bin/pdftotext.exe','models/catalog.json','PocketAI-data/workspace.json','LICENSE','LICENSING_HISTORY.md')) {
             if (!(Test-Path (Join-Path $folder $required))) { throw "Package is missing $required" }
           }
-          foreach ($obsolete in @('Avvia USB AI Rust.cmd','Avvia Offllama.cmd','Avvia USB AI Rust GPU.cmd','Avvia Offllama GPU.cmd')) {
+          foreach ($obsolete in @('Avvia USB AI Rust.cmd','Avvia Offllama.cmd','Avvia USB AI Rust GPU.cmd','Avvia Offllama GPU.cmd','Avvia LlamaNest GPU.cmd','Avvia LlamaNest LAN GPU.cmd')) {
             if (Test-Path (Join-Path $folder $obsolete)) { throw "Package contains obsolete launcher $obsolete" }
           }
           $workspace = Get-Content (Join-Path $folder 'PocketAI-data/workspace.json') -Raw | ConvertFrom-Json
