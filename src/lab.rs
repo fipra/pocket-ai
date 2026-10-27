@@ -17,6 +17,7 @@ const OPENROUTER_MODELS_URL: &str = "https://openrouter.ai/api/v1/models";
 const OPENROUTER_CHAT_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
 const CUDA_LAB_SCRIPT: &str = include_str!("../scripts/cuda_lab.py");
 const GGUF_PREPARE_SCRIPT: &str = include_str!("../scripts/gguf_prepare.py");
+const EXPORT_MODEL_SCRIPT: &str = include_str!("../scripts/export_model.py");
 
 fn adapter_weights(adapter: &Path) -> Option<PathBuf> {
     ["adapters.safetensors", "adapter_model.safetensors"]
@@ -45,6 +46,12 @@ fn cuda_worker(directory: &Path) -> Result<PathBuf, String> {
     Ok(script)
 }
 
+fn export_worker(directory: &Path) -> Result<PathBuf, String> {
+    let script = directory.join("export_model.py");
+    fs::write(&script, EXPORT_MODEL_SCRIPT).map_err(|e| e.to_string())?;
+    Ok(script)
+}
+
 fn prepare_gguf_base(
     source: &Path,
     root: &Path,
@@ -55,18 +62,75 @@ fn prepare_gguf_base(
         return Ok(source.to_path_buf());
     }
     validate_local_model_path(source)?;
+    let mac_python = if cfg!(target_os = "macos") {
+        let mut candidates = Vec::new();
+        if let Some(path) = std::env::var_os("LLAMANEST_GGUF_PYTHON") {
+            candidates.push(PathBuf::from(path));
+        }
+        candidates.push(root.parent().unwrap_or(root).join("gguf-venv/bin/python3"));
+        candidates.push(mlx_python(&mlx_tool(root, "MLX_LM_LORA", "mlx_lm.lora")));
+        candidates.push(PathBuf::from("python3"));
+        let available = candidates.into_iter().find(|python| {
+            Command::new(python)
+                .args([
+                    "-c",
+                    "import torch, transformers, gguf, safetensors, sentencepiece, tiktoken",
+                ])
+                .output()
+                .is_ok_and(|output| output.status.success())
+        });
+        if let Some(ref python) = available {
+            let mut output = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(log)
+                .map_err(|e| e.to_string())?;
+            writeln!(
+                output,
+                "Using available GGUF conversion Python: {}",
+                python.display()
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        available
+    } else {
+        None
+    };
+    if cfg!(target_os = "macos") && mac_python.is_none() {
+        let catalog: Value = serde_json::from_str(include_str!("../models/catalog.json"))
+            .map_err(|e| e.to_string())?;
+        if let Some(entry) = catalog.as_array().and_then(|entries| {
+            entries.iter().find(|entry| {
+                source
+                    .file_name()
+                    .is_some_and(|name| entry["file"].as_str() == name.to_str())
+                    && entry["size_bytes"].as_u64().is_none_or(|size| {
+                        fs::metadata(source).is_ok_and(|meta| meta.len() == size)
+                    })
+            })
+        }) {
+            if let Some((_, base)) = CHAT_TRAIN_BASES
+                .iter()
+                .find(|(name, _)| entry["file"].as_str() == Some(*name))
+            {
+                if crate::sha256_file(source).ok().as_deref() == entry["sha256"].as_str() {
+                    let mut output = fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(log)
+                        .map_err(|e| e.to_string())?;
+                    writeln!(output, "Using the matching full-precision base {base} for this verified catalog GGUF")
+                        .map_err(|e| e.to_string())?;
+                    return Ok(PathBuf::from(base));
+                }
+            }
+        }
+    }
     let python = if cfg!(windows) {
         cuda_python(root)?
     } else {
-        let python = std::env::var_os("LLAMANEST_GGUF_PYTHON")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| root.parent().unwrap_or(root).join("gguf-venv/bin/python3"));
-        if !python.is_file() {
-            return Err(
-                "GGUF conversion is not installed. Run Installa Fine Tuning GGUF.command.".into(),
-            );
-        }
-        python
+        mac_python
+            .ok_or("GGUF conversion is not installed. Run Installa Fine Tuning GGUF.command.")?
     };
     let script = root.join("gguf_prepare.py");
     fs::write(&script, GGUF_PREPARE_SCRIPT).map_err(|e| e.to_string())?;
@@ -1756,6 +1820,11 @@ pub fn start_train(
             let adapter = run.join("adapter");
             let log_path = run.join("train.log");
             let training_base = prepare_gguf_base(Path::new(&student), &root, &job, &log_path)?;
+            fs::write(
+                run.join("training-base.txt"),
+                training_base.to_string_lossy().as_bytes(),
+            )
+            .map_err(|e| e.to_string())?;
             let log = fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -2162,11 +2231,29 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
             if target.exists() {
                 return Err("This model is already in the library".into());
             }
+            if fused.exists() {
+                fs::remove_dir_all(&fused).map_err(|e| e.to_string())?;
+            }
+            for stale in [&f16, &part] {
+                if stale.exists() {
+                    fs::remove_file(stale).map_err(|e| e.to_string())?;
+                }
+            }
             let training_base = prepare_gguf_base(Path::new(&student), &root, &job, &log)?;
+            if let Ok(recorded) = fs::read_to_string(run.join("training-base.txt")) {
+                if recorded != training_base.to_string_lossy() {
+                    return Err("The training base changed since fine tuning; exporting would lose the learned weights".into());
+                }
+            }
             // Fusion writes a full copy, conversion writes F16, then quantization writes Q4.
             // Keep a reserve to avoid filling the user's disk halfway through export.
             let free_bytes = crate::quantize::free_disk_bytes(&models)?;
-            let needed_gb = match student.as_str() {
+            let estimate_name = if training_base.is_absolute() {
+                student.as_str()
+            } else {
+                training_base.to_str().unwrap_or(&student)
+            };
+            let needed_gb = match estimate_name {
                 DEFAULT_STUDENT => 3,
                 "Qwen/Qwen2.5-1.5B-Instruct" => 8,
                 "Qwen/Qwen2.5-3B-Instruct" | "meta-llama/Llama-3.2-3B-Instruct" => 16,
@@ -2192,7 +2279,7 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
                     "At least {needed_gb} GB of free disk space is needed to create the model"
                 ));
             }
-            let python = if cfg!(windows) {
+            let (python, export_base) = if cfg!(windows) {
                 let python = cuda_python(&root)?;
                 let script = cuda_worker(&export)?;
                 let mut merge = Command::new(&python);
@@ -2212,16 +2299,16 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
                     &log,
                     true,
                 )?;
-                python
+                (python, training_base.clone())
             } else {
                 let fuse_tool = mlx_tool(&root, "MLX_LM_FUSE", "mlx_lm.fuse");
                 let python = mlx_python(&fuse_tool);
-                let base = if Path::new(&student).is_absolute() {
+                let base = if training_base.is_absolute() {
                     let path = training_base.clone();
                     validate_local_model_folder(&path)?;
                     path
                 } else {
-                    cached_base_model(&python, &student)?
+                    cached_base_model(&python, &training_base.to_string_lossy())?
                 };
                 let mut fuse = Command::new(&fuse_tool);
                 fuse.arg("--model")
@@ -2241,25 +2328,51 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
                     }
                 }
                 run_export_step(&job, fuse, "Fuse adapter with base model", &log, true)?;
-                python
+                (python, base)
             };
             if !fused.join("config.json").is_file() {
                 return Err("Fusion did not produce a model".into());
             }
+            let converter_path = if cfg!(windows) {
+                cuda_converter()?
+            } else {
+                cuda_converter()
+                    .unwrap_or_else(|_| resolved_tool("LLAMA_CONVERT_HF", "convert_hf_to_gguf.py"))
+            };
+            let gguf_package = converter_path
+                .parent()
+                .map(|parent| parent.join("gguf-py"))
+                .filter(|path| path.is_dir());
+            let export_script = export_worker(&export)?;
+            let mut tokenizer = Command::new(&python);
+            tokenizer
+                .arg(&export_script)
+                .arg("prepare-tokenizer")
+                .arg("--base")
+                .arg(&export_base)
+                .arg("--fused")
+                .arg(&fused);
+            if Path::new(&student).is_file() {
+                tokenizer.arg("--original").arg(&student);
+            }
+            if let Some(package) = &gguf_package {
+                tokenizer.arg("--gguf-package").arg(package);
+            }
+            run_export_step(&job, tokenizer, "Preserve training tokenizer", &log, false)?;
 
-            let mut convert = Command::new(python);
+            let mut convert = Command::new(&python);
             convert
-                .arg(if cfg!(windows) {
-                    cuda_converter()?
-                } else {
-                    cuda_converter().unwrap_or_else(|_| {
-                        resolved_tool("LLAMA_CONVERT_HF", "convert_hf_to_gguf.py")
-                    })
-                })
+                .arg(&export_script)
+                .arg("convert-fused")
+                .arg("--converter")
+                .arg(&converter_path)
+                .arg("--fused")
                 .arg(&fused)
-                .args(["--outfile"])
-                .arg(&f16)
-                .args(["--outtype", "f16"]);
+                .arg("--outfile")
+                .arg(&f16);
+            if Path::new(&student).is_file() {
+                convert.arg("--original").arg(&student);
+            }
             run_export_step(&job, convert, "Convert fused model to GGUF", &log, true)?;
             valid_gguf(&f16)?;
 
@@ -2267,6 +2380,34 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
             quantize.arg(&f16).arg(&part).arg("Q4_K_M");
             run_export_step(&job, quantize, "Quantize GGUF model", &log, true)?;
             valid_gguf(&part)?;
+            let mut verify = Command::new(&python);
+            verify
+                .arg(&export_script)
+                .arg("verify-gguf")
+                .arg("--model")
+                .arg(&part)
+                .arg("--base")
+                .arg(&export_base);
+            if Path::new(&student).is_file() {
+                verify.arg("--original").arg(&student);
+            }
+            if let Some(package) = &gguf_package {
+                verify.arg("--gguf-package").arg(package);
+            }
+            run_export_step(&job, verify, "Verify exported GGUF tokenizer", &log, false)?;
+            let mut smoke = Command::new(tool_path("LLAMA_CLI", "llama-cli"));
+            smoke
+                .arg("-m")
+                .arg(&part)
+                .args(["-ngl", "0", "-p", "Hello", "-n", "1"])
+                .stdin(Stdio::null());
+            run_export_step(
+                &job,
+                smoke,
+                "Load and run GGUF with bundled llama-cli",
+                &log,
+                false,
+            )?;
             fs::rename(&part, &target).map_err(|e| e.to_string())?;
             // The finished model is in the library; temporary full precision copies are no longer needed.
             let _ = fs::remove_file(&f16);

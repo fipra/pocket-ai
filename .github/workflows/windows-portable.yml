@@ -11,6 +11,8 @@ on:
       - 'scripts/package-windows.ps1'
       - 'scripts/cuda_lab.py'
       - 'scripts/gguf_prepare.py'
+      - 'scripts/export_model.py'
+      - 'scripts/test_export_model.py'
       - 'scripts/test_cuda_lab.py'
       - 'scripts/setup-windows-cuda.ps1'
       - '.github/workflows/windows-portable.yml'
@@ -25,6 +27,8 @@ on:
       - 'scripts/package-windows.ps1'
       - 'scripts/cuda_lab.py'
       - 'scripts/gguf_prepare.py'
+      - 'scripts/export_model.py'
+      - 'scripts/test_export_model.py'
       - 'scripts/test_cuda_lab.py'
       - 'scripts/setup-windows-cuda.ps1'
       - '.github/workflows/windows-portable.yml'
@@ -80,8 +84,8 @@ jobs:
         run: |
           node --test web/desktop-lan.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Desktop LAN browser test failed' }
-          python -m unittest discover -s scripts -p test_cuda_lab.py
-          if ($LASTEXITCODE -ne 0) { throw 'CUDA worker data tests failed' }
+          python -m unittest discover -s scripts -p 'test_*.py'
+          if ($LASTEXITCODE -ne 0) { throw 'Laboratory worker tests failed' }
           cargo test --locked
           if ($LASTEXITCODE -ne 0) { throw 'Rust tests failed' }
           & scripts/package-windows.ps1

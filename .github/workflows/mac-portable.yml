@@ -11,6 +11,8 @@ on:
       - 'scripts/package-mac.py'
       - 'scripts/cuda_lab.py'
       - 'scripts/gguf_prepare.py'
+      - 'scripts/export_model.py'
+      - 'scripts/test_export_model.py'
       - 'scripts/setup-mac-gguf.command'
       - 'scripts/mac-launcher.command'
       - '.github/workflows/mac-portable.yml'
@@ -25,6 +27,8 @@ on:
       - 'scripts/package-mac.py'
       - 'scripts/cuda_lab.py'
       - 'scripts/gguf_prepare.py'
+      - 'scripts/export_model.py'
+      - 'scripts/test_export_model.py'
       - 'scripts/setup-mac-gguf.command'
       - 'scripts/mac-launcher.command'
       - '.github/workflows/mac-portable.yml'
@@ -60,6 +64,7 @@ jobs:
           LLAMANEST_CONVERTER_SOURCE_DIR: ${{ github.workspace }}/llama-converter
         run: |
           cargo test --locked
+          python3 -m unittest discover -s scripts -p 'test_*.py'
           python3 scripts/package-mac.py
           folder="release/USB-AI-Rust-mac-${{ matrix.architecture }}"
           test -f "$folder/Avvia LlamaNest.command"

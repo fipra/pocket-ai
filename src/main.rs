@@ -1982,7 +1982,7 @@ fn clean_llama_output(stdout: &str, prompt: &str, language: &str) -> Result<Stri
     Ok(answer)
 }
 
-fn sha256_file(path: &Path) -> Result<String, String> {
+pub(crate) fn sha256_file(path: &Path) -> Result<String, String> {
     #[cfg(target_os = "windows")]
     let output = Command::new("certutil")
         .arg("-hashfile")

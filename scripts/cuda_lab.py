@@ -184,10 +184,23 @@ def merge(args):
         low_cpu_mem_usage=True,
     )
     model = peft_class.from_pretrained(base, args.adapter, is_trainable=False, local_files_only=True)
-    model = model.merge_and_unload()
+    probes = []
+    for module in model.modules():
+        if not (hasattr(module, "lora_B") and hasattr(module, "get_base_layer")):
+            continue
+        if any(torch.count_nonzero(layer.weight).item() for layer in module.lora_B.values()):
+            layer = module.get_base_layer()
+            probes.append((layer, layer.weight.detach().clone()))
+        if len(probes) == 8:
+            break
+    if not probes:
+        raise RuntimeError("The LoRA adapter has no learned weights to merge")
+    model = model.merge_and_unload(safe_merge=True)
+    if not any(not torch.equal(layer.weight, before) for layer, before in probes):
+        raise RuntimeError("LoRA merge did not change the model weights")
     model.save_pretrained(args.output, safe_serialization=True, max_shard_size="2GB")
     tokenizer.save_pretrained(args.output)
-    if not (Path(args.output) / "config.json").is_file():
+    if not (Path(args.output) / "config.json").is_file() or not any(Path(args.output).glob("*.safetensors")):
         raise RuntimeError("Merged model was not saved")
 
 
