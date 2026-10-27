@@ -141,9 +141,20 @@ def main():
             shutil.copy2(source, OUT / "models" / name)
     for name in ["LICENSE", "LICENSE-MIT-LEGACY", "COMMERCIAL_LICENSE.md", "LICENSING_HISTORY.md"]:
         shutil.copy2(ROOT / name, OUT / name)
+    converter_source = pathlib.Path(os.environ.get("LLAMANEST_CONVERTER_SOURCE_DIR", ""))
+    if os.environ.get("LLAMANEST_CONVERTER_SOURCE_DIR"):
+        converter = BIN / "converter"
+        converter.mkdir(exist_ok=True)
+        shutil.copy2(converter_source / "convert_hf_to_gguf.py", converter)
+        shutil.copy2(converter_source / "LICENSE", converter)
+        shutil.copytree(converter_source / "conversion", converter / "conversion", dirs_exist_ok=True)
+        shutil.copytree(converter_source / "gguf-py", converter / "gguf-py", dirs_exist_ok=True)
     launcher = OUT / "Avvia LlamaNest.command"
     shutil.copy2(ROOT / "scripts/mac-launcher.command", launcher)
     launcher.chmod(0o755)
+    gguf_setup = OUT / "Installa Fine Tuning GGUF.command"
+    shutil.copy2(ROOT / "scripts/setup-mac-gguf.command", gguf_setup)
+    gguf_setup.chmod(0o755)
     (OUT / "LEGGIMI.txt").write_text(
         "Doppio clic su Avvia LlamaNest.command. Il browser si apre su 127.0.0.1.\n"
         "Al primo avvio il launcher verifica i binari inclusi e rimuove la loro quarantena.\n"

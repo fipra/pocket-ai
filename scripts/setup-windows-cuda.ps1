@@ -21,7 +21,7 @@ if (!(Test-Path $python)) {
 if ($LASTEXITCODE -ne 0) { throw 'Could not update pip.' }
 & $python -m pip install torch --index-url https://download.pytorch.org/whl/cu118
 if ($LASTEXITCODE -ne 0) { throw 'Could not install CUDA PyTorch.' }
-& $python -m pip install 'transformers>=4.45,<5' 'peft>=0.12,<1' 'accelerate>=0.34,<2' 'bitsandbytes>=0.45,<1' sentencepiece protobuf tiktoken numpy safetensors pyyaml requests tqdm
+& $python -m pip install 'transformers>=4.57,<5' 'peft>=0.12,<1' 'accelerate>=0.34,<2' 'bitsandbytes>=0.45,<1' gguf sentencepiece protobuf tiktoken numpy safetensors pyyaml requests tqdm
 if ($LASTEXITCODE -ne 0) { throw 'Could not install the training and conversion packages.' }
 & $python -c "import torch, transformers, peft, bitsandbytes; print('CUDA GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'unavailable'); assert torch.cuda.is_available(), 'PyTorch cannot access the NVIDIA GPU'"
 if ($LASTEXITCODE -ne 0) { throw 'CUDA is unavailable. Update the NVIDIA driver or choose a compatible PyTorch CUDA build.' }

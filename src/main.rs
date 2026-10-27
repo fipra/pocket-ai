@@ -2537,7 +2537,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                             "choose_local_model" => {
                                 if local_client {
-                                    lab::choose_local_model(lab_service.clone())
+                                    lab::choose_local_model(
+                                        lab_service.clone(),
+                                        data["kind"] == "file",
+                                    )
                                 } else {
                                     Err("localModelLocalOnly".into())
                                 }

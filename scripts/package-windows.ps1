@@ -54,6 +54,7 @@ try {
   Copy-Item (Join-Path $converterSource 'convert_hf_to_gguf.py') $converter
   Copy-Item (Join-Path $converterSource 'conversion') $converter -Recurse
   Copy-Item (Join-Path $converterSource 'gguf-py') $converter -Recurse
+  Copy-Item (Join-Path $converterSource 'LICENSE') $converter
   Copy-Item (Join-Path $root 'scripts\setup-windows-cuda.ps1') (Join-Path $out 'Installa Fine Tuning GPU.ps1')
   @'
 @echo off

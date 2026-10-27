@@ -232,7 +232,7 @@
     if (!status) return;
     const busy = saving || Boolean(pendingAction) || status.job?.active === true;
     const runningButton = {train:'train-start',preview:'preview-start',export:'export-model',distill:'generate-start',auto:'auto-start',document:'doc-generate'}[status.job?.active ? status.job.kind : ''];
-    for (const id of ['train-start','choose-local-model','preview-start','export-model','generate-start','auto-start','doc-upload','doc-generate','openrouter-save','openrouter-remove','distill-openrouter-save','distill-openrouter-remove','use-answers','cancel-job','pair-import','prompt-import','correction-save']) {
+    for (const id of ['train-start','choose-local-model','choose-gguf-model','preview-start','export-model','generate-start','auto-start','doc-upload','doc-generate','openrouter-save','openrouter-remove','distill-openrouter-save','distill-openrouter-remove','use-answers','cancel-job','pair-import','prompt-import','correction-save']) {
       const loading = id === pendingAction || id === runningButton;
       $(id).classList.toggle('loading', loading);
       $(id).setAttribute('aria-busy', String(loading));
@@ -279,6 +279,7 @@
     const localSelected = status.baseModel === '@local';
     const localReady = localSelected && status.localModelValid;
     $('choose-local-model').disabled = busy;
+    $('choose-gguf-model').disabled = busy;
     $('train-start').disabled = busy || pendingPair || longTraining || !status.trainSupported || !localReady || training.length < 5;
     $('train-start').textContent = tr(status.canContinue ? 'continueTrain' : 'trainStart');
     $('iterations-label').textContent = tr(status.canContinue ? 'additionalIterations' : 'iterations');
@@ -451,7 +452,15 @@
   $('tab-distill').onclick = () => tab('distill');
   $('choose-local-model').onclick = async () => {
     try { await withPending('choose-local-model', async () => {
-      status = await api('choose_local_model');
+      status = await api('choose_local_model', {kind:'folder'});
+      render();
+      message('train-message');
+    }); }
+    catch (error) { message('train-message', localError(error), true); }
+  };
+  $('choose-gguf-model').onclick = async () => {
+    try { await withPending('choose-gguf-model', async () => {
+      status = await api('choose_local_model', {kind:'file'});
       render();
       message('train-message');
     }); }

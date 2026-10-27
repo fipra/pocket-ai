@@ -16,6 +16,7 @@ const MAX_DOCUMENT_TEXT: usize = 1024 * 1024;
 const OPENROUTER_MODELS_URL: &str = "https://openrouter.ai/api/v1/models";
 const OPENROUTER_CHAT_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
 const CUDA_LAB_SCRIPT: &str = include_str!("../scripts/cuda_lab.py");
+const GGUF_PREPARE_SCRIPT: &str = include_str!("../scripts/gguf_prepare.py");
 
 fn adapter_weights(adapter: &Path) -> Option<PathBuf> {
     ["adapters.safetensors", "adapter_model.safetensors"]
@@ -44,6 +45,50 @@ fn cuda_worker(directory: &Path) -> Result<PathBuf, String> {
     Ok(script)
 }
 
+fn prepare_gguf_base(
+    source: &Path,
+    root: &Path,
+    job: &Arc<Mutex<Job>>,
+    log: &Path,
+) -> Result<PathBuf, String> {
+    if !source.is_file() {
+        return Ok(source.to_path_buf());
+    }
+    validate_local_model_path(source)?;
+    let python = if cfg!(windows) {
+        cuda_python(root)?
+    } else {
+        let python = std::env::var_os("LLAMANEST_GGUF_PYTHON")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| root.parent().unwrap_or(root).join("gguf-venv/bin/python3"));
+        if !python.is_file() {
+            return Err(
+                "GGUF conversion is not installed. Run Installa Fine Tuning GGUF.command.".into(),
+            );
+        }
+        python
+    };
+    let script = root.join("gguf_prepare.py");
+    fs::write(&script, GGUF_PREPARE_SCRIPT).map_err(|e| e.to_string())?;
+    let output = root.join("gguf-base");
+    let mut command = Command::new(python);
+    command
+        .arg(script)
+        .arg("--source")
+        .arg(source)
+        .arg("--output")
+        .arg(&output);
+    run_export_step(
+        job,
+        command,
+        "Prepare selected GGUF for training",
+        log,
+        false,
+    )?;
+    validate_local_model_folder(&output)?;
+    Ok(output)
+}
+
 fn cuda_converter() -> Result<PathBuf, String> {
     let converter = std::env::var_os("LLAMA_CONVERT_HF")
         .map(PathBuf::from)
@@ -58,6 +103,22 @@ fn cuda_converter() -> Result<PathBuf, String> {
         .is_file()
         .then_some(converter)
         .ok_or_else(|| "The Windows package is missing the Hugging Face to GGUF converter".into())
+}
+
+fn mlx_tool(root: &Path, override_name: &str, name: &str) -> PathBuf {
+    if let Some(path) = std::env::var_os(override_name) {
+        return PathBuf::from(path);
+    }
+    let installed = root
+        .parent()
+        .unwrap_or(root)
+        .join("gguf-venv/bin")
+        .join(name);
+    if installed.is_file() {
+        installed
+    } else {
+        tool_path(override_name, name)
+    }
 }
 
 fn valid_openrouter_key(key: &str) -> bool {
@@ -280,7 +341,7 @@ const STUDENT_MODELS: [&str; 6] = [
     "meta-llama/Llama-3.2-3B-Instruct",
     "google/gemma-2-9b-it",
 ];
-// A GGUF is quantized for inference. MLX trains the corresponding full-precision base.
+// GGUF selections are unpacked into a private full-precision training base first.
 const CHAT_TRAIN_BASES: [(&str, &str); 5] = [
     ("qwen2.5-0.5b-instruct-q4_k_m.gguf", DEFAULT_STUDENT),
     (
@@ -696,7 +757,7 @@ impl Service {
     fn checked_student_model(&self) -> Result<String, String> {
         let model = self.student_model();
         if self.student_selection() == LOCAL_STUDENT {
-            validate_local_model_folder(Path::new(&model))?;
+            validate_local_model_path(Path::new(&model))?;
         }
         Ok(model)
     }
@@ -711,7 +772,7 @@ impl Service {
             return Err("Unsupported student model".into());
         }
         if model == LOCAL_STUDENT {
-            validate_local_model_folder(&self.local_model_path().unwrap())?;
+            validate_local_model_path(&self.local_model_path().unwrap())?;
         }
         fs::create_dir_all(&self.root).map_err(|e| e.to_string())?;
         let temporary = self.root.join("student-model.txt.part");
@@ -720,15 +781,15 @@ impl Service {
         Ok(self.status())
     }
 
-    fn select_local_model_path(&mut self, folder: &Path) -> Result<Value, String> {
+    fn select_local_model_path(&mut self, path: &Path) -> Result<Value, String> {
         if self.busy() {
             return Err("A lab job is already running".into());
         }
-        let folder = fs::canonicalize(folder).map_err(|_| "localModelInvalid")?;
-        validate_local_model_folder(&folder)?;
+        let path = fs::canonicalize(path).map_err(|_| "localModelInvalid")?;
+        validate_local_model_path(&path)?;
         fs::create_dir_all(&self.root).map_err(|e| e.to_string())?;
         let temporary = self.root.join("local-model-path.txt.part");
-        fs::write(&temporary, folder.to_string_lossy().as_bytes()).map_err(|e| e.to_string())?;
+        fs::write(&temporary, path.to_string_lossy().as_bytes()).map_err(|e| e.to_string())?;
         fs::rename(&temporary, self.root.join("local-model-path.txt"))
             .map_err(|e| e.to_string())?;
         self.select_student(LOCAL_STUDENT)
@@ -820,7 +881,7 @@ impl Service {
         if shared < 3 || shared * 2 < previous.len().min(examples.len()) {
             return None;
         }
-        Some(adapter.join("adapters.safetensors"))
+        adapter_weights(&adapter)
     }
 
     pub fn new(root: PathBuf) -> Self {
@@ -866,7 +927,7 @@ impl Service {
             "baseModel":self.student_selection(),"resolvedBaseModel":self.student_model(),
             "studentModels":STUDENT_MODELS.iter().copied().chain(self.local_model_path().is_some().then_some(LOCAL_STUDENT)).collect::<Vec<_>>(),
             "localModelName":self.local_model_path().and_then(|path|path.file_name().map(|name|name.to_string_lossy().into_owned())),
-            "localModelValid":self.local_model_path().is_some_and(|path|validate_local_model_folder(&path).is_ok()),
+            "localModelValid":self.local_model_path().is_some_and(|path|validate_local_model_path(&path).is_ok()),
             "chatTrainBases":CHAT_TRAIN_BASES,"selectionSaved":self.root.join("student-model.txt").is_file(),
             "trainSupported":cfg!(any(all(target_os="macos", target_arch="aarch64"), target_os="windows")),
             "workspace":self.root,"document":self.document_meta(),"openrouterConfigured":self.openrouter_key().is_ok(),"adapter":self.latest_adapter(),"adapterFresh":self.adapter_fresh(),
@@ -1139,7 +1200,12 @@ pub fn start_preview(service: Arc<Mutex<Service>>, prompt: &str) -> Result<Value
             let preview_id = id();
             let log_path = dir.join(format!("{preview_id}.log"));
             let answer_path = dir.join(format!("{preview_id}.txt"));
-            let log = fs::File::create(&log_path).map_err(|e| e.to_string())?;
+            let training_base = prepare_gguf_base(Path::new(&student), &root, &job, &log_path)?;
+            let log = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_path)
+                .map_err(|e| e.to_string())?;
             let answer = fs::File::create(&answer_path).map_err(|e| e.to_string())?;
             let mut command = if cfg!(windows) {
                 let python = cuda_python(&root)?;
@@ -1149,7 +1215,7 @@ pub fn start_preview(service: Arc<Mutex<Service>>, prompt: &str) -> Result<Value
                     .arg(script)
                     .arg("preview")
                     .arg("--model")
-                    .arg(&student)
+                    .arg(&training_base)
                     .arg("--adapter")
                     .arg(&adapter)
                     .arg("--prompt")
@@ -1158,9 +1224,12 @@ pub fn start_preview(service: Arc<Mutex<Service>>, prompt: &str) -> Result<Value
                     .arg("160");
                 command
             } else {
-                let mut command = Command::new(tool_path("MLX_LM_GENERATE", "mlx_lm.generate"));
+                let mut command =
+                    Command::new(mlx_tool(&root, "MLX_LM_GENERATE", "mlx_lm.generate"));
                 command
-                    .args(["--model", &student, "--adapter-path"])
+                    .arg("--model")
+                    .arg(&training_base)
+                    .arg("--adapter-path")
                     .arg(&adapter)
                     .args([
                         "--prompt",
@@ -1674,7 +1743,12 @@ pub fn start_train(
             let data = prepare_training_data(&run, &examples, &student, iters, resume.as_deref())?;
             let adapter = run.join("adapter");
             let log_path = run.join("train.log");
-            let log = fs::File::create(&log_path).map_err(|e| e.to_string())?;
+            let training_base = prepare_gguf_base(Path::new(&student), &root, &job, &log_path)?;
+            let log = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_path)
+                .map_err(|e| e.to_string())?;
             let stderr = log.try_clone().map_err(|e| e.to_string())?;
             let mut command = if cfg!(windows) {
                 let python = cuda_python(&root)?;
@@ -1684,7 +1758,7 @@ pub fn start_train(
                     .arg(script)
                     .arg("train")
                     .arg("--model")
-                    .arg(&student)
+                    .arg(&training_base)
                     .arg("--data")
                     .arg(data.join("train.jsonl"))
                     .arg("--adapter")
@@ -1696,9 +1770,11 @@ pub fn start_train(
                 }
                 command
             } else {
-                let mut command = Command::new(tool_path("MLX_LM_LORA", "mlx_lm.lora"));
+                let mut command = Command::new(mlx_tool(&root, "MLX_LM_LORA", "mlx_lm.lora"));
                 command
-                    .args(["--model", &student, "--train", "--data"])
+                    .arg("--model")
+                    .arg(&training_base)
+                    .args(["--train", "--data"])
                     .arg(&data)
                     .arg("--adapter-path")
                     .arg(&adapter);
@@ -1897,7 +1973,21 @@ fn validate_local_model_folder(folder: &Path) -> Result<(), String> {
     Ok(())
 }
 
-pub fn choose_local_model(service: Arc<Mutex<Service>>) -> Result<Value, String> {
+fn validate_local_model_path(path: &Path) -> Result<(), String> {
+    if path.is_dir() {
+        return validate_local_model_folder(path);
+    }
+    if !path.is_file()
+        || !path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("gguf"))
+    {
+        return Err("localModelInvalid".into());
+    }
+    valid_gguf(path).map_err(|_| "localModelInvalid".into())
+}
+
+pub fn choose_local_model(service: Arc<Mutex<Service>>, file: bool) -> Result<Value, String> {
     if !cfg!(any(target_os = "macos", target_os = "windows")) {
         return Err("localModelUnsupportedPlatform".into());
     }
@@ -1905,21 +1995,21 @@ pub fn choose_local_model(service: Arc<Mutex<Service>>) -> Result<Value, String>
         return Err("A lab job is already running".into());
     }
     let output = if cfg!(windows) {
+        let script = if file {
+            "Add-Type -AssemblyName System.Windows.Forms; $picker = New-Object System.Windows.Forms.OpenFileDialog; $picker.Title = 'Choose a GGUF model for fine tuning'; $picker.Filter = 'GGUF models (*.gguf)|*.gguf'; $picker.CheckFileExists = $true; if ($picker.ShowDialog() -eq 'OK') { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); [Console]::WriteLine($picker.FileName) } else { exit 1 }"
+        } else {
+            "Add-Type -AssemblyName System.Windows.Forms; $picker = New-Object System.Windows.Forms.FolderBrowserDialog; $picker.Description = 'Choose a model folder for fine tuning'; if ($picker.ShowDialog() -eq 'OK') { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); [Console]::WriteLine($picker.SelectedPath) } else { exit 1 }"
+        };
         Command::new("powershell.exe")
-            .args([
-                "-NoProfile",
-                "-STA",
-                "-Command",
-                "Add-Type -AssemblyName System.Windows.Forms; $picker = New-Object System.Windows.Forms.FolderBrowserDialog; $picker.Description = 'Choose a model folder for fine tuning'; if ($picker.ShowDialog() -eq 'OK') { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); [Console]::WriteLine($picker.SelectedPath) } else { exit 1 }",
-            ])
+            .args(["-NoProfile", "-STA", "-Command", script])
             .output()
     } else {
-        Command::new("osascript")
-            .args([
-                "-e",
-                "POSIX path of (choose folder with prompt \"Choose a model folder for fine tuning\")",
-            ])
-            .output()
+        let script = if file {
+            "POSIX path of (choose file with prompt \"Choose a GGUF model for fine tuning\")"
+        } else {
+            "POSIX path of (choose folder with prompt \"Choose a model folder for fine tuning\")"
+        };
+        Command::new("osascript").args(["-e", script]).output()
     }
     .map_err(|_| "localModelPickerUnavailable")?;
     if !output.status.success() {
@@ -1939,6 +2029,7 @@ fn run_export_step(
     mut command: Command,
     label: &str,
     log: &Path,
+    advance: bool,
 ) -> Result<(), String> {
     let output = fs::OpenOptions::new()
         .create(true)
@@ -1992,7 +2083,9 @@ fn run_export_step(
                     .unwrap_or_else(|| format!("exited with {status}"));
                 return Err(format!("{label}: {detail}"));
             }
-            guard.done += 1;
+            if advance {
+                guard.done += 1;
+            }
             return Ok(());
         }
         drop(guard);
@@ -2057,6 +2150,7 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
             if target.exists() {
                 return Err("This model is already in the library".into());
             }
+            let training_base = prepare_gguf_base(Path::new(&student), &root, &job, &log)?;
             // Fusion writes a full copy, conversion writes F16, then quantization writes Q4.
             // Keep a reserve to avoid filling the user's disk halfway through export.
             let free_bytes = crate::quantize::free_disk_bytes(&models)?;
@@ -2066,7 +2160,7 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
                 "Qwen/Qwen2.5-3B-Instruct" | "meta-llama/Llama-3.2-3B-Instruct" => 16,
                 "Qwen/Qwen2.5-7B-Instruct" => 35,
                 _ if Path::new(&student).is_absolute() => {
-                    let weight_bytes = fs::read_dir(&student)
+                    let weight_bytes = fs::read_dir(&training_base)
                         .map_err(|e| e.to_string())?
                         .filter_map(Result::ok)
                         .filter(|entry| {
@@ -2094,18 +2188,24 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
                     .arg(script)
                     .arg("merge")
                     .arg("--model")
-                    .arg(&student)
+                    .arg(&training_base)
                     .arg("--adapter")
                     .arg(&adapter)
                     .arg("--output")
                     .arg(&fused);
-                run_export_step(&job, merge, "Merge CUDA adapter with base model", &log)?;
+                run_export_step(
+                    &job,
+                    merge,
+                    "Merge CUDA adapter with base model",
+                    &log,
+                    true,
+                )?;
                 python
             } else {
-                let fuse_tool = resolved_tool("MLX_LM_FUSE", "mlx_lm.fuse");
+                let fuse_tool = mlx_tool(&root, "MLX_LM_FUSE", "mlx_lm.fuse");
                 let python = mlx_python(&fuse_tool);
                 let base = if Path::new(&student).is_absolute() {
-                    let path = PathBuf::from(&student);
+                    let path = training_base.clone();
                     validate_local_model_folder(&path)?;
                     path
                 } else {
@@ -2128,7 +2228,7 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
                         fuse.arg("--de-quantize");
                     }
                 }
-                run_export_step(&job, fuse, "Fuse adapter with base model", &log)?;
+                run_export_step(&job, fuse, "Fuse adapter with base model", &log, true)?;
                 python
             };
             if !fused.join("config.json").is_file() {
@@ -2140,18 +2240,20 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
                 .arg(if cfg!(windows) {
                     cuda_converter()?
                 } else {
-                    resolved_tool("LLAMA_CONVERT_HF", "convert_hf_to_gguf.py")
+                    cuda_converter().unwrap_or_else(|_| {
+                        resolved_tool("LLAMA_CONVERT_HF", "convert_hf_to_gguf.py")
+                    })
                 })
                 .arg(&fused)
                 .args(["--outfile"])
                 .arg(&f16)
                 .args(["--outtype", "f16"]);
-            run_export_step(&job, convert, "Convert fused model to GGUF", &log)?;
+            run_export_step(&job, convert, "Convert fused model to GGUF", &log, true)?;
             valid_gguf(&f16)?;
 
             let mut quantize = Command::new(tool_path("LLAMA_QUANTIZE", "llama-quantize"));
             quantize.arg(&f16).arg(&part).arg("Q4_K_M");
-            run_export_step(&job, quantize, "Quantize GGUF model", &log)?;
+            run_export_step(&job, quantize, "Quantize GGUF model", &log, true)?;
             valid_gguf(&part)?;
             fs::rename(&part, &target).map_err(|e| e.to_string())?;
             // The finished model is in the library; temporary full precision copies are no longer needed.
@@ -2418,6 +2520,33 @@ mod tests {
             reopened.checked_student_model().unwrap_err(),
             "localModelInvalid"
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn selected_gguf_file_is_validated_and_persists_as_training_model() {
+        let root = std::env::temp_dir().join(format!("llamanest-gguf-model-{}", id()));
+        fs::create_dir_all(&root).unwrap();
+        let file = root.join("my-chat-model.gguf");
+        fs::write(&file, [0_u8; 32]).unwrap();
+        let mut service = Service::new(root.join("lab"));
+        assert_eq!(
+            service.select_local_model_path(&file).unwrap_err(),
+            "localModelInvalid"
+        );
+        let mut bytes = [0_u8; 32];
+        bytes[..4].copy_from_slice(b"GGUF");
+        fs::write(&file, bytes).unwrap();
+        let selected = service.select_local_model_path(&file).unwrap();
+        assert_eq!(selected["localModelName"], "my-chat-model.gguf");
+        assert_eq!(selected["localModelValid"], true);
+        let reopened = Service::new(root.join("lab"));
+        assert_eq!(
+            reopened.status()["resolvedBaseModel"],
+            fs::canonicalize(&file).unwrap().to_str().unwrap()
+        );
+        fs::remove_file(file).unwrap();
+        assert_eq!(reopened.status()["localModelValid"], false);
         fs::remove_dir_all(root).unwrap();
     }
 
