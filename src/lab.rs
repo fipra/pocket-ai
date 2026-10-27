@@ -1978,10 +1978,19 @@ fn resolved_tool(override_name: &str, name: &str) -> PathBuf {
 }
 
 fn mlx_python(fuse_tool: &Path) -> PathBuf {
+    let executable = if fuse_tool.components().count() == 1 {
+        std::env::var_os("PATH").and_then(|path| {
+            std::env::split_paths(&path)
+                .map(|directory| directory.join(fuse_tool))
+                .find(|candidate| candidate.is_file())
+        })
+    } else {
+        Some(fuse_tool.to_path_buf())
+    };
     std::env::var_os("LLAMA_CONVERT_PYTHON")
         .map(PathBuf::from)
         .or_else(|| {
-            fs::read_to_string(fuse_tool)
+            fs::read_to_string(executable?)
                 .ok()?
                 .lines()
                 .next()?
