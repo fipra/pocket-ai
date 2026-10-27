@@ -2263,6 +2263,10 @@ fn smoke_exported_gguf(job: &Arc<Mutex<Job>>, model: &Path, log: &Path) -> Resul
     )
 }
 
+// Small LoRA updates can disappear when fused weights are quantized to four bits.
+// Eight-bit GGUF retained the learned answer in the export regression case.
+const LAB_EXPORT_QUANTIZATION: &str = "Q8_0";
+
 pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Result<Value, String> {
     if !cfg!(any(
         all(target_os = "macos", target_arch = "aarch64"),
@@ -2308,7 +2312,7 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
             &short_name
         };
         let final_name = format!(
-            "LlamaNest-{short_name}-{}-Q4_K_M.gguf",
+            "LlamaNest-{short_name}-{}-{LAB_EXPORT_QUANTIZATION}.gguf",
             run.file_name().unwrap().to_string_lossy()
         );
         let part = models.join(format!(".{final_name}.part"));
@@ -2371,7 +2375,7 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
                 }
                 fs::remove_file(&part).map_err(|e| e.to_string())?;
             }
-            // Fusion writes a full copy, conversion writes F16, then quantization writes Q4.
+            // Fusion writes a full copy, conversion writes F16, then quantization writes Q8.
             // Keep a reserve to avoid filling the user's disk halfway through export.
             let free_bytes = crate::quantize::free_disk_bytes(&models)?;
             let estimate_name = if training_base.is_absolute() {
@@ -2492,7 +2496,7 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
             valid_gguf(&f16)?;
 
             let mut quantize = Command::new(tool_path("LLAMA_QUANTIZE", "llama-quantize"));
-            quantize.arg(&f16).arg(&part).arg("Q4_K_M");
+            quantize.arg(&f16).arg(&part).arg(LAB_EXPORT_QUANTIZATION);
             run_export_step(&job, quantize, "Quantize GGUF model", &log, true)?;
             verify_exported_gguf(
                 &job,
@@ -2545,6 +2549,7 @@ mod tests {
 
     #[test]
     fn export_smoke_check_exits_after_one_turn() {
+        assert_eq!(LAB_EXPORT_QUANTIZATION, "Q8_0");
         let command = gguf_smoke_command(Path::new("model.gguf"));
         let args: Vec<_> = command.get_args().collect();
         assert!(args.contains(&std::ffi::OsStr::new("--single-turn")));
