@@ -1003,7 +1003,12 @@ impl Service {
                 .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
                 .filter(|report| {
                     self.latest_adapter().as_ref().is_some_and(|adapter| {
-                        report["adapterPath"] == adapter.to_string_lossy().as_ref()
+                        adapter
+                            .parent()
+                            .and_then(|run| run.file_name())
+                            .is_some_and(|run_id| {
+                                report["runId"] == run_id.to_string_lossy().as_ref()
+                            })
                     })
                 })
         } else {
@@ -1426,7 +1431,7 @@ fn verification_report(
     gguf_rows: &[Value],
     gguf: Option<&Path>,
 ) -> Value {
-    json!({"adapterPath":adapter,"adapter":adapter_rows,"gguf":gguf_rows,
+    json!({"runId":adapter.parent().and_then(|run|run.file_name()).and_then(|name|name.to_str()),"adapter":adapter_rows,"gguf":gguf_rows,
         "ggufName":gguf.and_then(|path|path.file_name().and_then(|name|name.to_str()))})
 }
 
