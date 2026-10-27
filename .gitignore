@@ -2,5 +2,10 @@
 /release/
 /PocketAI-data/
 /models/*.gguf
+/remote/models/
+/remote/token.local.txt
+/remote/downloads/
+/remote/llama-cuda/
+/LlamaNest-remote-test.zip
 __pycache__/
 .DS_Store
