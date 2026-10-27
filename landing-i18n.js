@@ -18,7 +18,6 @@
     ["Fai il fine tuning del modello alunno, correggi le risposte e crea un GGUF da portare nella chat LlamaNest.", "Fine tune the student model, correct its answers, and create a GGUF for LlamaNest chat.", "Ajustez le modèle élève, corrigez ses réponses et créez un GGUF pour le chat LlamaNest.", "Trainiere das Schülermodell, korrigiere Antworten und erstelle ein GGUF für den LlamaNest-Chat.", "Ajusta el modelo alumno, corrige respuestas y crea un GGUF para el chat de LlamaNest."],
     ["Il Laboratorio è nell’app per computer. Per ora il fine tuning e l’esportazione del modello richiedono un Mac Apple Silicon. Con l’insegnante locale i contenuti restano sul computer; se scegli OpenRouter, le domande o gli estratti vengono inviati online e possono esserci costi.", "The Laboratory is in the desktop app. Fine tuning and model export currently require an Apple Silicon Mac. A local teacher keeps content on your computer; with OpenRouter, questions or excerpts are sent online and requests may cost money.", "Le Laboratoire se trouve dans l’application pour ordinateur. L’ajustement fin et l’export du modèle nécessitent actuellement un Mac Apple Silicon. Un enseignant local garde le contenu sur votre ordinateur ; avec OpenRouter, les questions ou extraits sont envoyés en ligne et peuvent entraîner des frais.", "Das Labor ist in der Desktop-App. Fine Tuning und Modellexport benötigen derzeit einen Mac mit Apple Silicon. Bei einem lokalen Lehrermodell bleiben die Inhalte auf dem Computer; mit OpenRouter werden Fragen oder Auszüge online gesendet und können Kosten verursachen.", "El Laboratorio está en la aplicación de escritorio. El ajuste fino y la exportación del modelo requieren por ahora un Mac Apple Silicon. Con un maestro local el contenido permanece en el ordenador; con OpenRouter, las preguntas o fragmentos se envían en línea y pueden generar costes."],
     ["Scarica l’app per computer", "Download the desktop app", "Télécharger l’application pour ordinateur", "Desktop-App herunterladen", "Descargar la aplicación de escritorio"],
-    ["Come funziona il Laboratorio", "How the Laboratory works", "Fonctionnement du Laboratoire", "So funktioniert das Labor", "Cómo funciona el Laboratorio"],
     ["Scarica gratis ↓", "Download free ↓", "Télécharger gratuitement ↓", "Kostenlos herunterladen ↓", "Descargar gratis ↓"],
     ["Un progetto FipraAI", "A FipraAI project", "Un projet FipraAI", "Ein Projekt von FipraAI", "Un proyecto de FipraAI"],
     ["La tua AI.", "Your AI.", "Votre IA.", "Deine KI.", "Tu IA."],
@@ -91,9 +90,6 @@
   const language = preferred.map(value => value.toLowerCase().split("-")[0]).find(value => locales.includes(value)) || "en";
   const column = locales.indexOf(language);
   document.documentElement.lang = language;
-  document.getElementById("lab-guide-link").href = language === "it"
-    ? "https://github.com/fipra/usb-ai/blob/main/README.it.md"
-    : "https://github.com/fipra/usb-ai/blob/main/README.md";
   if (language === "it") return;
 
   const dictionary = new Map(rows.map(row => [row[0], row[column]]));
