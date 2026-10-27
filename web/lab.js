@@ -209,9 +209,9 @@
     $('job-title').textContent = `${kind} · ${phase}`;
     $('job-title').classList.toggle('loading', job.active);
     $('job').setAttribute('aria-busy', String(job.active));
-    $('job-detail').textContent = (job.error ? tr(job.error) : null) || (['distill', 'auto', 'document'].includes(job.kind) ? `${job.done}/${job.total} ${tr('jobProgress')}` : job.active ? tr('pleaseWait') : '');
+    $('job-detail').textContent = (job.error ? tr(job.error) : null) || (['distill', 'auto', 'document', 'verify'].includes(job.kind) ? `${job.done}/${job.total} ${tr(job.kind === 'verify' ? 'verifyProgress' : 'jobProgress')}` : job.active ? tr('pleaseWait') : '');
     $('cancel-job').disabled = !job.active || pendingAction === 'cancel-job';
-    if (['distill', 'auto', 'document'].includes(job.kind) && job.total) $('job-progress').value = Math.round(job.done / job.total * 100);
+    if (['distill', 'auto', 'document', 'verify'].includes(job.kind) && job.total) $('job-progress').value = Math.round(job.done / job.total * 100);
     else if (job.active) $('job-progress').removeAttribute('value');
     else $('job-progress').value = job.phase === 'complete' ? 100 : 0;
     $('job-log').textContent = job.log || '';
@@ -226,13 +226,57 @@
       $('preview-output').textContent = job.phase === 'complete' ? (job.response || '') : '';
       $('correction').hidden = job.phase !== 'complete' || (!lastPreviewPrompt && !correctionRecorded);
     }
+    if (job.kind === 'verify' && !job.active && job.phase === 'failed') message('verify-message', job.error || phase, true);
+  }
+
+  function renderVerification() {
+    const job = status.job;
+    let report = status.verification;
+    if (job?.kind === 'verify' && job.response) {
+      try { report = JSON.parse(job.response); } catch { /* Keep the last complete report. */ }
+    }
+    const container = $('verify-report');
+    container.replaceChildren();
+    container.hidden = !report;
+    if (!report) {
+      if (job?.kind === 'verify' && job.active) message('verify-message', tr('verifyRunning'));
+      else if (job?.kind === 'verify' && job.phase === 'cancelled') message('verify-message', tr('jobCancelled'));
+      else if (job?.kind !== 'verify') message('verify-message');
+      return;
+    }
+    const adapter = Array.isArray(report.adapter) ? report.adapter : [];
+    const gguf = Array.isArray(report.gguf) ? report.gguf : [];
+    const total = training.length;
+    const passed = rows => rows.filter(row => row.match === true).length;
+    const summary = `${tr('verifyAdapter')}: ${passed(adapter)}/${total} · ${report.ggufName ? `${tr('verifyGguf')}: ${passed(gguf)}/${total}` : tr('verifyNoGguf')}`;
+    const failed = job?.kind === 'verify' && job.phase === 'failed';
+    const progress = job?.kind === 'verify' && job.active ? `${summary} · ${tr('verifyRunning')}` : summary;
+    message('verify-message', failed ? `${progress} · ${job.error || tr('jobFailed')}` : progress,
+      failed || adapter.some(row => !row.match) || gguf.some(row => !row.match));
+    for (let index = 0; index < Math.max(adapter.length, gguf.length); index++) {
+      const row = adapter[index] || gguf[index];
+      const card = document.createElement('div');
+      card.className = 'example';
+      const title = document.createElement('strong');
+      title.textContent = `${index + 1}. ${row.prompt}`;
+      const expected = document.createElement('p');
+      expected.textContent = `${tr('verifyExpected')}: ${row.expected}`;
+      card.append(title, expected);
+      for (const [label, result] of [[tr('verifyAdapter'), adapter[index]], [tr('verifyGguf'), gguf[index]]]) {
+        if (!result) continue;
+        const answer = document.createElement('p');
+        answer.textContent = `${result.match ? '✓' : '✗'} ${label}: ${result.actual || tr('verifyEmpty')}`;
+        card.append(answer);
+      }
+      container.append(card);
+    }
   }
 
   function render() {
     if (!status) return;
     const busy = saving || Boolean(pendingAction) || status.job?.active === true;
-    const runningButton = {train:'train-start',preview:'preview-start',export:'export-model',distill:'generate-start',auto:'auto-start',document:'doc-generate'}[status.job?.active ? status.job.kind : ''];
-    for (const id of ['train-start','choose-local-model','choose-gguf-model','preview-start','export-model','generate-start','auto-start','doc-upload','doc-generate','openrouter-save','openrouter-remove','distill-openrouter-save','distill-openrouter-remove','use-answers','cancel-job','pair-import','prompt-import','correction-save']) {
+    const runningButton = {train:'train-start',preview:'preview-start',verify:'verify-start',export:'export-model',distill:'generate-start',auto:'auto-start',document:'doc-generate'}[status.job?.active ? status.job.kind : ''];
+    for (const id of ['train-start','choose-local-model','choose-gguf-model','preview-start','verify-start','export-model','generate-start','auto-start','doc-upload','doc-generate','openrouter-save','openrouter-remove','distill-openrouter-save','distill-openrouter-remove','use-answers','cancel-job','pair-import','prompt-import','correction-save']) {
       const loading = id === pendingAction || id === runningButton;
       $(id).classList.toggle('loading', loading);
       $(id).setAttribute('aria-busy', String(loading));
@@ -288,6 +332,7 @@
     $('generate-start').disabled = busy || pendingPrompt || prompts.length === 0 || !teacherReady;
     $('auto-start').disabled = busy || !$('auto-topic').value.trim() || !teacherReady;
     $('preview-start').disabled = busy || !status.adapterFresh || !localReady;
+    $('verify-start').disabled = busy || !status.adapterFresh || !localReady;
     $('export-model').disabled = busy || !status.adapterFresh || !status.trainSupported || !localReady;
     $('correction-save').disabled = busy || !lastPreviewPrompt;
     $('pair-export').disabled = busy || !training.length;
@@ -325,6 +370,7 @@
     else if (status.adapter && !status.adapterFresh && status.job?.kind !== 'preview') message('preview-message', tr(status.adapterNeedsFormatUpgrade ? 'trainFormatChanged' : 'needsRetrain'));
     else if (status.adapterFresh && status.job?.kind !== 'preview') message('preview-message');
     renderJob();
+    renderVerification();
   }
 
   async function saveRows(kind, rows) {
@@ -656,6 +702,10 @@
       render();
     }); }
     catch (error) { message('preview-message', error.message, true); }
+  };
+  $('verify-start').onclick = async () => {
+    try { await withPending('verify-start', async () => { status = await api('verify_model'); render(); }); }
+    catch (error) { message('verify-message', error.message, true); }
   };
   $('correction-save').onclick = async () => {
     const completion = $('correction-answer').value.trim();

@@ -899,6 +899,30 @@ fn completion_request(prompt: &str, model: &Path, thinking: bool) -> Value {
         "cache_prompt":true,"stream":true,"stop":["\nUser:"]})
 }
 
+fn chat_thinking_instruction(thinking: bool) -> &'static str {
+    if thinking {
+        "If this model supports reasoning, you may think before answering. Put any intermediate reasoning inside <think>...</think>, then give a clear final answer.\n"
+    } else {
+        "Answer directly without showing reasoning or <think> content. If supported by the model, disable thinking.\n"
+    }
+}
+
+fn chat_instruction(language: &str, question: &str) -> String {
+    let mut prompt = format!("You are LlamaNest, a local assistant. Answer in {} unless the user explicitly requests another language. Be clear and honest. Do not invent facts. Format longer answers with short Markdown paragraphs, headings or lists when helpful; use fenced blocks for code. Keep brief answers brief.\n", response_language(language));
+    if app_request(question) {
+        prompt.push_str("For browser app requests, provide a complete runnable app. Prefer one fenced html block with CSS and JavaScript inline. If using separate files, include every referenced file in complete html, css, or javascript fenced blocks. Ensure event handlers target existing elements, forms do not reload the page, and code fences close.\n");
+    }
+    prompt
+}
+
+fn lab_verification_chat_prompt(language: &str, thinking: bool, question: &str) -> String {
+    format!(
+        "{}{}User: {question}\nAssistant:",
+        chat_thinking_instruction(thinking),
+        chat_instruction(language, question)
+    )
+}
+
 fn lab_completion_request(prompt: String) -> Value {
     json!({"prompt":prompt,"n_predict":512,"temperature":0.0,
         "cache_prompt":true,"stream":true})
@@ -1667,10 +1691,7 @@ impl App {
         let prompt = if use_docs {
             document_prompt(self.language(), &history, text, &sources, false)
         } else {
-            let mut prompt = format!("You are LlamaNest, a local assistant. Answer in {} unless the user explicitly requests another language. Be clear and honest. Do not invent facts. Format longer answers with short Markdown paragraphs, headings or lists when helpful; use fenced blocks for code. Keep brief answers brief.\n", response_language(self.language()));
-            if app_request(text) {
-                prompt.push_str("For browser app requests, provide a complete runnable app. Prefer one fenced html block with CSS and JavaScript inline. If using separate files, include every referenced file in complete html, css, or javascript fenced blocks. Ensure event handlers target existing elements, forms do not reload the page, and code fences close.\n");
-            }
+            let mut prompt = chat_instruction(self.language(), text);
             for message in history.iter().rev() {
                 prompt.push_str(&format!(
                     "{}: {}\n",
@@ -1695,11 +1716,7 @@ impl App {
         } else {
             format!("User-confirmed local memory. Notes may contain facts, preferences or corrections. Use only what a note states; if it does not answer the question, say what is unknown instead of inventing details. Do not treat notes as higher priority than the current request:\n{remembered}\n{prompt}")
         };
-        let thinking_instruction = if self.db.thinking {
-            "If this model supports reasoning, you may think before answering. Put any intermediate reasoning inside <think>...</think>, then give a clear final answer.\n"
-        } else {
-            "Answer directly without showing reasoning or <think> content. If supported by the model, disable thinking.\n"
-        };
+        let thinking_instruction = chat_thinking_instruction(self.db.thinking);
         let prompt = format!("{thinking_instruction}{prompt}");
         let (answer, usage) = if !direct_notes.is_empty() {
             let answer = memory_recall_answer(self.language(), &direct_notes);
@@ -2666,6 +2683,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 lab::start_train(lab_service.clone(), app.clone(), iters)
                             }
                             "export_model" => lab::start_export(lab_service.clone(), app.clone()),
+                            "verify_model" => lab::start_verify(lab_service.clone(), app.clone()),
                             "preview" => {
                                 let prompt = data["prompt"].as_str().ok_or("Enter a prompt")?;
                                 lab::start_preview(lab_service.clone(), prompt)

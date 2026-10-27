@@ -997,6 +997,18 @@ impl Service {
                         .is_some_and(|manifest| manifest["formatVersion"].as_u64() != Some(2))
                 })
             });
+        let verification = if self.adapter_fresh() {
+            fs::read(self.root.join("verification-latest.json"))
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+                .filter(|report| {
+                    self.latest_adapter().as_ref().is_some_and(|adapter| {
+                        report["adapterPath"] == adapter.to_string_lossy().as_ref()
+                    })
+                })
+        } else {
+            None
+        };
         json!({"trainingCount":training_count,"promptCount":prompt_count,"distilledCount":distilled_count,
             "job":self.job.as_ref().map(|job|job.lock().unwrap().status()),
             "baseModel":self.student_selection(),"resolvedBaseModel":self.student_model(),
@@ -1006,7 +1018,7 @@ impl Service {
             "chatTrainBases":CHAT_TRAIN_BASES,"selectionSaved":self.root.join("student-model.txt").is_file(),
             "trainSupported":cfg!(any(all(target_os="macos", target_arch="aarch64"), target_os="windows")),
             "workspace":self.root,"document":self.document_meta(),"openrouterConfigured":self.openrouter_key().is_ok(),"adapter":self.latest_adapter(),"adapterFresh":self.adapter_fresh(),"adapterNeedsFormatUpgrade":adapter_needs_format_upgrade,
-            "canContinue":self.continuation_adapter(&training).is_some()})
+            "canContinue":self.continuation_adapter(&training).is_some(),"verification":verification})
     }
 
     fn rows(&self, kind: &str) -> Result<Vec<Example>, String> {
@@ -1390,6 +1402,288 @@ pub fn start_preview(service: Arc<Mutex<Service>>, prompt: &str) -> Result<Value
             }
             Err(error) => guard.error = Some(error),
             _ => {}
+        }
+    });
+    Ok(service.lock().unwrap().status())
+}
+
+fn verify_answer_matches(expected: &str, actual: &str) -> bool {
+    let normalize = |value: &str| {
+        value
+            .trim()
+            .trim_matches(|ch: char| ch.is_ascii_punctuation() || ch.is_whitespace())
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase()
+    };
+    normalize(expected) == normalize(actual)
+}
+
+fn verification_report(
+    adapter: &Path,
+    adapter_rows: &[Value],
+    gguf_rows: &[Value],
+    gguf: Option<&Path>,
+) -> Value {
+    json!({"adapterPath":adapter,"adapter":adapter_rows,"gguf":gguf_rows,
+        "ggufName":gguf.and_then(|path|path.file_name().and_then(|name|name.to_str()))})
+}
+
+fn verification_gguf(models: &Path, run: &Path) -> Option<PathBuf> {
+    let run_id = run.file_name()?.to_str()?;
+    let suffix = format!("-{run_id}-");
+    let mut matches = fs::read_dir(models)
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.is_file()
+                && path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| {
+                        name.starts_with("LlamaNest-")
+                            && name.contains(&suffix)
+                            && name.ends_with(".gguf")
+                    })
+        })
+        .collect::<Vec<_>>();
+    matches.sort_by_key(|path| {
+        !path
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().ends_with("-Q8_0.gguf"))
+    });
+    matches.into_iter().next()
+}
+
+fn verify_adapter_answer(
+    job: &Arc<Mutex<Job>>,
+    root: &Path,
+    base: &Path,
+    adapter: &Path,
+    prompt: &str,
+    index: usize,
+    directory: &Path,
+) -> Result<String, String> {
+    let answer_path = directory.join(format!("adapter-{index}.txt"));
+    let log_path = directory.join(format!("adapter-{index}.log"));
+    let answer = fs::File::create(&answer_path).map_err(|e| e.to_string())?;
+    let log = fs::File::create(&log_path).map_err(|e| e.to_string())?;
+    let mut command = if cfg!(windows) {
+        let python = cuda_python(root)?;
+        let script = cuda_worker(directory)?;
+        let mut command = Command::new(python);
+        command
+            .arg(script)
+            .arg("preview")
+            .arg("--model")
+            .arg(base)
+            .arg("--adapter")
+            .arg(adapter)
+            .arg("--prompt")
+            .arg(prompt)
+            .args(["--max-tokens", "160"]);
+        command
+    } else {
+        let mut command = Command::new(mlx_tool(root, "MLX_LM_GENERATE", "mlx_lm.generate"));
+        command
+            .arg("--model")
+            .arg(base)
+            .arg("--adapter-path")
+            .arg(adapter)
+            .args([
+                "--prompt",
+                prompt,
+                "--max-tokens",
+                "160",
+                "--verbose",
+                "false",
+            ]);
+        command
+    };
+    let child = command
+        .stdout(Stdio::from(answer))
+        .stderr(Stdio::from(log))
+        .spawn()
+        .map_err(|e| format!("Cannot start model verification: {e}"))?;
+    {
+        let mut guard = job.lock().unwrap();
+        if guard.cancelled {
+            let mut child = child;
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("Verification cancelled".into());
+        }
+        guard.child = Some(child);
+        guard.log = Some(log_path.clone());
+        guard.phase = "running";
+    }
+    loop {
+        let mut guard = job.lock().unwrap();
+        if guard.cancelled {
+            if let Some(mut child) = guard.child.take() {
+                let _ = child.wait();
+            }
+            return Err("Verification cancelled".into());
+        }
+        if let Some(status) = guard
+            .child
+            .as_mut()
+            .unwrap()
+            .try_wait()
+            .map_err(|e| e.to_string())?
+        {
+            guard.child = None;
+            if !status.success() {
+                let detail = fs::read_to_string(&log_path)
+                    .unwrap_or_default()
+                    .lines()
+                    .rev()
+                    .find(|line| !line.trim().is_empty())
+                    .unwrap_or("Model verification failed")
+                    .to_owned();
+                return Err(detail);
+            }
+            break;
+        }
+        drop(guard);
+        thread::sleep(Duration::from_millis(250));
+    }
+    fs::read_to_string(answer_path)
+        .map(|answer| answer.trim().to_owned())
+        .map_err(|e| e.to_string())
+}
+
+pub fn start_verify(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Result<Value, String> {
+    let (adapter, student, root, examples, job) = {
+        let mut lab = service.lock().unwrap();
+        if lab.busy() {
+            return Err("A lab job is already running".into());
+        }
+        if !lab.adapter_fresh() {
+            return Err("Retrain the model with the current examples before verifying".into());
+        }
+        let examples = lab.rows("training")?;
+        if examples.is_empty() {
+            return Err("Add training examples before verifying".into());
+        }
+        let adapter = lab.latest_adapter().ok_or("Train an adapter first")?;
+        let student = lab.checked_student_model()?;
+        let job = Arc::new(Mutex::new(Job::new("verify", examples.len())));
+        lab.job = Some(job.clone());
+        (adapter, student, lab.root.clone(), examples, job)
+    };
+    let models = app.lock().unwrap().models.clone();
+    thread::spawn(move || {
+        let result = (|| -> Result<(), String> {
+            let run = adapter.parent().ok_or("Training run missing")?;
+            let gguf = verification_gguf(&models, run);
+            if gguf.is_some() {
+                job.lock().unwrap().total = examples.len() * 2;
+            }
+            let directory = root.join("verifications").join(id());
+            fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+            let report_path = directory.join("report.json");
+            let latest_path = root.join("verification-latest.json");
+            let _ = fs::remove_file(&latest_path);
+            job.lock().unwrap().response = Some(report_path.clone());
+            let base = prepare_gguf_base(
+                Path::new(&student),
+                &root,
+                &job,
+                &directory.join("prepare.log"),
+            )?;
+            let mut adapter_rows = Vec::new();
+            let mut gguf_rows = Vec::new();
+            for (index, example) in examples.iter().enumerate() {
+                if job.lock().unwrap().cancelled {
+                    return Err("Verification cancelled".into());
+                }
+                let expected = example.completion.as_deref().unwrap_or("");
+                let actual = verify_adapter_answer(
+                    &job,
+                    &root,
+                    &base,
+                    &adapter,
+                    &example.prompt,
+                    index,
+                    &directory,
+                )?;
+                adapter_rows.push(
+                    json!({"prompt":example.prompt,"expected":expected,"actual":actual,
+                    "match":verify_answer_matches(expected, &actual)}),
+                );
+                job.lock().unwrap().done += 1;
+                fs::write(
+                    &report_path,
+                    verification_report(&adapter, &adapter_rows, &gguf_rows, gguf.as_deref())
+                        .to_string(),
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            if let Some(model) = gguf {
+                for example in &examples {
+                    if job.lock().unwrap().cancelled {
+                        return Err("Verification cancelled".into());
+                    }
+                    let expected = example.completion.as_deref().unwrap_or("");
+                    let mut app = app.lock().unwrap();
+                    let generation = Arc::new(ActiveGeneration::new("lab-verify".into(), id()));
+                    job.lock().unwrap().generation = Some(generation.clone());
+                    let prompt = crate::lab_verification_chat_prompt(
+                        app.language(),
+                        app.db.thinking,
+                        &example.prompt,
+                    );
+                    let actual = match app.infer_stream(
+                        &model,
+                        &prompt,
+                        Some(&example.prompt),
+                        &mut |_| Ok(()),
+                        &generation,
+                    ) {
+                        Ok((answer, _)) => answer,
+                        Err(error) if error == crate::localized_empty_response(app.language()) => {
+                            String::new()
+                        }
+                        Err(error) => return Err(error),
+                    };
+                    drop(app);
+                    job.lock().unwrap().generation = None;
+                    gguf_rows.push(
+                        json!({"prompt":example.prompt,"expected":expected,"actual":actual,
+                        "match":verify_answer_matches(expected, &actual)}),
+                    );
+                    job.lock().unwrap().done += 1;
+                    fs::write(
+                        &report_path,
+                        verification_report(&adapter, &adapter_rows, &gguf_rows, Some(&model))
+                            .to_string(),
+                    )
+                    .map_err(|e| e.to_string())?;
+                }
+            }
+            if job.lock().unwrap().cancelled {
+                return Err("Verification cancelled".into());
+            }
+            let latest_part = root.join("verification-latest.json.part");
+            fs::copy(&report_path, &latest_part).map_err(|e| e.to_string())?;
+            fs::rename(latest_part, latest_path).map_err(|e| e.to_string())?;
+            Ok(())
+        })();
+        let mut guard = job.lock().unwrap();
+        guard.child = None;
+        guard.generation = None;
+        guard.phase = if guard.cancelled {
+            "cancelled"
+        } else if result.is_ok() {
+            "complete"
+        } else {
+            "failed"
+        };
+        if let Err(error) = result {
+            guard.error = Some(error);
         }
     });
     Ok(service.lock().unwrap().status())
@@ -2548,6 +2842,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn verification_matches_exact_answers_and_the_current_run() {
+        assert!(verify_answer_matches("Katja", " Katja. \n"));
+        assert!(!verify_answer_matches("Katja", "Cenza"));
+        assert!(!verify_answer_matches("2", "20"));
+        let root = std::env::temp_dir().join(format!("llamanest-verification-{}", id()));
+        let models = root.join("models");
+        let run = root.join("runs").join("run-123");
+        fs::create_dir_all(&models).unwrap();
+        fs::create_dir_all(&run).unwrap();
+        fs::write(models.join("LlamaNest-base-run-123-Q4_K_M.gguf"), b"").unwrap();
+        fs::write(models.join("LlamaNest-base-run-123-Q8_0.gguf"), b"").unwrap();
+        fs::write(models.join("LlamaNest-base-run-456-Q8_0.gguf"), b"").unwrap();
+        assert_eq!(
+            verification_gguf(&models, &run)
+                .unwrap()
+                .file_name()
+                .unwrap(),
+            "LlamaNest-base-run-123-Q8_0.gguf"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn export_smoke_check_exits_after_one_turn() {
         assert_eq!(LAB_EXPORT_QUANTIZATION, "Q8_0");
         let command = gguf_smoke_command(Path::new("model.gguf"));
@@ -2695,6 +3012,16 @@ mod tests {
         .unwrap();
         fs::write(adapter.parent().unwrap().join(".complete"), b"ok\n").unwrap();
         assert_eq!(service.status()["adapterFresh"], true);
+        fs::write(
+            dir.join("verification-latest.json"),
+            verification_report(&adapter, &[json!({"prompt":"a","match":true})], &[], None)
+                .to_string(),
+        )
+        .unwrap();
+        assert_eq!(
+            Service::new(dir.clone()).status()["verification"]["adapter"][0]["match"],
+            true
+        );
         thread::sleep(Duration::from_millis(20));
         service
             .save(
@@ -2703,6 +3030,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(Service::new(dir.clone()).status()["adapterFresh"], false);
+        assert!(Service::new(dir.clone()).status()["verification"].is_null());
         fs::remove_dir_all(dir).unwrap();
     }
 
