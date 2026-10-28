@@ -145,3 +145,24 @@ test('complete HTML documents are recognized with filename or no language label'
     assert.match(buttons[3].title, /incompleto/);
   } finally { globalThis.document = originalDocument; }
 });
+
+test('edit control opens a translated editor and resends the edited text', () => {
+  const originalDocument = globalThis.document;
+  const makeElement = tag => ({ tagName: tag, children: [], setAttribute(name, value) { this[name] = value; },
+    append(...items) { this.children.push(...items); }, focus() {}, remove() { this.removed = true; } });
+  globalThis.document = { createElement: makeElement };
+  try {
+    const container = makeElement('div'); let sent;
+    window.USB_AI_CODE_VIEW.addEditButton(container, { text: 'Originale' }, 'it', text => { sent = text; }, false);
+    const button = container.children[0];
+    assert.equal(button['aria-label'], 'Modifica e rilancia');
+    button.onclick();
+    const editor = container.children[1];
+    assert.match(editor.children[1].textContent, /conversazione successiva/);
+    editor.children[0].value = ' Nuovo prompt ';
+    editor.children[2].onclick();
+    assert.equal(sent, 'Nuovo prompt');
+    editor.children[3].onclick();
+    assert.equal(button.hidden, false);
+  } finally { globalThis.document = originalDocument; }
+});

@@ -1698,6 +1698,25 @@ impl App {
             .iter()
             .position(|c| c.id == chat_id)
             .ok_or("Chat non trovata")?;
+        let edit_index = match data.get("editIndex") {
+            None | Some(Value::Null) => None,
+            Some(value) => {
+                let index = value
+                    .as_u64()
+                    .and_then(|v| usize::try_from(v).ok())
+                    .ok_or("Invalid message index")?;
+                if self.db.chats[idx]
+                    .messages
+                    .get(index)
+                    .is_none_or(|message| message.role != "user")
+                {
+                    return Err("Invalid user message index".into());
+                }
+                Some(index)
+            }
+        };
+        let previous_messages =
+            &self.db.chats[idx].messages[..edit_index.unwrap_or(self.db.chats[idx].messages.len())];
         let chat_docs = self
             .db
             .documents
@@ -1715,8 +1734,7 @@ impl App {
         } else {
             identity_memory_notes(text, &self.db.memory)
         };
-        let previous_sources = self.db.chats[idx]
-            .messages
+        let previous_sources = previous_messages
             .iter()
             .rev()
             .find(|message| message.role == "assistant")
@@ -1731,8 +1749,7 @@ impl App {
         let history = if has_new_document {
             Vec::new()
         } else {
-            self.db.chats[idx]
-                .messages
+            previous_messages
                 .iter()
                 .rev()
                 .take(8)
@@ -1833,6 +1850,9 @@ impl App {
             }
         };
         let chat = &mut self.db.chats[idx];
+        if let Some(index) = edit_index {
+            chat.messages.truncate(index);
+        }
         if chat.messages.is_empty() {
             chat.title = text.chars().take(45).collect();
         }
@@ -3492,6 +3512,27 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("Nora Rossi vive a Roma"));
+        assert!(app
+            .command(
+                "send",
+                json!({"chatId":chat_id,"text":"chi è Nora Rossi?","editIndex":1})
+            )
+            .is_err());
+        assert_eq!(app.db.chats[0].messages.len(), 2);
+        let edited = app
+            .command(
+                "send",
+                json!({"chatId":chat_id,"text":"chi è Nora Rossi?","editIndex":0}),
+            )
+            .unwrap();
+        assert_eq!(edited["chats"][0]["messages"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            edited["chats"][0]["messages"][0]["text"],
+            "chi è Nora Rossi?"
+        );
+        let saved: Workspace =
+            serde_json::from_slice(&fs::read(root.join("workspace.json")).unwrap()).unwrap();
+        assert_eq!(saved.chats[0].messages[0].text, "chi è Nora Rossi?");
         fs::remove_dir_all(root).unwrap();
     }
     #[test]

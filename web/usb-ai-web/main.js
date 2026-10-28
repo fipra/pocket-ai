@@ -49,7 +49,7 @@ function translate() { document.documentElement.lang = language; document.queryS
 function closeSidebar() { $('sidebar').classList.remove('open'); }
 function saveSettings() { return db.put('settings', { id: 'main', language, selectedId, activeId, thinking, remoteConfig }); }
 function renderChats() { const list = $('chat-list'); list.replaceChildren(); if (!chats.length) list.append(node('p', tr('noChats'), 'empty')); for (const chat of [...chats].sort((a,b) => b.updated - a.updated)) { const button = node('button', chat.title, `chat-item${chat.id === activeId ? ' active' : ''}`); button.onclick = () => { activeId = chat.id; saveSettings(); render(); closeSidebar(); }; list.append(button); } }
-function renderMessages() { const box = $('messages'); box.replaceChildren(); const chat = chats.find(item => item.id === activeId); if (!chat?.messages.length) { const welcome = node('div', undefined, 'welcome'); welcome.append(node('div', '✦', 'welcome-mark'), node('h1', tr('welcome')), node('p', models.length ? tr('welcomeNote') : tr(usesSafariCpu() ? 'safariStarterHint' : 'starterHint'))); box.append(welcome); return; } for (const message of chat.messages) { const row = node('article', undefined, `message ${message.role}`); row.append(node('div', message.role === 'user' ? 'U' : '✦', 'avatar')); const content = node('div'); const body = node('div', undefined, 'message-body'); if (message.role === 'assistant') window.USB_AI_RESPONSE_VIEW.render(body, message, language, thinking); else window.USB_AI_CODE_VIEW.render(body, message.text, language); content.append(node('strong', message.role === 'user' ? tr('you') : tr('assistant')), body); if (message.role === 'assistant' && message.text) { const correction = node('button', tr('rememberCorrection'), 'memory-correction'); correction.onclick = () => { pendingMemoryPrompt = null; $('memory-id').value = ''; $('memory-text').value = ''; $('memory-dialog').showModal(); $('memory-text').focus(); }; content.append(correction); } if (message.sources?.length) { const details = node('details', undefined, 'source'); details.append(node('summary', `${tr('sources')} (${message.sources.length})`)); for (const source of message.sources) details.append(node('p', `${source.name}: ${source.text}`)); content.append(details); } row.append(content); box.append(row); } $('thread').scrollTop = $('thread').scrollHeight; }
+function renderMessages() { const box = $('messages'); box.replaceChildren(); const chat = chats.find(item => item.id === activeId); if (!chat?.messages.length) { const welcome = node('div', undefined, 'welcome'); welcome.append(node('div', '✦', 'welcome-mark'), node('h1', tr('welcome')), node('p', models.length ? tr('welcomeNote') : tr(usesSafariCpu() ? 'safariStarterHint' : 'starterHint'))); box.append(welcome); return; } for (const [messageIndex, message] of chat.messages.entries()) { const row = node('article', undefined, `message ${message.role}`); row.append(node('div', message.role === 'user' ? 'U' : '✦', 'avatar')); const content = node('div'); const body = node('div', undefined, 'message-body'); if (message.role === 'assistant') window.USB_AI_RESPONSE_VIEW.render(body, message, language, thinking); else window.USB_AI_CODE_VIEW.render(body, message.text, language); content.append(node('strong', message.role === 'user' ? tr('you') : tr('assistant')), body); if (message.role === 'user') window.USB_AI_CODE_VIEW.addEditButton(content, message, language, value => run(() => send(value, messageIndex, chat.id)), busy); if (message.role === 'assistant' && message.text) { const correction = node('button', tr('rememberCorrection'), 'memory-correction'); correction.onclick = () => { pendingMemoryPrompt = null; $('memory-id').value = ''; $('memory-text').value = ''; $('memory-dialog').showModal(); $('memory-text').focus(); }; content.append(correction); } if (message.sources?.length) { const details = node('details', undefined, 'source'); details.append(node('summary', `${tr('sources')} (${message.sources.length})`)); for (const source of message.sources) details.append(node('p', `${source.name}: ${source.text}`)); content.append(details); } row.append(content); box.append(row); } $('thread').scrollTop = $('thread').scrollHeight; }
 function appendModelAdvice(info, model, hardware, recommended = false) {
   const advice = modelGuidance(model, hardware);
   const detail = tr(advice.reason).replace('{minimum}', advice.memory.minimum).replace('{recommended}', advice.memory.recommended);
@@ -180,11 +180,13 @@ async function chooseModel(id) {
   if (loaded && pendingFirstPrompt) { pendingFirstPrompt = false; await send(); }
 }
 async function newChat() { const chat = { id: crypto.randomUUID(), title: tr('newChat').replace('＋ ',''), messages: [], updated: Date.now() }; chats.unshift(chat); activeId = chat.id; await db.put('chats', chat); await saveSettings(); render(); closeSidebar(); $('prompt').focus(); }
-async function send() {
-  const text = $('prompt').value.trim();
+async function send(editedText, editIndex, editChatId) {
+  const editing = Number.isInteger(editIndex);
+  if (editing && (activeId !== editChatId || chats.find(item => item.id === activeId)?.messages[editIndex]?.role !== 'user')) return;
+  const text = (editing ? editedText : $('prompt').value).trim();
   if (!text || busy) return;
-  const command = memoryCommand(text);
-  const note = command ?? rememberRequest(text);
+  const command = editing ? null : memoryCommand(text);
+  const note = editing ? null : command ?? rememberRequest(text);
   if (note !== null) {
     pendingMemoryPrompt = text;
     $('memory-id').value = '';
@@ -199,11 +201,12 @@ async function send() {
     let chat = chats.find(item => item.id === activeId);
     if (!chat) { await newChat(); chat = chats.find(item => item.id === activeId); }
     const reply = `${tr('memoryRecallIntro')}\n${directNotes.map(item => `- ${item.text}`).join('\n')}\n${tr('memoryRecallLimit')}`;
+    if (editing) chat.messages.splice(editIndex);
     chat.messages.push({ role:'user', text }, { role:'assistant', text:reply });
     chat.title = chat.messages.find(message => message.role === 'user')?.text.slice(0,55) || chat.title;
     chat.updated = Date.now();
     await db.put('chats', chat);
-    $('prompt').value = '';
+    if (!editing) $('prompt').value = '';
     setStatus(tr('ready'));
     render();
     return;
@@ -223,15 +226,18 @@ async function send() {
   const chatDocuments = documentsForChat(documents, chat.id);
   const sources = chatDocuments.length ? retrieve(text, chatDocuments, 3) : [];
   const hasNewDocument = chatDocuments.some(doc => (doc.updated || 0) >= (chat.updated || 0));
-  const contexts = ragContexts(hasNewDocument ? [] : chat.messages, text, sources);
+  const contexts = ragContexts(hasNewDocument ? [] : editing ? chat.messages.slice(0, editIndex) : chat.messages, text, sources);
   for (const context of contexts) context.unshift({ role:'system', content: thinking ? 'If the model supports reasoning, put intermediate thinking in <think>...</think> and then give a clear final answer.' : 'Answer directly. Do not show intermediate reasoning or <think> content.' });
   const remembered = memoryContext(text, memories);
   if (remembered) for (const context of contexts) context.unshift({ role:'system', content:remembered });
   const answer = { role:'assistant', text:'', sources: sources.map(({name,text}) => ({name,text})) };
+  const previousMessages = editing ? chat.messages.slice() : null;
+  const previousTitle = chat.title;
+  if (editing) chat.messages.splice(editIndex);
   chat.messages.push({ role:'user', text }, answer);
   chat.title = chat.messages.find(message => message.role === 'user')?.text.slice(0,55) || chat.title;
   chat.updated = Date.now();
-  $('prompt').value = '';
+  if (!editing) $('prompt').value = '';
   controller = new AbortController();
   setBusy(true); setStatus(tr('generating'), false, true); renderMessages();
   const body = $('messages').lastElementChild?.querySelector('.message-body');
@@ -253,7 +259,8 @@ async function send() {
   } catch (error) {
     if (!controller.signal.aborted) {
       const message = error.message === 'EMPTY_MODEL_RESPONSE' ? tr('emptyResponse') : error.message === 'GENERATION_TIMEOUT' ? tr('safariGenerationTimeout') : `${tr('error')}: ${error.message}`;
-      answer.text ||= message;
+      if (editing && !answer.text) { chat.messages = previousMessages; chat.title = previousTitle; }
+      else answer.text ||= message;
       setStatus(message, true);
     }
   } finally {

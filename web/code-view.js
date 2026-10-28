@@ -13,6 +13,31 @@
     fr: 'Le code HTML est peut-être incomplet. Terminez la réponse avant de l’enregistrer.',
     es: 'El código HTML puede estar incompleto. Completa la respuesta antes de guardarlo.'
   };
+  const editLabels = {
+    en: ['Edit and resend', 'Resend', 'Cancel', 'Resending replaces this message and the following conversation.'],
+    it: ['Modifica e rilancia', 'Rilancia', 'Annulla', 'Il rilancio sostituisce questo messaggio e la conversazione successiva.'],
+    de: ['Bearbeiten und erneut senden', 'Erneut senden', 'Abbrechen', 'Beim erneuten Senden werden diese Nachricht und der folgende Verlauf ersetzt.'],
+    fr: ['Modifier et renvoyer', 'Renvoyer', 'Annuler', 'Le renvoi remplace ce message et la suite de la conversation.'],
+    es: ['Editar y volver a enviar', 'Volver a enviar', 'Cancelar', 'Al reenviar se sustituirán este mensaje y la conversación posterior.']
+  };
+  function addEditButton(content, message, language, onSubmit, disabled) {
+    const [edit, send, cancel, warning] = editLabels[language] || editLabels.en;
+    const button = element('button', '✎', 'edit-message');
+    button.type = 'button'; button.title = edit; button.setAttribute('aria-label', edit); button.disabled = disabled;
+    button.onclick = () => {
+      button.hidden = true;
+      const editor = element('div', undefined, 'edit-message-form');
+      const input = element('textarea'); input.value = message.text; input.maxLength = 12000;
+      input.setAttribute('aria-label', edit);
+      const note = element('p', warning);
+      const submit = element('button', send); submit.type = 'button';
+      const close = element('button', cancel); close.type = 'button';
+      close.onclick = () => { editor.remove(); button.hidden = false; };
+      submit.onclick = () => { const value = input.value.trim(); if (value) onSubmit(value); else input.focus(); };
+      editor.append(input, note, submit, close); content.append(editor); input.focus();
+    };
+    content.append(button);
+  }
   const element = (tag, text, className) => {
     const item = document.createElement(tag);
     if (text !== undefined) item.textContent = text;
@@ -332,5 +357,5 @@
       flush() { if (frame !== null) cancelAnimationFrame(frame); paint(); }
     };
   }
-  window.USB_AI_CODE_VIEW = { render, streamRenderer, blocks, appFiles, previewDocument, zipFiles };
+  window.USB_AI_CODE_VIEW = { render, streamRenderer, blocks, appFiles, previewDocument, zipFiles, addEditButton };
 })();
