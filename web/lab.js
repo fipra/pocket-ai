@@ -43,6 +43,19 @@
   }
   const localError = error => tr(error.message);
 
+  function qualityError(error) {
+    if (!error) return '';
+    const separator = error.indexOf(':');
+    if (separator < 0 || !['qualityRegression','qualityMismatchAdapter','qualityMismatch'].includes(error.slice(0, separator))) return tr(error);
+    try {
+      const details = JSON.parse(error.slice(separator + 1));
+      const parts = [tr(error.slice(0, separator)), `${tr('question')}: ${details.prompt}`];
+      if (details.expected != null) parts.push(`${tr('verifyExpected')}: ${details.expected}`);
+      parts.push(`${tr('qualityActual')}: ${details.actual || tr('verifyEmpty')}`);
+      return parts.join(' · ');
+    } catch { return tr(error.slice(0, separator)); }
+  }
+
   async function withPending(buttonId, action) {
     if (pendingAction) return;
     pendingAction = buttonId;
@@ -211,14 +224,14 @@
     $('job-title').textContent = `${kind} · ${phase}`;
     $('job-title').classList.toggle('loading', job.active);
     $('job').setAttribute('aria-busy', String(job.active));
-    $('job-detail').textContent = (job.error ? tr(job.error) : null) || (['distill', 'auto', 'document', 'verify'].includes(job.kind) ? `${job.done}/${job.total} ${tr(job.kind === 'verify' ? 'verifyProgress' : 'jobProgress')}` : job.active ? tr('pleaseWait') : '');
+    $('job-detail').textContent = (job.error ? qualityError(job.error) : null) || (['distill', 'auto', 'document', 'verify', 'export'].includes(job.kind) ? `${job.done}/${job.total} ${tr(job.kind === 'verify' ? 'verifyProgress' : job.kind === 'export' ? 'qualityProgress' : 'jobProgress')}` : job.active ? tr('pleaseWait') : '');
     $('cancel-job').disabled = !job.active || pendingAction === 'cancel-job';
-    if (['distill', 'auto', 'document', 'verify'].includes(job.kind) && job.total) $('job-progress').value = Math.round(job.done / job.total * 100);
+    if (['distill', 'auto', 'document', 'verify', 'export'].includes(job.kind) && job.total) $('job-progress').value = Math.round(job.done / job.total * 100);
     else if (job.active) $('job-progress').removeAttribute('value');
     else $('job-progress').value = job.phase === 'complete' ? 100 : 0;
     $('job-log').textContent = job.log || '';
-    if (job.kind === 'train' && !job.active) message('train-message', job.error || phase, job.phase === 'failed');
-    if (job.kind === 'export' && !job.active) message('export-message', job.error ? tr(job.error) : (job.phase === 'complete' ? `${tr('modelReady')} ${job.output}` : phase), job.phase === 'failed');
+    if (job.kind === 'train' && !job.active) message('train-message', job.error ? qualityError(job.error) : phase, job.phase === 'failed');
+    if (job.kind === 'export' && !job.active) message('export-message', job.error ? qualityError(job.error) : (job.phase === 'complete' ? `${tr('modelReady')} ${job.output}` : phase), job.phase === 'failed');
     if (job.kind === 'distill' && !job.active) message('generate-message', job.error || phase, job.phase === 'failed');
     if (job.kind === 'auto' && !job.active) message('auto-message', job.error ? tr(job.error) : (job.phase === 'complete' ? tr('autoReady') : phase), job.phase === 'failed');
     if (job.kind === 'document' && !job.active) message('doc-message', job.error ? tr(job.error) : job.phase === 'complete' ? tr('documentReady') : phase, job.phase === 'failed');

@@ -1425,11 +1425,19 @@ fn verify_answer_matches(expected: &str, actual: &str) -> bool {
     normalize(expected) == normalize(actual)
 }
 
+fn quality_error(code: &str, prompt: &str, expected: Option<&str>, actual: &str) -> String {
+    format!(
+        "{}:{}",
+        code,
+        json!({"prompt":prompt,"expected":expected,"actual":actual.chars().take(240).collect::<String>()})
+    )
+}
+
 // A greeting is deliberately outside the user's factual examples. If an adapted
 // model answers it with one of those facts, it has learned to emit the answer
 // without attending to the question. This is a conservative regression check,
 // not a claim that arbitrary unseen questions can be graded automatically.
-const BEHAVIOR_PROBES: &[&str] = &["ciao", "hello"];
+const BEHAVIOR_PROBES: &[&str] = &["ciao", "hello", "Come stai?", "How are you?"];
 
 fn leaked_training_answer(prompt: &str, answer: &str, examples: &[Example]) -> bool {
     let answer = answer
@@ -2154,6 +2162,8 @@ pub fn start_train(
     };
     app_guard.inference = None;
     drop(app_guard);
+    let export_service = service.clone();
+    let export_app = app.clone();
     thread::spawn(move || {
         let result = (|| -> Result<String, String> {
             if job.lock().unwrap().cancelled {
@@ -2273,6 +2283,7 @@ pub fn start_train(
             fs::write(run.join(".complete"), "ok\n").map_err(|e| e.to_string())?;
             Ok(adapter.display().to_string())
         })();
+        let trained = result.is_ok() && !job.lock().unwrap().cancelled;
         let mut guard = job.lock().unwrap();
         guard.child = None;
         guard.phase = if guard.cancelled {
@@ -2289,6 +2300,14 @@ pub fn start_train(
             }
             Err(error) => guard.error = Some(error),
             _ => {}
+        }
+        drop(guard);
+        if trained {
+            if let Err(error) = start_export(export_service, export_app) {
+                let mut guard = job.lock().unwrap();
+                guard.phase = "failed";
+                guard.error = Some(error);
+            }
         }
     });
     Ok(service.lock().unwrap().status())
@@ -2618,12 +2637,35 @@ fn check_adapter_behavior(
     for (index, prompt) in BEHAVIOR_PROBES.iter().enumerate() {
         let base_answer =
             verify_adapter_answer(job, root, base, None, prompt, index + 100, directory)?;
+        job.lock().unwrap().done += 1;
         let answer =
             verify_adapter_answer(job, root, base, Some(adapter), prompt, index, directory)?;
+        job.lock().unwrap().done += 1;
         if !leaked_training_answer(prompt, &base_answer, examples)
             && leaked_training_answer(prompt, &answer, examples)
         {
-            return Err("qualityRegression".into());
+            return Err(quality_error("qualityRegression", prompt, None, &answer));
+        }
+    }
+    for (index, example) in examples.iter().enumerate() {
+        let expected = example.completion.as_deref().unwrap_or("");
+        let answer = verify_adapter_answer(
+            job,
+            root,
+            base,
+            Some(adapter),
+            &example.prompt,
+            index + 200,
+            directory,
+        )?;
+        job.lock().unwrap().done += 1;
+        if !verify_answer_matches(expected, &answer) {
+            return Err(quality_error(
+                "qualityMismatchAdapter",
+                &example.prompt,
+                Some(expected),
+                &answer,
+            ));
         }
     }
     Ok(())
@@ -2660,11 +2702,12 @@ fn check_gguf_behavior(
             .0;
         drop(app);
         job.lock().unwrap().generation = None;
+        job.lock().unwrap().done += 1;
         if expected.is_none() && leaked_training_answer(prompt, &answer, examples) {
-            return Err("qualityRegression".into());
+            return Err(quality_error("qualityRegression", prompt, None, &answer));
         }
         if expected.is_some_and(|expected| !verify_answer_matches(expected, &answer)) {
-            return Err("qualityMismatch".into());
+            return Err(quality_error("qualityMismatch", prompt, expected, &answer));
         }
     }
     Ok(())
@@ -2697,7 +2740,10 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
         let adapter = lab.latest_adapter().ok_or("Train an adapter first")?;
         let student = lab.checked_student_model()?;
         let examples = lab.rows("training")?;
-        let job = Arc::new(Mutex::new(Job::new("export", 3)));
+        let job = Arc::new(Mutex::new(Job::new(
+            "export",
+            3 + 3 * BEHAVIOR_PROBES.len() + 2 * examples.len(),
+        )));
         lab.job = Some(job.clone());
         (adapter, student, lab.root.clone(), examples, job)
     };
@@ -2972,6 +3018,22 @@ mod tests {
             "Cenza",
             &examples
         ));
+    }
+
+    #[test]
+    fn quality_failure_reports_the_question_and_answer() {
+        let error = quality_error(
+            "qualityMismatchAdapter",
+            "chi sei?",
+            Some("LlamaNest"),
+            "Alibaba",
+        );
+        let (code, details) = error.split_once(':').unwrap();
+        assert_eq!(code, "qualityMismatchAdapter");
+        let details: Value = serde_json::from_str(details).unwrap();
+        assert_eq!(details["prompt"], "chi sei?");
+        assert_eq!(details["expected"], "LlamaNest");
+        assert_eq!(details["actual"], "Alibaba");
     }
 
     #[test]
