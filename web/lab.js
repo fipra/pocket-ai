@@ -16,6 +16,8 @@
   let editingPrompt = null;
   let answerEditing = false;
   let lastPreviewPrompt = null;
+  let correctionFromVerification = false;
+  let verificationCorrectionsPending = false;
   let correctionRecorded = false;
   let activeTab = 'train';
   let wasDistilling = false;
@@ -250,7 +252,8 @@
     const passed = rows => rows.filter(row => row.match === true).length;
     const summary = `${tr('verifyAdapter')}: ${passed(adapter)}/${total} · ${report.ggufName ? `${tr('verifyGguf')}: ${passed(gguf)}/${total}` : tr('verifyNoGguf')}`;
     const failed = job?.kind === 'verify' && job.phase === 'failed';
-    const progress = job?.kind === 'verify' && job.active ? `${summary} · ${tr('verifyRunning')}` : summary;
+    const progress = verificationCorrectionsPending ? `${summary} · ${tr('verifyNeedsRetrain')}`
+      : job?.kind === 'verify' && job.active ? `${summary} · ${tr('verifyRunning')}` : summary;
     message('verify-message', failed ? `${progress} · ${job.error || tr('jobFailed')}` : progress,
       failed || adapter.some(row => !row.match) || gguf.some(row => !row.match));
     for (let index = 0; index < Math.max(adapter.length, gguf.length); index++) {
@@ -267,6 +270,20 @@
         const answer = document.createElement('p');
         answer.textContent = `${result.match ? '✓' : '✗'} ${label}: ${result.actual || tr('verifyEmpty')}`;
         card.append(answer);
+      }
+      if (!job?.active) {
+        const correct = button('verifyCorrect', 'secondary', () => {
+          lastPreviewPrompt = row.prompt;
+          correctionFromVerification = true;
+          correctionRecorded = false;
+          $('correction-answer').value = training.find(item => item.prompt === row.prompt)?.completion || row.expected || '';
+          $('correction').hidden = false;
+          message('correction-message', tr('verifyCorrectionHelp'));
+          $('correction').scrollIntoView({behavior:'smooth', block:'center'});
+          $('correction-answer').focus();
+          render();
+        });
+        card.append(correct);
       }
       container.append(card);
     }
@@ -665,7 +682,7 @@
     catch (_) { /* Keep the entered text for another attempt. */ }
   };
   $('train-start').onclick = async () => {
-    try { await withPending('train-start', async () => { status = await api('train', {iterations:Number($('iterations').value)}); correctionRecorded = false; $('correction').hidden = true; render(); }); }
+    try { await withPending('train-start', async () => { status = await api('train', {iterations:Number($('iterations').value)}); verificationCorrectionsPending = false; correctionRecorded = false; $('correction').hidden = true; render(); }); }
     catch (error) { message('train-message', error.message, true); }
   };
   $('export-model').onclick = async () => {
@@ -694,6 +711,7 @@
     try { await withPending('preview-start', async () => {
       status = await api('preview', {prompt});
       lastPreviewPrompt = prompt;
+      correctionFromVerification = false;
       correctionRecorded = false;
       $('preview-output').hidden = true;
       $('correction').hidden = true;
@@ -704,7 +722,7 @@
     catch (error) { message('preview-message', error.message, true); }
   };
   $('verify-start').onclick = async () => {
-    try { await withPending('verify-start', async () => { status = await api('verify_model'); render(); }); }
+    try { await withPending('verify-start', async () => { status = await api('verify_model'); verificationCorrectionsPending = false; render(); }); }
     catch (error) { message('verify-message', error.message, true); }
   };
   $('correction-save').onclick = async () => {
@@ -712,7 +730,7 @@
     if (!completion) return message('correction-message', tr('correctionNeed'), true);
     if (!lastPreviewPrompt) return;
     const index = training.findIndex(row => row.prompt === lastPreviewPrompt);
-    if (index >= 0 && training[index].completion === completion) {
+    if (index >= 0 && training[index].completion === completion && !correctionFromVerification) {
       return message('correction-message', tr('correctionAlreadyPresent'));
     }
     if (index < 0 && training.length >= 200) return message('correction-message', tr('pairLimit'), true);
@@ -721,10 +739,12 @@
     else next[index] = {prompt:lastPreviewPrompt, completion};
     try { await withPending('correction-save', async () => {
       await saveRows('training', next);
+      if (correctionFromVerification) verificationCorrectionsPending = true;
       lastPreviewPrompt = null;
       correctionRecorded = true;
       $('correction-answer').value = '';
-      message('correction-message', tr('correctionSaved'));
+      message('correction-message', tr(correctionFromVerification ? 'verifyCorrectionSaved' : 'correctionSaved'));
+      correctionFromVerification = false;
       render();
     }); } catch (error) { message('correction-message', `${tr('failedSave')} ${error.message}`, true); }
   };
