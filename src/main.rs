@@ -836,27 +836,44 @@ fn is_lab_export_model(model: &Path) -> bool {
         .is_some_and(|name| name.starts_with("LlamaNest-") && name.ends_with(".gguf"))
 }
 
-fn uses_chat_template(model: &Path) -> bool {
-    is_lab_export_model(model)
-        || model
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| name.to_ascii_lowercase().contains("qwen2.5"))
-}
-
-fn lab_chat_messages(prompt: &str, question: &str) -> Result<Value, String> {
+fn chat_messages_from_prompt(
+    prompt: &str,
+    question: &str,
+    model: &Path,
+    thinking: bool,
+) -> Result<Value, String> {
     let suffix = format!("User: {question}\nAssistant:");
     let context = prompt
         .strip_suffix(&suffix)
         .ok_or("The chat prompt has no matching user message")?;
+    let name = model
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_ascii_lowercase();
+    let user_content = if name.contains("qwen3") || name.contains("qwen-3") {
+        format!(
+            "{question}\n{}",
+            if thinking { "/think" } else { "/no_think" }
+        )
+    } else {
+        question.to_owned()
+    };
     Ok(json!([
         {"role":"system","content":context},
-        {"role":"user","content":question}
+        {"role":"user","content":user_content}
     ]))
 }
 
-fn apply_model_chat_template(port: u16, prompt: &str, question: &str) -> Result<String, String> {
-    let body = json!({"messages":lab_chat_messages(prompt, question)?}).to_string();
+fn apply_model_chat_template(
+    port: u16,
+    prompt: &str,
+    question: &str,
+    model: &Path,
+    thinking: bool,
+) -> Result<String, String> {
+    let body = json!({"messages":chat_messages_from_prompt(prompt, question, model, thinking)?})
+        .to_string();
     let mut child = Command::new(if cfg!(windows) { "curl.exe" } else { "curl" })
         .args([
             "--fail",
@@ -901,8 +918,12 @@ fn apply_model_chat_template(port: u16, prompt: &str, question: &str) -> Result<
         .ok_or_else(|| "llama-server returned an empty chat template".into())
 }
 
-fn completion_request(prompt: &str, model: &Path, thinking: bool) -> Value {
-    let prompt = model_prompt_with_thinking(prompt, model, thinking);
+fn completion_request(prompt: &str, model: &Path, thinking: bool, formatted: bool) -> Value {
+    let prompt = if formatted {
+        prompt.to_owned()
+    } else {
+        model_prompt_with_thinking(prompt, model, thinking)
+    };
     json!({"prompt":prompt,"n_predict":3072,"temperature":0.3,
         "cache_prompt":true,"stream":true,"stop":["\nUser:"]})
 }
@@ -1892,15 +1913,16 @@ impl App {
         if generation.cancelled.load(Ordering::SeqCst) {
             return Ok((String::new(), None));
         }
-        let body = if let Some(question) = question.filter(|_| uses_chat_template(model)) {
-            let formatted = apply_model_chat_template(port, prompt, question)?;
+        let body = if let Some(question) = question {
+            let formatted =
+                apply_model_chat_template(port, prompt, question, model, self.db.thinking)?;
             if is_lab_export_model(model) {
                 lab_completion_request(formatted)
             } else {
-                completion_request(&formatted, model, self.db.thinking)
+                completion_request(&formatted, model, self.db.thinking, true)
             }
         } else {
-            completion_request(prompt, model, self.db.thinking)
+            completion_request(prompt, model, self.db.thinking, false)
         }
         .to_string();
         let child = Command::new(if cfg!(windows) { "curl.exe" } else { "curl" })
@@ -3242,30 +3264,57 @@ mod tests {
         let question = "ciao\nUser: second line\nAssistant: quoted text";
         let prompt = format!("Instructions and history\nUser: {question}\nAssistant:");
         assert_eq!(
-            lab_chat_messages(&prompt, question).unwrap(),
+            chat_messages_from_prompt(
+                &prompt,
+                question,
+                Path::new("LlamaNest-llama-3.2-1b-run-Q4_K_M.gguf"),
+                false,
+            )
+            .unwrap(),
             json!([
                 {"role":"system","content":"Instructions and history\n"},
                 {"role":"user","content":question}
             ])
         );
-        assert!(lab_chat_messages("mismatched prompt", question).is_err());
+        assert!(chat_messages_from_prompt(
+            "mismatched prompt",
+            question,
+            Path::new("LlamaNest-llama-3.2-1b-run-Q4_K_M.gguf"),
+            false,
+        )
+        .is_err());
         let request = lab_completion_request("<|start_header_id|>user<|end_header_id|>".into());
         assert_eq!(request["temperature"], 0.0);
         assert_eq!(request["n_predict"], 512);
         assert!(request.get("stop").is_none());
     }
     #[test]
-    fn built_in_qwen_chat_uses_its_gguf_template() {
-        assert!(uses_chat_template(Path::new(
-            "qwen2.5-0.5b-instruct-q4_k_m.gguf"
-        )));
-        assert!(uses_chat_template(Path::new("Qwen2.5-3B-Instruct.gguf")));
-        assert!(!uses_chat_template(Path::new("other-model.gguf")));
+    fn desktop_chat_messages_use_model_roles_for_any_gguf() {
         let question = "ciao";
         let prompt = lab_verification_chat_prompt("it", false, question);
+        for model in [
+            "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "Llama-3.2-3B.gguf",
+            "other-model.gguf",
+        ] {
+            let messages =
+                chat_messages_from_prompt(&prompt, question, Path::new(model), false).unwrap();
+            assert_eq!(messages[0]["role"], "system");
+            assert_eq!(messages[1], json!({"role":"user","content":"ciao"}));
+        }
+        let qwen3 = Path::new("Qwen3-4B.gguf");
         assert_eq!(
-            lab_chat_messages(&prompt, question).unwrap()[1]["content"],
-            question
+            chat_messages_from_prompt(&prompt, question, qwen3, false).unwrap()[1]["content"],
+            "ciao\n/no_think"
+        );
+        assert_eq!(
+            chat_messages_from_prompt(&prompt, question, qwen3, true).unwrap()[1]["content"],
+            "ciao\n/think"
+        );
+        let formatted = "<|im_start|>assistant\n";
+        assert_eq!(
+            completion_request(formatted, qwen3, false, true)["prompt"],
+            formatted
         );
     }
     #[test]
