@@ -30,6 +30,8 @@
     ["Può ridurre lo spazio e la memoria richiesti e migliorare la velocità, a seconda dell’hardware.", "It can reduce storage and memory needs and improve speed, depending on your hardware.", "Cela peut réduire l’espace et la mémoire nécessaires et améliorer la vitesse, selon votre matériel.", "Je nach Hardware kann dies Speicherplatz und Arbeitsspeicher sparen und die Geschwindigkeit verbessern.", "Puede reducir el espacio y la memoria necesarios y mejorar la velocidad, según el hardware."],
     ["Una precisione inferiore può ridurre la qualità delle risposte.", "Lower precision can reduce answer quality.", "Une précision moindre peut réduire la qualité des réponses.", "Eine geringere Präzision kann die Qualität der Antworten senken.", "Una menor precisión puede reducir la calidad de las respuestas."],
     ["L’originale viene conservato. Per migliori risultati, parti da un modello ad alta precisione.", "The original is kept. For best results, start with a high-precision model.", "L’original est conservé. Pour de meilleurs résultats, partez d’un modèle haute précision.", "Das Original bleibt erhalten. Verwende für beste Ergebnisse ein Modell mit hoher Präzision.", "Se conserva el original. Para mejores resultados, parte de un modelo de alta precisión."],
+    ["Contatti", "Contact", "Contact", "Kontakt", "Contacto"],
+    ["Svizzera", "Switzerland", "Suisse", "Schweiz", "Suiza"],
     ["Come funziona", "How it works", "Comment ça marche", "So funktioniert es", "Cómo funciona"],
     ["Scarica gratis ↓", "Download free ↓", "Télécharger gratuitement ↓", "Kostenlos herunterladen ↓", "Descargar gratis ↓"],
     ["Un progetto FipraAI", "A FipraAI project", "Un projet FipraAI", "Ein Projekt von FipraAI", "Un proyecto de FipraAI"],
