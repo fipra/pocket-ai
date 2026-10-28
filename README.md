@@ -37,7 +37,7 @@ have their own licenses.
 - Import text PDFs, TXT, and Markdown files (up to 20 MB each).
 - Search documents by keyword, with excerpts and PDF page numbers.
 - Save conversations and export them as Markdown.
-- Choose among curated 0.5B, 3B, 7B, and 9B models with guidance based on your computer's RAM and CPU cores.
+- Choose a curated starter model or search for other GGUF models with guidance based on your computer's RAM and CPU cores.
 - Use the interface in English by default, or select Italian, German, French, or Spanish in the sidebar. The saved choice also guides the language of model responses unless you ask for another language.
 
 The app normally opens at `http://127.0.0.1:48157`. If that port is busy, it picks a free port through `48167` and opens the right address. The normal launcher listens only on your computer. On Windows, use `Avvia LlamaNest LAN.cmd` to also open it from other computers at `http://SERVER-NAME:PORT/` or `http://SERVER-IP:PORT/`. The LAN launcher sets `USB_AI_BIND_ADDR=0.0.0.0`; the app prints the selected port. Both launchers use a Vulkan GPU when available and fall back to the CPU. Allow the selected TCP port through Windows Firewall for trusted networks. LAN mode has no login and uses unencrypted HTTP, so anyone who can reach the port can access the workspace. Data is stored **without encryption** in `PocketAI-data/`.
@@ -69,9 +69,9 @@ On first launch, the launcher verifies the bundled executables and libraries' lo
 
 ## Models and hardware guidance
 
-Open the model picker to see detected total RAM, logical CPU cores, and architecture. On a fresh installation, the first prompt automatically downloads, verifies, and starts Qwen 2.5 0.5B. It then sends that same prompt. The app verifies the pinned SHA-256 hash, exact size, and GGUF format before use. Internet is needed for the first download; afterward chat and document search run locally. You can also place a compatible instruct `.gguf` file in `models/`, import one, or find another model through search.
+Open the model picker to see detected total RAM, logical CPU cores, and architecture. On a fresh installation, the first prompt automatically downloads, verifies, and starts Llama 3.2 1B. It then sends that same prompt. The app verifies the pinned SHA-256 hash, exact size, and GGUF format before use. Internet is needed for the first download; afterward chat and document search run locally. You can also place a compatible instruct `.gguf` file in `models/`, import one, or find another model through search.
 
-Qwen 2.5 0.5B is the only built-in test download (491 MB, Apache 2.0). RAM guidance is an estimate based on total RAM; actual speed also depends on GPU, context length, and other open programs. The download source, hash, and license are recorded in [models/catalog.json](models/catalog.json). Model weights are not tracked in this repository. Check each model's license before redistributing it.
+Llama 3.2 1B is the only built-in test download (808 MB, Llama 3.2 Community License; Built with Llama). RAM guidance is an estimate based on total RAM; actual speed also depends on GPU, context length, and other open programs. The download source, hash, and license are recorded in [models/catalog.json](models/catalog.json). Model weights are not tracked in this repository. Check each model's license before redistributing it.
 
 ## Run from source
 

@@ -26,6 +26,6 @@ export function recommendedModel(models, hardware) {
   if (good.length) return [...good].sort((a,b) => b.size - a.size)[0];
   const possible = eligible.filter(model => modelGuidance(model, hardware).fit === 'possible');
   if (possible.length) return [...possible].sort((a,b) => b.size - a.size)[0];
-  if (hardware.ramGb === null) return eligible.find(model => model.id === 'qwen-0.5b') || [...eligible].sort((a,b) => a.size - b.size)[0] || null;
+  if (hardware.ramGb === null) return eligible.find(model => model.id === 'llama-3.2-1b') || [...eligible].sort((a,b) => a.size - b.size)[0] || null;
   return [...eligible].sort((a,b) => a.size - b.size)[0] || null;
 }

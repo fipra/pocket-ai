@@ -1,18 +1,18 @@
 [
   {
-    "id": "qwen-0.5b",
-    "name": "Qwen 2.5 · 0.5B",
-    "family": "Qwen2.5 Instruct",
-    "parameters": "0.5B",
-    "file": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
-    "url": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/9217f5db79a29953eb74d5343926648285ec7e67/qwen2.5-0.5b-instruct-q4_k_m.gguf",
-    "source_url": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/blob/main/qwen2.5-0.5b-instruct-q4_k_m.gguf",
-    "size_bytes": 491400032,
-    "download_gb": 0.49,
-    "sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+    "id": "llama-3.2-1b",
+    "name": "Llama 3.2 \u00b7 1B \u2014 Built with Llama",
+    "family": "Llama 3.2 Instruct",
+    "parameters": "1B",
+    "file": "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+    "url": "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/9971ce1bbba2f8b55de026a783323a808b3eeedb/Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+    "source_url": "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/blob/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+    "size_bytes": 807694464,
+    "download_gb": 0.81,
+    "sha256": "6f85a640a97cf2bf5b8e764087b1e83da0fdb51d7c9fab7d0fece9385611df83",
     "minimum_ram_gb": 4,
     "comfortable_ram_gb": 6,
-    "license": "Apache 2.0",
-    "summary": "Fast and light for simple questions. Limited accuracy."
+    "license": "Llama 3.2 Community License",
+    "summary": "Built with Llama. Starter model for local chat and documents."
   }
 ]

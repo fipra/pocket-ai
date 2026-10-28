@@ -29,11 +29,11 @@ const simpleHubStrings = {
 };
 for (const language of Object.keys(window.USB_AI_I18N)) Object.assign(window.USB_AI_I18N[language], simpleHubStrings[language]);
 const starterStrings = {
-  en: { starterHint:'Write your first message. Qwen 0.5B will download and start automatically.', starterDownloading:'Downloading the starter model…', starterPreparing:'Preparing the model…', modelLlama:'Starter model for private chat and documents.' },
-  it: { starterHint:'Scrivi il primo messaggio. Qwen 0.5B verrà scaricato e avviato automaticamente.', starterDownloading:'Scaricamento del modello iniziale…', starterPreparing:'Preparazione del modello…', modelLlama:'Modello iniziale per chat e documenti privati.' },
-  de: { starterHint:'Schreibe deine erste Nachricht. Qwen 0.5B wird automatisch heruntergeladen und gestartet.', starterDownloading:'Startmodell wird heruntergeladen…', starterPreparing:'Modell wird vorbereitet…', modelLlama:'Startmodell für private Chats und Dokumente.' },
-  fr: { starterHint:'Écrivez votre premier message. Qwen 0.5B sera téléchargé et lancé automatiquement.', starterDownloading:'Téléchargement du modèle initial…', starterPreparing:'Préparation du modèle…', modelLlama:'Modèle initial pour les discussions et documents privés.' },
-  es: { starterHint:'Escribe tu primer mensaje. Qwen 0.5B se descargará e iniciará automáticamente.', starterDownloading:'Descargando el modelo inicial…', starterPreparing:'Preparando el modelo…', modelLlama:'Modelo inicial para chat y documentos privados.' }
+  en: { starterHint:'Write your first message. Llama 3.2 1B will download and start automatically.', starterDownloading:'Downloading the starter model…', starterPreparing:'Preparing the model…', modelLlama:'Starter model for private chat and documents.' },
+  it: { starterHint:'Scrivi il primo messaggio. Llama 3.2 1B verrà scaricato e avviato automaticamente.', starterDownloading:'Scaricamento del modello iniziale…', starterPreparing:'Preparazione del modello…', modelLlama:'Modello iniziale per chat e documenti privati.' },
+  de: { starterHint:'Schreibe deine erste Nachricht. Llama 3.2 1B wird automatisch heruntergeladen und gestartet.', starterDownloading:'Startmodell wird heruntergeladen…', starterPreparing:'Modell wird vorbereitet…', modelLlama:'Startmodell für private Chats und Dokumente.' },
+  fr: { starterHint:'Écrivez votre premier message. Llama 3.2 1B sera téléchargé et lancé automatiquement.', starterDownloading:'Téléchargement du modèle initial…', starterPreparing:'Préparation du modèle…', modelLlama:'Modèle initial pour les discussions et documents privés.' },
+  es: { starterHint:'Escribe tu primer mensaje. Llama 3.2 1B se descargará e iniciará automáticamente.', starterDownloading:'Descargando el modelo inicial…', starterPreparing:'Preparando el modelo…', modelLlama:'Modelo inicial para chat y documentos privados.' }
 };
 for (const language of Object.keys(window.USB_AI_I18N)) Object.assign(window.USB_AI_I18N[language], starterStrings[language]);
 const firstModelStrings = {
@@ -64,8 +64,8 @@ for (const language of Object.keys(window.USB_AI_I18N)) Object.assign(window.USB
 const hardwareGuidanceStrings = {
   "en": {
     "hardwareAdviceChoice": "Best estimated fit for this computer: {model}.",
-    "hardwareAdviceFast": "For quicker replies, try Qwen 0.5B.",
-    "hardwareAdviceNoFit": "No model meets the comfortable memory estimate. Try Qwen 0.5B with short chats and check free RAM.",
+    "hardwareAdviceFast": "For quicker replies, try Llama 3.2 1B.",
+    "hardwareAdviceNoFit": "No model meets the comfortable memory estimate. Try Llama 3.2 1B with short chats and check free RAM.",
     "modelAdviceLow": "Estimated minimum: {minimum} GB RAM. This model may not load.",
     "modelAdviceSlow": "Few CPU cores for this model; replies may be slow.",
     "modelAdvicePossible": "May run, but about {recommended} GB RAM is more comfortable.",
@@ -75,8 +75,8 @@ const hardwareGuidanceStrings = {
   },
   "it": {
     "hardwareAdviceChoice": "Modello più adatto stimato per questo computer: {model}.",
-    "hardwareAdviceFast": "Per risposte più rapide, prova Qwen 0.5B.",
-    "hardwareAdviceNoFit": "Nessun modello raggiunge la RAM consigliata. Prova Qwen 0.5B con chat brevi e controlla la memoria libera.",
+    "hardwareAdviceFast": "Per risposte più rapide, prova Llama 3.2 1B.",
+    "hardwareAdviceNoFit": "Nessun modello raggiunge la RAM consigliata. Prova Llama 3.2 1B con chat brevi e controlla la memoria libera.",
     "modelAdviceLow": "Minimo stimato: {minimum} GB di RAM. Il modello potrebbe non caricarsi.",
     "modelAdviceSlow": "Pochi core CPU per questo modello; le risposte potrebbero essere lente.",
     "modelAdvicePossible": "Può funzionare, ma circa {recommended} GB di RAM sono più comodi.",
@@ -86,8 +86,8 @@ const hardwareGuidanceStrings = {
   },
   "de": {
     "hardwareAdviceChoice": "Voraussichtlich passendstes Modell für diesen Computer: {model}.",
-    "hardwareAdviceFast": "Für schnellere Antworten Qwen 0.5B versuchen.",
-    "hardwareAdviceNoFit": "Kein Modell erreicht den empfohlenen RAM. Versuche Qwen 0.5B mit kurzen Chats und prüfe freien RAM.",
+    "hardwareAdviceFast": "Für schnellere Antworten Llama 3.2 1B versuchen.",
+    "hardwareAdviceNoFit": "Kein Modell erreicht den empfohlenen RAM. Versuche Llama 3.2 1B mit kurzen Chats und prüfe freien RAM.",
     "modelAdviceLow": "Geschätztes Minimum: {minimum} GB RAM. Das Modell lädt möglicherweise nicht.",
     "modelAdviceSlow": "Wenige CPU-Kerne für dieses Modell; Antworten könnten langsam sein.",
     "modelAdvicePossible": "Kann laufen, mit etwa {recommended} GB RAM aber zuverlässiger.",
@@ -97,8 +97,8 @@ const hardwareGuidanceStrings = {
   },
   "fr": {
     "hardwareAdviceChoice": "Modèle estimé le mieux adapté à cet ordinateur : {model}.",
-    "hardwareAdviceFast": "Pour des réponses plus rapides, essayez Qwen 0.5B.",
-    "hardwareAdviceNoFit": "Aucun modèle n’atteint la RAM conseillée. Essayez Qwen 0.5B avec des discussions courtes et vérifiez la RAM libre.",
+    "hardwareAdviceFast": "Pour des réponses plus rapides, essayez Llama 3.2 1B.",
+    "hardwareAdviceNoFit": "Aucun modèle n’atteint la RAM conseillée. Essayez Llama 3.2 1B avec des discussions courtes et vérifiez la RAM libre.",
     "modelAdviceLow": "Minimum estimé : {minimum} Go de RAM. Le modèle peut ne pas se charger.",
     "modelAdviceSlow": "Peu de cœurs CPU pour ce modèle ; les réponses peuvent être lentes.",
     "modelAdvicePossible": "Peut fonctionner, mais environ {recommended} Go de RAM sont préférables.",
@@ -108,8 +108,8 @@ const hardwareGuidanceStrings = {
   },
   "es": {
     "hardwareAdviceChoice": "Modelo estimado más adecuado para este ordenador: {model}.",
-    "hardwareAdviceFast": "Para respuestas más rápidas, prueba Qwen 0.5B.",
-    "hardwareAdviceNoFit": "Ningún modelo alcanza la RAM aconsejada. Prueba Qwen 0.5B con chats cortos y comprueba la RAM libre.",
+    "hardwareAdviceFast": "Para respuestas más rápidas, prueba Llama 3.2 1B.",
+    "hardwareAdviceNoFit": "Ningún modelo alcanza la RAM aconsejada. Prueba Llama 3.2 1B con chats cortos y comprueba la RAM libre.",
     "modelAdviceLow": "Mínimo estimado: {minimum} GB de RAM. Puede que el modelo no cargue.",
     "modelAdviceSlow": "Pocos núcleos de CPU para este modelo; las respuestas pueden ser lentas.",
     "modelAdvicePossible": "Puede funcionar, pero unos {recommended} GB de RAM son preferibles.",

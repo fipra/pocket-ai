@@ -10,7 +10,8 @@ test('browser hardware treats unavailable RAM as unknown', () => {
   const hardware = browserHardware({hardwareConcurrency:8,userAgent:chrome});
   assert.equal(hardware.ramGb, null);
   assert.equal(modelGuidance(models[2], hardware).fit, 'unknown');
-  assert.equal(recommendedModel(models, hardware).id, 'qwen-0.5b');
+  assert.equal(recommendedModel(models, hardware).id, 'small');
+  assert.equal(recommendedModel([...models, {id:'llama-3.2-1b',size:807_694_464}], hardware).id, 'llama-3.2-1b');
 });
 
 test('RAM and core estimates guide the browser model choice', () => {

@@ -3265,16 +3265,15 @@ mod tests {
     }
 
     #[test]
-    fn curated_chat_models_have_supported_training_bases() {
-        let catalog: Value = serde_json::from_str(include_str!("../models/catalog.json")).unwrap();
-        for model in catalog.as_array().unwrap() {
-            let file = model["file"].as_str().unwrap();
-            let (_, base) = CHAT_TRAIN_BASES
-                .iter()
-                .find(|(name, _)| *name == file)
-                .expect("curated chat model needs a training base");
-            assert!(STUDENT_MODELS.contains(base));
+    fn mapped_chat_models_have_supported_training_bases() {
+        for (_, base) in CHAT_TRAIN_BASES {
+            assert!(STUDENT_MODELS.contains(&base));
         }
+        let catalog: Value = serde_json::from_str(include_str!("../models/catalog.json")).unwrap();
+        let starter = catalog[0]["file"].as_str().unwrap();
+        // The public starter is usable for chat; the experimental Lab must not
+        // claim an unsupported fine-tuning base for it.
+        assert!(!CHAT_TRAIN_BASES.iter().any(|(name, _)| *name == starter));
     }
 
     #[test]

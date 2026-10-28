@@ -59,16 +59,13 @@ Il browser si apre automaticamente. Apri **Scegli un modello** per vedere RAM to
 
 | Modello | Download circa | RAM minima indicativa | RAM più comoda | Licenza |
 |---|---:|---:|---:|---|
-| Qwen 2.5 0,5B | 0,49 GB | 4 GB | 6 GB | Apache 2.0 |
-| Qwen 2.5 3B | 2,1 GB | 8 GB | 10 GB | Qwen Research |
-| Qwen 2.5 7B | 4,68 GB | 12 GB | 16 GB | Apache 2.0 |
-| Gemma 2 9B | 5,76 GB | 16 GB | 24 GB | Gemma |
+| Llama 3.2 1B (Built with Llama) | 0,81 GB | 4 GB | 6 GB | Llama 3.2 Community License |
 
 Queste soglie sono stime prudenti basate sulla **RAM totale**, non una misura della memoria libera. Velocità e capacità effettive dipendono anche da GPU, contesto e programmi aperti. Il catalogo e le fonti dei file sono in [models/catalog.json](models/catalog.json).
 
 Su Windows, installa Rust, `llama-server.exe`, `llama-cli.exe`, `llama-quantize.exe` e `pdftotext.exe` nel PATH, poi esegui `cargo run --release` da PowerShell.
 
-Questa repo non contiene pesi GGUF nel controllo versione. Una copia locale del modello rimane in `models/` e viene inclusa nel pacchetto portabile. Usa un modello *instruct* compatibile e controlla la sua licenza prima di distribuirlo.
+Questa repo non contiene pesi GGUF nel controllo versione. Una copia locale del modello rimane in `models/`; i pacchetti scaricabili non includono i pesi. Usa un modello *instruct* compatibile e controlla la sua licenza prima di distribuirlo.
 
 ## Pacchetto per chiavetta USB
 

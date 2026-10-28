@@ -1,8 +1,8 @@
-// The single built-in test model. Hash and size match the desktop catalog.
+// Built-in starter model. Hash and size match the desktop catalog.
 export const CATALOG = [{
-  id: 'qwen-0.5b', name: 'Qwen 2.5 · 0.5B Q4', size: 491400032,
-  url: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/9217f5db79a29953eb74d5343926648285ec7e67/qwen2.5-0.5b-instruct-q4_k_m.gguf',
-  source: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/blob/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
-  sha256: '74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db',
-  license: 'Apache 2.0'
+  id: 'llama-3.2-1b', name: 'Llama 3.2 · 1B Q4 — Built with Llama', size: 807694464,
+  url: 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/9971ce1bbba2f8b55de026a783323a808b3eeedb/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
+  source: 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/blob/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
+  sha256: '6f85a640a97cf2bf5b8e764087b1e83da0fdb51d7c9fab7d0fece9385611df83',
+  license: 'Llama 3.2 Community License'
 }];

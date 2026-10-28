@@ -30,8 +30,8 @@ const isRemote = id => String(id || '').startsWith('remote:');
 let hubResults = [], hubNext = null, hubSearching = false;
 let pendingFirstPrompt = false;
 let splitSourceFile, splitController;
-const STARTER_ID = 'qwen-0.5b';
-const STARTER_FILE = 'qwen2.5-0.5b-instruct-q4_k_m.gguf';
+const STARTER_ID = 'llama-3.2-1b';
+const STARTER_FILE = 'Llama-3.2-1B-Instruct-Q4_K_M.gguf';
 const isStarterModel = model => model?.id === STARTER_ID || [model?.filename, model?.name, model?.url].some(value => typeof value === 'string' && value.endsWith(STARTER_FILE));
 const tr = key => translations[language]?.[key] || translations.en[key] || key;
 function renderBrowserModelWarning() {

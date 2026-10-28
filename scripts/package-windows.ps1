@@ -49,7 +49,7 @@ try {
     $destination = Join-Path (Join-Path $out 'models') $_.Name
     if (-not (Test-Path $destination)) { Copy-Item $_.FullName $destination }
   }
-  foreach ($name in @('QWEN-LICENSE.txt','catalog.json')) {
+  foreach ($name in @('QWEN-LICENSE.txt','LLAMA-3.2-LICENSE.txt','LLAMA-3.2-NOTICE.txt','catalog.json')) {
     $file = Join-Path (Join-Path $root 'models') $name
     if (Test-Path $file) { Copy-Item $file (Join-Path $out 'models') }
   }

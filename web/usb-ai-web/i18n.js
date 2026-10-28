@@ -47,11 +47,11 @@ const auxiliaryStrings = {
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], auxiliaryStrings[language]);
 const starterStrings = {
-  en: { starterHint:'Write your first message. Qwen 0.5B will download and start automatically.', starterDownloading:'Downloading the starter model…' },
-  it: { starterHint:'Scrivi il primo messaggio. Qwen 0.5B verrà scaricato e avviato automaticamente.', starterDownloading:'Scaricamento del modello iniziale…' },
-  fr: { starterHint:'Écrivez votre premier message. Qwen 0.5B sera téléchargé et lancé automatiquement.', starterDownloading:'Téléchargement du modèle initial…' },
-  de: { starterHint:'Schreibe deine erste Nachricht. Qwen 0.5B wird automatisch heruntergeladen und gestartet.', starterDownloading:'Startmodell wird heruntergeladen…' },
-  es: { starterHint:'Escribe tu primer mensaje. Qwen 0.5B se descargará e iniciará automáticamente.', starterDownloading:'Descargando el modelo inicial…' }
+  en: { starterHint:'Write your first message. Llama 3.2 1B will download and start automatically.', starterDownloading:'Downloading the starter model…' },
+  it: { starterHint:'Scrivi il primo messaggio. Llama 3.2 1B verrà scaricato e avviato automaticamente.', starterDownloading:'Scaricamento del modello iniziale…' },
+  fr: { starterHint:'Écrivez votre premier message. Llama 3.2 1B sera téléchargé et lancé automatiquement.', starterDownloading:'Téléchargement du modèle initial…' },
+  de: { starterHint:'Schreibe deine erste Nachricht. Llama 3.2 1B wird automatisch heruntergeladen und gestartet.', starterDownloading:'Startmodell wird heruntergeladen…' },
+  es: { starterHint:'Escribe tu primer mensaje. Llama 3.2 1B se descargará e iniciará automáticamente.', starterDownloading:'Descargando el modelo inicial…' }
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], starterStrings[language]);
 const firstModelStrings = {
@@ -63,11 +63,11 @@ const firstModelStrings = {
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], firstModelStrings[language]);
 const safariStrings = {
-  en: { safariStarterHint:'Write your first message, then choose a saved GGUF or download a smaller suggested model.', safariGenerationTimeout:'Safari did not produce text within 90 seconds. Try Qwen 0.5B in Models or use a browser with WebGPU for larger models.', safariSwitchingModel:'Preparing Qwen 0.5B for Safari…' },
-  it: { safariStarterHint:'Scrivi il primo messaggio, poi scegli un GGUF già salvato o scarica un modello consigliato più piccolo.', safariGenerationTimeout:'Safari non ha prodotto testo entro 90 secondi. Prova Qwen 0.5B in Modelli o usa un browser con WebGPU per modelli più grandi.', safariSwitchingModel:'Preparazione di Qwen 0.5B per Safari…' },
-  fr: { safariStarterHint:'Écrivez votre premier message, puis choisissez un GGUF enregistré ou téléchargez un plus petit modèle conseillé.', safariGenerationTimeout:'Safari n’a produit aucun texte en 90 secondes. Essayez Qwen 0.5B dans Modèles ou un navigateur WebGPU pour les grands modèles.', safariSwitchingModel:'Préparation de Qwen 0.5B pour Safari…' },
-  de: { safariStarterHint:'Schreibe die erste Nachricht und wähle dann eine gespeicherte GGUF-Datei oder lade ein kleineres empfohlenes Modell herunter.', safariGenerationTimeout:'Safari hat in 90 Sekunden keinen Text erzeugt. Probiere Qwen 0.5B unter Modelle oder einen Browser mit WebGPU für größere Modelle.', safariSwitchingModel:'Qwen 0.5B für Safari wird vorbereitet…' },
-  es: { safariStarterHint:'Escribe el primer mensaje y luego elige un GGUF guardado o descarga un modelo recomendado más pequeño.', safariGenerationTimeout:'Safari no generó texto en 90 segundos. Prueba Qwen 0.5B en Modelos o un navegador con WebGPU para modelos grandes.', safariSwitchingModel:'Preparando Qwen 0.5B para Safari…' }
+  en: { safariStarterHint:'Write your first message to download Llama 3.2 1B. Safari may run slowly or run out of memory.', safariGenerationTimeout:'Safari did not produce text within 90 seconds. Try a smaller model in Models, or use a browser with WebGPU.', safariSwitchingModel:'Preparing Llama 3.2 1B for Safari…' },
+  it: { safariStarterHint:'Scrivi il primo messaggio per scaricare Llama 3.2 1B. Safari potrebbe essere lento o esaurire la memoria.', safariGenerationTimeout:'Safari non ha prodotto testo entro 90 secondi. Prova un modello più piccolo in Modelli oppure usa un browser con WebGPU.', safariSwitchingModel:'Preparazione di Llama 3.2 1B per Safari…' },
+  fr: { safariStarterHint:'Écrivez votre premier message pour télécharger Llama 3.2 1B. Safari peut être lent ou manquer de mémoire.', safariGenerationTimeout:'Safari n’a produit aucun texte en 90 secondes. Essayez un modèle plus petit ou un navigateur avec WebGPU.', safariSwitchingModel:'Préparation de Llama 3.2 1B pour Safari…' },
+  de: { safariStarterHint:'Schreibe die erste Nachricht und wähle dann eine gespeicherte GGUF-Datei oder lade ein kleineres empfohlenes Modell herunter.', safariGenerationTimeout:'Safari hat in 90 Sekunden keinen Text erzeugt. Versuche ein kleineres Modell oder einen Browser mit WebGPU.', safariSwitchingModel:'Llama 3.2 1B für Safari wird vorbereitet…' },
+  es: { safariStarterHint:'Escribe el primer mensaje para descargar Llama 3.2 1B. Safari puede ser lento o quedarse sin memoria.', safariGenerationTimeout:'Safari no generó texto en 90 segundos. Prueba un modelo más pequeño o un navegador con WebGPU.', safariSwitchingModel:'Preparando Llama 3.2 1B para Safari…' }
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], safariStrings[language]);
 const safariWarning = {
@@ -79,11 +79,11 @@ const safariWarning = {
 };
 for (const language of Object.keys(translations)) translations[language].safariLargeModelWarning = safariWarning[language];
 const browserModelWarnings = {
-  en: { safariLargeModelsUnsupported:'Safari: large models such as Llama 3.2 (1.6 GB) are not supported in LlamaNest Web. Safari may reload the page because of memory use. Try Qwen 0.5B, or use Chrome, Edge, or the desktop app for large models.', firefoxLargeModelsUnsupported:'Firefox: large models such as Llama 3.2 (1.6 GB) are not supported in LlamaNest Web. Generation may be very slow or fail. Try Qwen 0.5B, or use Chrome, Edge, or the desktop app for large models.' },
-  it: { safariLargeModelsUnsupported:'Safari: i modelli grandi come Llama 3.2 (1,6 GB) non sono supportati in LlamaNest Web. Safari può ricaricare la pagina per l’uso eccessivo di memoria. Prova Qwen 0.5B oppure usa Chrome, Edge o l’app desktop per i modelli grandi.', firefoxLargeModelsUnsupported:'Firefox: i modelli grandi come Llama 3.2 (1,6 GB) non sono supportati in LlamaNest Web. La generazione può essere molto lenta o non riuscire. Prova Qwen 0.5B oppure usa Chrome, Edge o l’app desktop per i modelli grandi.' },
-  fr: { safariLargeModelsUnsupported:'Safari : les grands modèles comme Llama 3.2 (1,6 Go) ne sont pas pris en charge dans LlamaNest Web. Safari peut recharger la page à cause de la mémoire utilisée. Essayez Qwen 0.5B, ou utilisez Chrome, Edge ou l’application de bureau pour les grands modèles.', firefoxLargeModelsUnsupported:'Firefox : les grands modèles comme Llama 3.2 (1,6 Go) ne sont pas pris en charge dans LlamaNest Web. La génération peut être très lente ou échouer. Essayez Qwen 0.5B, ou utilisez Chrome, Edge ou l’application de bureau pour les grands modèles.' },
-  de: { safariLargeModelsUnsupported:'Safari: Große Modelle wie Llama 3.2 (1,6 GB) werden in LlamaNest Web nicht unterstützt. Safari kann die Seite wegen hohen Speicherverbrauchs neu laden. Versuche Qwen 0.5B oder nutze Chrome, Edge oder die Desktop-App für große Modelle.', firefoxLargeModelsUnsupported:'Firefox: Große Modelle wie Llama 3.2 (1,6 GB) werden in LlamaNest Web nicht unterstützt. Die Generierung kann sehr langsam sein oder scheitern. Versuche Qwen 0.5B oder nutze Chrome, Edge oder die Desktop-App für große Modelle.' },
-  es: { safariLargeModelsUnsupported:'Safari: los modelos grandes como Llama 3.2 (1,6 GB) no son compatibles con LlamaNest Web. Safari puede recargar la página por el uso de memoria. Prueba Qwen 0.5B o usa Chrome, Edge o la aplicación de escritorio para modelos grandes.', firefoxLargeModelsUnsupported:'Firefox: los modelos grandes como Llama 3.2 (1,6 GB) no son compatibles con LlamaNest Web. La generación puede ser muy lenta o fallar. Prueba Qwen 0.5B o usa Chrome, Edge o la aplicación de escritorio para modelos grandes.' }
+  en: { safariLargeModelsUnsupported:'Safari: large models such as Llama 3.2 (1.6 GB) are not supported in LlamaNest Web. Safari may reload the page because of memory use. Try Llama 3.2 1B, or use Chrome, Edge, or the desktop app for large models.', firefoxLargeModelsUnsupported:'Firefox: large models such as Llama 3.2 (1.6 GB) are not supported in LlamaNest Web. Generation may be very slow or fail. Try Llama 3.2 1B, or use Chrome, Edge, or the desktop app for large models.' },
+  it: { safariLargeModelsUnsupported:'Safari: i modelli grandi come Llama 3.2 (1,6 GB) non sono supportati in LlamaNest Web. Safari può ricaricare la pagina per l’uso eccessivo di memoria. Prova Llama 3.2 1B oppure usa Chrome, Edge o l’app desktop per i modelli grandi.', firefoxLargeModelsUnsupported:'Firefox: i modelli grandi come Llama 3.2 (1,6 GB) non sono supportati in LlamaNest Web. La generazione può essere molto lenta o non riuscire. Prova Llama 3.2 1B oppure usa Chrome, Edge o l’app desktop per i modelli grandi.' },
+  fr: { safariLargeModelsUnsupported:'Safari : les grands modèles comme Llama 3.2 (1,6 Go) ne sont pas pris en charge dans LlamaNest Web. Safari peut recharger la page à cause de la mémoire utilisée. Essayez Llama 3.2 1B, ou utilisez Chrome, Edge ou l’application de bureau pour les grands modèles.', firefoxLargeModelsUnsupported:'Firefox : les grands modèles comme Llama 3.2 (1,6 Go) ne sont pas pris en charge dans LlamaNest Web. La génération peut être très lente ou échouer. Essayez Llama 3.2 1B, ou utilisez Chrome, Edge ou l’application de bureau pour les grands modèles.' },
+  de: { safariLargeModelsUnsupported:'Safari: Große Modelle wie Llama 3.2 (1,6 GB) werden in LlamaNest Web nicht unterstützt. Safari kann die Seite wegen hohen Speicherverbrauchs neu laden. Versuche Llama 3.2 1B oder nutze Chrome, Edge oder die Desktop-App für große Modelle.', firefoxLargeModelsUnsupported:'Firefox: Große Modelle wie Llama 3.2 (1,6 GB) werden in LlamaNest Web nicht unterstützt. Die Generierung kann sehr langsam sein oder scheitern. Versuche Llama 3.2 1B oder nutze Chrome, Edge oder die Desktop-App für große Modelle.' },
+  es: { safariLargeModelsUnsupported:'Safari: los modelos grandes como Llama 3.2 (1,6 GB) no son compatibles con LlamaNest Web. Safari puede recargar la página por el uso de memoria. Prueba Llama 3.2 1B o usa Chrome, Edge o la aplicación de escritorio para modelos grandes.', firefoxLargeModelsUnsupported:'Firefox: los modelos grandes como Llama 3.2 (1,6 GB) no son compatibles con LlamaNest Web. La generación puede ser muy lenta o fallar. Prueba Llama 3.2 1B o usa Chrome, Edge o la aplicación de escritorio para modelos grandes.' }
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], browserModelWarnings[language]);
 const thinkingStrings = {
@@ -128,7 +128,7 @@ const modelGuidanceStrings = {
     "browserHardware": "Browser estimate: {ram} GB RAM, {cores} logical cores.",
     "hardwareAdviceChoice": "Suggested model: {model}.",
     "deviceChoice": "Suggested",
-    "modelBrowserLimit": "Large models are not supported in this browser. Use Chrome, Edge, or the desktop app.",
+    "modelBrowserLimit": "This model may be slow or run out of memory in this browser. Try Chrome, Edge, or the desktop app.",
     "modelRamUnknown": "RAM is unavailable; check free memory before loading.",
     "modelRamLow": "Estimated minimum: {minimum} GB RAM. This device may run out of memory.",
     "modelCpuSlow": "Few CPU cores: generation may be slow.",
@@ -141,7 +141,7 @@ const modelGuidanceStrings = {
     "browserHardware": "Stima del browser: {ram} GB di RAM, {cores} core logici.",
     "hardwareAdviceChoice": "Modello suggerito: {model}.",
     "deviceChoice": "Suggerito",
-    "modelBrowserLimit": "I modelli grandi non sono supportati in questo browser. Usa Chrome, Edge o l’app desktop.",
+    "modelBrowserLimit": "Questo modello potrebbe essere lento o esaurire la memoria. Prova Chrome, Edge o l’app desktop.",
     "modelRamUnknown": "RAM non disponibile; controlla la memoria libera prima di caricare il modello.",
     "modelRamLow": "Minimo stimato: {minimum} GB di RAM. La memoria potrebbe esaurirsi.",
     "modelCpuSlow": "Pochi core CPU: la generazione potrebbe essere lenta.",
@@ -154,7 +154,7 @@ const modelGuidanceStrings = {
     "browserHardware": "Browser-Schätzung: {ram} GB RAM, {cores} logische Kerne.",
     "hardwareAdviceChoice": "Empfohlenes Modell: {model}.",
     "deviceChoice": "Empfohlen",
-    "modelBrowserLimit": "Große Modelle werden in diesem Browser nicht unterstützt. Nutze Chrome, Edge oder die Desktop-App.",
+    "modelBrowserLimit": "Dieses Modell kann langsam sein oder zu viel Speicher benötigen. Versuche Chrome, Edge oder die Desktop-App.",
     "modelRamUnknown": "RAM unbekannt; prüfe freien Speicher vor dem Laden.",
     "modelRamLow": "Geschätztes Minimum: {minimum} GB RAM. Der Speicher könnte nicht reichen.",
     "modelCpuSlow": "Wenige CPU-Kerne: die Ausgabe könnte langsam sein.",
@@ -167,7 +167,7 @@ const modelGuidanceStrings = {
     "browserHardware": "Estimation du navigateur : {ram} Go de RAM, {cores} cœurs logiques.",
     "hardwareAdviceChoice": "Modèle conseillé : {model}.",
     "deviceChoice": "Conseillé",
-    "modelBrowserLimit": "Les grands modèles ne sont pas pris en charge ici. Utilisez Chrome, Edge ou l’application de bureau.",
+    "modelBrowserLimit": "Ce modèle peut être lent ou manquer de mémoire. Essayez Chrome, Edge ou l’application de bureau.",
     "modelRamUnknown": "RAM inconnue ; vérifiez la mémoire libre avant le chargement.",
     "modelRamLow": "Minimum estimé : {minimum} Go de RAM. La mémoire peut manquer.",
     "modelCpuSlow": "Peu de cœurs CPU : la génération peut être lente.",
@@ -180,7 +180,7 @@ const modelGuidanceStrings = {
     "browserHardware": "Estimación del navegador: {ram} GB de RAM, {cores} núcleos lógicos.",
     "hardwareAdviceChoice": "Modelo sugerido: {model}.",
     "deviceChoice": "Sugerido",
-    "modelBrowserLimit": "Los modelos grandes no son compatibles con este navegador. Usa Chrome, Edge o la aplicación de escritorio.",
+    "modelBrowserLimit": "Este modelo puede ser lento o quedarse sin memoria. Prueba Chrome, Edge o la aplicación de escritorio.",
     "modelRamUnknown": "RAM desconocida; comprueba la memoria libre antes de cargarlo.",
     "modelRamLow": "Mínimo estimado: {minimum} GB de RAM. Puede faltar memoria.",
     "modelCpuSlow": "Pocos núcleos de CPU: la generación puede ser lenta.",

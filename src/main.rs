@@ -2463,7 +2463,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         quantization: None,
     };
     let installed = app_state.models();
-    let starter = "qwen2.5-0.5b-instruct-q4_k_m.gguf";
+    let starter = "Llama-3.2-1B-Instruct-Q4_K_M.gguf";
     let preferred = recommended_id(&app_state.hardware, &app_state.catalog)
         .and_then(|id| app_state.catalog.iter().find(|model| model.id == id))
         .map(|model| model.file.clone());
@@ -3694,7 +3694,7 @@ mod tests {
                 .iter()
                 .map(|model| model.id.as_str())
                 .collect::<Vec<_>>(),
-            vec!["qwen-0.5b"]
+            vec!["llama-3.2-1b"]
         );
         for model in catalog {
             assert!(model.url.starts_with("https://huggingface.co/"));
@@ -3724,16 +3724,16 @@ mod tests {
             logical_cores: 8,
             ram_gb: Some(8.0),
         };
-        assert_eq!(recommended_id(&hardware, &catalog), Some("qwen-0.5b"));
+        assert_eq!(recommended_id(&hardware, &catalog), Some("llama-3.2-1b"));
         hardware.ram_gb = Some(16.0);
-        assert_eq!(recommended_id(&hardware, &catalog), Some("qwen-0.5b"));
+        assert_eq!(recommended_id(&hardware, &catalog), Some("llama-3.2-1b"));
         hardware.ram_gb = Some(24.0);
-        assert_eq!(recommended_id(&hardware, &catalog), Some("qwen-0.5b"));
+        assert_eq!(recommended_id(&hardware, &catalog), Some("llama-3.2-1b"));
         hardware.ram_gb = None;
         assert_eq!(recommended_id(&hardware, &catalog), None);
         hardware.ram_gb = Some(24.0);
         hardware.logical_cores = 2;
-        assert_eq!(recommended_id(&hardware, &catalog), Some("qwen-0.5b"));
+        assert_eq!(recommended_id(&hardware, &catalog), Some("llama-3.2-1b"));
         assert_eq!(model_fit(&hardware, 16, 24, 5.76), "slow");
     }
     #[test]
