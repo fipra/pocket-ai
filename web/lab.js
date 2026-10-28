@@ -218,7 +218,7 @@
     else $('job-progress').value = job.phase === 'complete' ? 100 : 0;
     $('job-log').textContent = job.log || '';
     if (job.kind === 'train' && !job.active) message('train-message', job.error || phase, job.phase === 'failed');
-    if (job.kind === 'export' && !job.active) message('export-message', job.error || (job.phase === 'complete' ? `${tr('modelReady')} ${job.output}` : phase), job.phase === 'failed');
+    if (job.kind === 'export' && !job.active) message('export-message', job.error ? tr(job.error) : (job.phase === 'complete' ? `${tr('modelReady')} ${job.output}` : phase), job.phase === 'failed');
     if (job.kind === 'distill' && !job.active) message('generate-message', job.error || phase, job.phase === 'failed');
     if (job.kind === 'auto' && !job.active) message('auto-message', job.error ? tr(job.error) : (job.phase === 'complete' ? tr('autoReady') : phase), job.phase === 'failed');
     if (job.kind === 'document' && !job.active) message('doc-message', job.error ? tr(job.error) : job.phase === 'complete' ? tr('documentReady') : phase, job.phase === 'failed');
@@ -342,10 +342,12 @@
     $('choose-local-model').disabled = busy;
     $('choose-gguf-model').disabled = busy;
     $('train-start').disabled = busy || pendingPair || longTraining || !status.trainSupported || !localReady || training.length < 5;
-    $('train-start').textContent = tr(status.canContinue ? 'continueTrain' : 'trainStart');
-    $('iterations-label').textContent = tr(status.canContinue ? 'additionalIterations' : 'iterations');
+    $('restart-base-label').hidden = !status.canContinue;
+    $('restart-base').disabled = busy;
+    $('train-start').textContent = tr(status.canContinue && !$('restart-base').checked ? 'continueTrain' : 'trainStart');
+    $('iterations-label').textContent = tr(status.canContinue && !$('restart-base').checked ? 'additionalIterations' : 'iterations');
     $('train-mode').hidden = !status.canContinue;
-    $('train-mode').textContent = status.canContinue ? tr('continueHelp') : '';
+    $('train-mode').textContent = status.canContinue ? tr($('restart-base').checked ? 'restartHelp' : 'continueHelp') : '';
     $('generate-start').disabled = busy || pendingPrompt || prompts.length === 0 || !teacherReady;
     $('auto-start').disabled = busy || !$('auto-topic').value.trim() || !teacherReady;
     $('preview-start').disabled = busy || !status.adapterFresh || !localReady;
@@ -681,8 +683,9 @@
     try { await saveRows('prompts', next); clearPromptForm(); }
     catch (_) { /* Keep the entered text for another attempt. */ }
   };
+  $('restart-base').onchange = render;
   $('train-start').onclick = async () => {
-    try { await withPending('train-start', async () => { status = await api('train', {iterations:Number($('iterations').value)}); verificationCorrectionsPending = false; correctionRecorded = false; $('correction').hidden = true; render(); }); }
+    try { await withPending('train-start', async () => { status = await api('train', {iterations:Number($('iterations').value),restartFromBase:$('restart-base').checked}); verificationCorrectionsPending = false; correctionRecorded = false; $('correction').hidden = true; render(); }); }
     catch (error) { message('train-message', error.message, true); }
   };
   $('export-model').onclick = async () => {

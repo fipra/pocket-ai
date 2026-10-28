@@ -153,7 +153,10 @@ def preview(args):
     torch, _, tokenizer_class, _, _, peft_class, *_ = deps
     tokenizer = tokenizer_for(args.model, tokenizer_class)
     base, _ = quantized_model(args.model, deps)
-    model = peft_class.from_pretrained(base, args.adapter, is_trainable=False, local_files_only=True)
+    model = (
+        peft_class.from_pretrained(base, args.adapter, is_trainable=False, local_files_only=True)
+        if args.adapter else base
+    )
     model.eval()
     tokens = prompt_tokens(tokenizer, args.prompt)
     inputs = torch.tensor([tokens], device="cuda")
@@ -215,7 +218,7 @@ def main():
     train_parser.add_argument("--resume")
     preview_parser = sub.add_parser("preview")
     preview_parser.add_argument("--model", required=True)
-    preview_parser.add_argument("--adapter", required=True)
+    preview_parser.add_argument("--adapter")
     preview_parser.add_argument("--prompt", required=True)
     preview_parser.add_argument("--max-tokens", type=int, default=160)
     merge_parser = sub.add_parser("merge")

@@ -1425,6 +1425,46 @@ fn verify_answer_matches(expected: &str, actual: &str) -> bool {
     normalize(expected) == normalize(actual)
 }
 
+// A greeting is deliberately outside the user's factual examples. If an adapted
+// model answers it with one of those facts, it has learned to emit the answer
+// without attending to the question. This is a conservative regression check,
+// not a claim that arbitrary unseen questions can be graded automatically.
+const BEHAVIOR_PROBES: &[&str] = &["ciao", "hello"];
+
+fn leaked_training_answer(prompt: &str, answer: &str, examples: &[Example]) -> bool {
+    let answer = answer
+        .trim()
+        .trim_matches(|ch: char| ch.is_ascii_punctuation());
+    if answer.is_empty()
+        || examples
+            .iter()
+            .any(|row| row.prompt.eq_ignore_ascii_case(prompt))
+    {
+        return false;
+    }
+    // A greeting may itself be a legitimate training answer.
+    if [
+        "ciao",
+        "hello",
+        "hi",
+        "salve",
+        "buongiorno",
+        "bonjour",
+        "hola",
+        "hallo",
+    ]
+    .iter()
+    .any(|greeting| answer.eq_ignore_ascii_case(greeting))
+    {
+        return false;
+    }
+    examples.iter().any(|row| {
+        row.completion
+            .as_deref()
+            .is_some_and(|expected| expected.trim().eq_ignore_ascii_case(answer))
+    })
+}
+
 fn verification_report(
     adapter: &Path,
     adapter_rows: &[Value],
@@ -1466,7 +1506,7 @@ fn verify_adapter_answer(
     job: &Arc<Mutex<Job>>,
     root: &Path,
     base: &Path,
-    adapter: &Path,
+    adapter: Option<&Path>,
     prompt: &str,
     index: usize,
     directory: &Path,
@@ -1484,27 +1524,26 @@ fn verify_adapter_answer(
             .arg("preview")
             .arg("--model")
             .arg(base)
-            .arg("--adapter")
-            .arg(adapter)
             .arg("--prompt")
             .arg(prompt)
             .args(["--max-tokens", "160"]);
+        if let Some(adapter) = adapter {
+            command.arg("--adapter").arg(adapter);
+        }
         command
     } else {
         let mut command = Command::new(mlx_tool(root, "MLX_LM_GENERATE", "mlx_lm.generate"));
-        command
-            .arg("--model")
-            .arg(base)
-            .arg("--adapter-path")
-            .arg(adapter)
-            .args([
-                "--prompt",
-                prompt,
-                "--max-tokens",
-                "160",
-                "--verbose",
-                "false",
-            ]);
+        command.arg("--model").arg(base).args([
+            "--prompt",
+            prompt,
+            "--max-tokens",
+            "160",
+            "--verbose",
+            "false",
+        ]);
+        if let Some(adapter) = adapter {
+            command.arg("--adapter-path").arg(adapter);
+        }
         command
     };
     let child = command
@@ -1610,7 +1649,7 @@ pub fn start_verify(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
                     &job,
                     &root,
                     &base,
-                    &adapter,
+                    Some(&adapter),
                     &example.prompt,
                     index,
                     &directory,
@@ -2070,6 +2109,7 @@ pub fn start_train(
     service: Arc<Mutex<Service>>,
     app: Arc<Mutex<App>>,
     iters: u64,
+    restart_from_base: bool,
 ) -> Result<Value, String> {
     if !cfg!(any(
         all(target_os = "macos", target_arch = "aarch64"),
@@ -2100,7 +2140,11 @@ pub fn start_train(
             return Err("Shorten every answer to 4000 characters before training".into());
         }
         let job = Arc::new(Mutex::new(Job::new("train", iters as usize)));
-        let resume = lab.continuation_adapter(&examples);
+        let resume = if restart_from_base {
+            None
+        } else {
+            lab.continuation_adapter(&examples)
+        };
         let student = lab.checked_student_model()?;
         if cfg!(windows) && lab.student_selection() != LOCAL_STUDENT {
             return Err("Choose a local model folder before CUDA training".into());
@@ -2563,6 +2607,69 @@ fn smoke_exported_gguf(job: &Arc<Mutex<Job>>, model: &Path, log: &Path) -> Resul
     )
 }
 
+fn check_adapter_behavior(
+    job: &Arc<Mutex<Job>>,
+    root: &Path,
+    base: &Path,
+    adapter: &Path,
+    examples: &[Example],
+    directory: &Path,
+) -> Result<(), String> {
+    for (index, prompt) in BEHAVIOR_PROBES.iter().enumerate() {
+        let base_answer =
+            verify_adapter_answer(job, root, base, None, prompt, index + 100, directory)?;
+        let answer =
+            verify_adapter_answer(job, root, base, Some(adapter), prompt, index, directory)?;
+        if !leaked_training_answer(prompt, &base_answer, examples)
+            && leaked_training_answer(prompt, &answer, examples)
+        {
+            return Err("qualityRegression".into());
+        }
+    }
+    Ok(())
+}
+
+fn check_gguf_behavior(
+    job: &Arc<Mutex<Job>>,
+    app: &Arc<Mutex<App>>,
+    model: &Path,
+    examples: &[Example],
+) -> Result<(), String> {
+    for (prompt, expected) in BEHAVIOR_PROBES.iter().map(|prompt| (*prompt, None)).chain(
+        examples
+            .iter()
+            .map(|row| (row.prompt.as_str(), row.completion.as_deref())),
+    ) {
+        if job.lock().unwrap().cancelled {
+            return Err("Verification cancelled".into());
+        }
+        let generation = Arc::new(ActiveGeneration::new("lab-export-check".into(), id()));
+        job.lock().unwrap().generation = Some(generation.clone());
+        let mut app = app.lock().unwrap();
+        let chat_prompt =
+            crate::lab_verification_chat_prompt(app.language(), app.db.thinking, prompt);
+        let answer = app
+            .infer_stream(
+                model,
+                &chat_prompt,
+                Some(prompt),
+                None,
+                &mut |_| Ok(()),
+                &generation,
+            )?
+            .0;
+        drop(app);
+        job.lock().unwrap().generation = None;
+        if expected.is_none() && leaked_training_answer(prompt, &answer, examples) {
+            return Err("qualityRegression".into());
+        }
+        if expected.is_some_and(|expected| !verify_answer_matches(expected, &answer)) {
+            return Err("qualityMismatch".into());
+        }
+    }
+    Ok(())
+}
+
 // Small LoRA updates can disappear when fused weights are quantized to four bits.
 // Eight-bit GGUF retained the learned answer in the export regression case.
 const LAB_EXPORT_QUANTIZATION: &str = "Q8_0";
@@ -2579,7 +2686,7 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
         .map_err(|_| "Chat is busy; try again when it finishes")?
         .models
         .clone();
-    let (adapter, student, root, job) = {
+    let (adapter, student, root, examples, job) = {
         let mut lab = service.lock().unwrap();
         if lab.busy() {
             return Err("A lab job is already running".into());
@@ -2589,9 +2696,10 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
         }
         let adapter = lab.latest_adapter().ok_or("Train an adapter first")?;
         let student = lab.checked_student_model()?;
+        let examples = lab.rows("training")?;
         let job = Arc::new(Mutex::new(Job::new("export", 3)));
         lab.job = Some(job.clone());
-        (adapter, student, lab.root.clone(), job)
+        (adapter, student, lab.root.clone(), examples, job)
     };
     thread::spawn(move || {
         let run = adapter.parent().unwrap().to_path_buf();
@@ -2637,6 +2745,7 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
                     return Err("The training base changed since fine tuning; exporting would lose the learned weights".into());
                 }
             }
+            check_adapter_behavior(&job, &root, &training_base, &adapter, &examples, &export)?;
             let converter_path = if cfg!(windows) {
                 cuda_converter()?
             } else {
@@ -2667,8 +2776,9 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
                     )
                     .is_ok()
                     {
-                        keep_verified_part = true;
                         smoke_exported_gguf(&job, &part, &log)?;
+                        check_gguf_behavior(&job, &app, &part, &examples)?;
+                        keep_verified_part = true;
                         fs::rename(&part, &target).map_err(|e| e.to_string())?;
                         return Ok(final_name);
                     }
@@ -2808,8 +2918,9 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
                 gguf_package.as_deref(),
                 &log,
             )?;
-            keep_verified_part = true;
             smoke_exported_gguf(&job, &part, &log)?;
+            check_gguf_behavior(&job, &app, &part, &examples)?;
+            keep_verified_part = true;
             fs::rename(&part, &target).map_err(|e| e.to_string())?;
             // The finished model is in the library; temporary full precision copies are no longer needed.
             let _ = fs::remove_file(&f16);
@@ -2846,6 +2957,22 @@ pub fn start_export(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unrelated_greeting_must_not_repeat_a_learned_fact() {
+        let examples = vec![Example {
+            prompt: "Who is the mother?".into(),
+            completion: Some("Cenza".into()),
+        }];
+        assert!(leaked_training_answer("ciao", "Cenza.", &examples));
+        assert!(leaked_training_answer("hello", " cenza ", &examples));
+        assert!(!leaked_training_answer("ciao", "Ciao!", &examples));
+        assert!(!leaked_training_answer(
+            "Who is the mother?",
+            "Cenza",
+            &examples
+        ));
+    }
 
     #[test]
     fn verification_matches_exact_answers_and_the_current_run() {

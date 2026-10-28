@@ -833,7 +833,10 @@ fn is_lab_export_model(model: &Path) -> bool {
     model
         .file_name()
         .and_then(|name| name.to_str())
-        .is_some_and(|name| name.starts_with("LlamaNest-") && name.ends_with(".gguf"))
+        .is_some_and(|name| {
+            (name.starts_with("LlamaNest-") && name.ends_with(".gguf"))
+                || (name.starts_with(".LlamaNest-") && name.ends_with(".gguf.part"))
+        })
 }
 
 fn chat_messages_from_prompt(prompt: &str, question: &str) -> Result<Value, String> {
@@ -2771,7 +2774,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 let iters = data["iterations"]
                                     .as_u64()
                                     .ok_or("Choose a valid iteration count")?;
-                                lab::start_train(lab_service.clone(), app.clone(), iters)
+                                let restart = data["restartFromBase"].as_bool().unwrap_or(false);
+                                lab::start_train(lab_service.clone(), app.clone(), iters, restart)
                             }
                             "export_model" => lab::start_export(lab_service.clone(), app.clone()),
                             "verify_model" => lab::start_verify(lab_service.clone(), app.clone()),
@@ -3316,6 +3320,9 @@ mod tests {
         )));
         assert!(is_lab_export_model(Path::new(
             "LlamaNest-llama-3.2-1b-run-Q4_K_M.gguf"
+        )));
+        assert!(is_lab_export_model(Path::new(
+            ".LlamaNest-Qwen2.5-0.5B-run-Q8_0.gguf.part"
         )));
         assert!(!is_lab_export_model(Path::new("other-qwen.gguf")));
         let question = "ciao\nUser: second line\nAssistant: quoted text";
