@@ -2349,7 +2349,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         quantization: None,
     };
     let installed = app_state.models();
-    let starter = "Llama-3.2-3B-Instruct-IQ3_M.gguf";
+    let starter = "qwen2.5-0.5b-instruct-q4_k_m.gguf";
     let preferred = recommended_id(&app_state.hardware, &app_state.catalog)
         .and_then(|id| app_state.catalog.iter().find(|model| model.id == id))
         .map(|model| model.file.clone());
@@ -3486,13 +3486,7 @@ mod tests {
                 .iter()
                 .map(|model| model.id.as_str())
                 .collect::<Vec<_>>(),
-            vec![
-                "llama-3.2-3b-iq3m",
-                "qwen-0.5b",
-                "qwen-3b",
-                "qwen-7b",
-                "gemma-9b"
-            ]
+            vec!["qwen-0.5b"]
         );
         for model in catalog {
             assert!(model.url.starts_with("https://huggingface.co/"));
@@ -3522,14 +3516,11 @@ mod tests {
             logical_cores: 8,
             ram_gb: Some(8.0),
         };
-        assert_eq!(
-            recommended_id(&hardware, &catalog),
-            Some("llama-3.2-3b-iq3m")
-        );
+        assert_eq!(recommended_id(&hardware, &catalog), Some("qwen-0.5b"));
         hardware.ram_gb = Some(16.0);
-        assert_eq!(recommended_id(&hardware, &catalog), Some("qwen-7b"));
+        assert_eq!(recommended_id(&hardware, &catalog), Some("qwen-0.5b"));
         hardware.ram_gb = Some(24.0);
-        assert_eq!(recommended_id(&hardware, &catalog), Some("gemma-9b"));
+        assert_eq!(recommended_id(&hardware, &catalog), Some("qwen-0.5b"));
         hardware.ram_gb = None;
         assert_eq!(recommended_id(&hardware, &catalog), None);
         hardware.ram_gb = Some(24.0);
@@ -3557,9 +3548,9 @@ mod tests {
             quantization: None,
         };
         let state = app.state();
-        assert_eq!(state["catalog"].as_array().unwrap().len(), 5);
+        assert_eq!(state["catalog"].as_array().unwrap().len(), 1);
         assert_eq!(state["hardware"]["ram_gb"], 16.0);
-        assert_eq!(state["catalog"][3]["recommended"], true);
+        assert_eq!(state["catalog"][0]["recommended"], true);
         let progress = app.command("download-status", json!({})).unwrap();
         assert_eq!(progress["active"], false);
         assert!(progress.get("chats").is_none());

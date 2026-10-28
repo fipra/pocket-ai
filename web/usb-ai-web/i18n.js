@@ -47,11 +47,11 @@ const auxiliaryStrings = {
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], auxiliaryStrings[language]);
 const starterStrings = {
-  en: { starterHint:'Write your first message, then choose a saved GGUF or download the suggested model.', starterDownloading:'Downloading the starter model…' },
-  it: { starterHint:'Scrivi il primo messaggio, poi scegli un GGUF già salvato o scarica il modello consigliato.', starterDownloading:'Scaricamento del modello iniziale…' },
-  fr: { starterHint:'Écrivez votre premier message, puis choisissez un GGUF enregistré ou téléchargez le modèle conseillé.', starterDownloading:'Téléchargement du modèle initial…' },
-  de: { starterHint:'Schreibe deine erste Nachricht und wähle dann eine gespeicherte GGUF-Datei oder lade das empfohlene Modell herunter.', starterDownloading:'Startmodell wird heruntergeladen…' },
-  es: { starterHint:'Escribe tu primer mensaje y luego elige un GGUF guardado o descarga el modelo recomendado.', starterDownloading:'Descargando el modelo inicial…' }
+  en: { starterHint:'Write your first message. Qwen 0.5B will download and start automatically.', starterDownloading:'Downloading the starter model…' },
+  it: { starterHint:'Scrivi il primo messaggio. Qwen 0.5B verrà scaricato e avviato automaticamente.', starterDownloading:'Scaricamento del modello iniziale…' },
+  fr: { starterHint:'Écrivez votre premier message. Qwen 0.5B sera téléchargé et lancé automatiquement.', starterDownloading:'Téléchargement du modèle initial…' },
+  de: { starterHint:'Schreibe deine erste Nachricht. Qwen 0.5B wird automatisch heruntergeladen und gestartet.', starterDownloading:'Startmodell wird heruntergeladen…' },
+  es: { starterHint:'Escribe tu primer mensaje. Qwen 0.5B se descargará e iniciará automáticamente.', starterDownloading:'Descargando el modelo inicial…' }
 };
 for (const language of Object.keys(translations)) Object.assign(translations[language], starterStrings[language]);
 const firstModelStrings = {

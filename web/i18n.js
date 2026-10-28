@@ -29,11 +29,11 @@ const simpleHubStrings = {
 };
 for (const language of Object.keys(window.USB_AI_I18N)) Object.assign(window.USB_AI_I18N[language], simpleHubStrings[language]);
 const starterStrings = {
-  en: { starterHint:'Write your first message, then choose a GGUF already on this computer or download a suggested model.', starterDownloading:'Downloading the starter model…', starterPreparing:'Preparing the model…', modelLlama:'Starter model for private chat and documents.' },
-  it: { starterHint:'Scrivi il primo messaggio, poi scegli un GGUF già sul computer o scarica un modello consigliato.', starterDownloading:'Scaricamento del modello iniziale…', starterPreparing:'Preparazione del modello…', modelLlama:'Modello iniziale per chat e documenti privati.' },
-  de: { starterHint:'Schreibe deine erste Nachricht und wähle dann eine vorhandene GGUF-Datei oder lade ein empfohlenes Modell herunter.', starterDownloading:'Startmodell wird heruntergeladen…', starterPreparing:'Modell wird vorbereitet…', modelLlama:'Startmodell für private Chats und Dokumente.' },
-  fr: { starterHint:'Écrivez votre premier message, puis choisissez un GGUF déjà présent ou téléchargez un modèle conseillé.', starterDownloading:'Téléchargement du modèle initial…', starterPreparing:'Préparation du modèle…', modelLlama:'Modèle initial pour les discussions et documents privés.' },
-  es: { starterHint:'Escribe el primer mensaje y luego elige un GGUF ya guardado o descarga un modelo recomendado.', starterDownloading:'Descargando el modelo inicial…', starterPreparing:'Preparando el modelo…', modelLlama:'Modelo inicial para chat y documentos privados.' }
+  en: { starterHint:'Write your first message. Qwen 0.5B will download and start automatically.', starterDownloading:'Downloading the starter model…', starterPreparing:'Preparing the model…', modelLlama:'Starter model for private chat and documents.' },
+  it: { starterHint:'Scrivi il primo messaggio. Qwen 0.5B verrà scaricato e avviato automaticamente.', starterDownloading:'Scaricamento del modello iniziale…', starterPreparing:'Preparazione del modello…', modelLlama:'Modello iniziale per chat e documenti privati.' },
+  de: { starterHint:'Schreibe deine erste Nachricht. Qwen 0.5B wird automatisch heruntergeladen und gestartet.', starterDownloading:'Startmodell wird heruntergeladen…', starterPreparing:'Modell wird vorbereitet…', modelLlama:'Startmodell für private Chats und Dokumente.' },
+  fr: { starterHint:'Écrivez votre premier message. Qwen 0.5B sera téléchargé et lancé automatiquement.', starterDownloading:'Téléchargement du modèle initial…', starterPreparing:'Préparation du modèle…', modelLlama:'Modèle initial pour les discussions et documents privés.' },
+  es: { starterHint:'Escribe tu primer mensaje. Qwen 0.5B se descargará e iniciará automáticamente.', starterDownloading:'Descargando el modelo inicial…', starterPreparing:'Preparando el modelo…', modelLlama:'Modelo inicial para chat y documentos privados.' }
 };
 for (const language of Object.keys(window.USB_AI_I18N)) Object.assign(window.USB_AI_I18N[language], starterStrings[language]);
 const firstModelStrings = {

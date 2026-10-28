@@ -18,9 +18,10 @@ test('curated downloads have pinned integrity data', () => {
     assert.ok(model.size > 0);
   }
 });
-test('the first prompt uses a complete pinned Llama starter model', () => {
-  const starter = CATALOG.find(model => model.id === 'llama-3.2-3b-iq3m');
-  assert.equal(starter.size, 1599668768);
-  assert.equal(starter.sha256, 'deac83b571f3982a12377181fdfd7780bf4ce8cbfbdcac179e4bf2ad47b1b228');
-  assert.match(starter.url, /Llama-3\.2-3B-Instruct-IQ3_M\.gguf$/);
+test('the only built-in test model is the pinned Qwen 0.5B GGUF', () => {
+  assert.deepEqual(CATALOG.map(model => model.id), ['qwen-0.5b']);
+  const starter = CATALOG[0];
+  assert.equal(starter.size, 491400032);
+  assert.equal(starter.sha256, '74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db');
+  assert.match(starter.url, /qwen2\.5-0\.5b-instruct-q4_k_m\.gguf$/);
 });

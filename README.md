@@ -72,17 +72,9 @@ On first launch, the launcher verifies the bundled executables and libraries' lo
 
 ## Models and hardware guidance
 
-Open the model picker to see detected total RAM, logical CPU cores, and architecture. On an empty installation, the first prompt lets you import an existing GGUF or download a suggested model. Computers with less than 4 GB RAM are offered Qwen 0.5B instead of Llama 3.2 3B. The app shows download progress and verifies the SHA-256 hash and GGUF format before use. Internet is needed for a download; afterward chat and document search run locally. You can also place a compatible instruct `.gguf` file in `models/` and press **Refresh local models**.
+Open the model picker to see detected total RAM, logical CPU cores, and architecture. On a fresh installation, the first prompt automatically downloads, verifies, and starts Qwen 2.5 0.5B. It then sends that same prompt. The app verifies the pinned SHA-256 hash, exact size, and GGUF format before use. Internet is needed for the first download; afterward chat and document search run locally. You can also place a compatible instruct `.gguf` file in `models/`, import one, or find another model through search.
 
-| Model | Approximate download | Suggested minimum RAM | More comfortable RAM | License |
-|---|---:|---:|---:|---|
-| Llama 3.2 3B Instruct IQ3_M | 1.60 GB | 4 GB | 6 GB | Llama 3.2 |
-| Qwen 2.5 0.5B | 0.49 GB | 4 GB | 6 GB | Apache 2.0 |
-| Qwen 2.5 3B | 2.1 GB | 8 GB | 10 GB | Qwen Research |
-| Qwen 2.5 7B | 4.68 GB | 12 GB | 16 GB | Apache 2.0 |
-| Gemma 2 9B | 5.76 GB | 16 GB | 24 GB | Gemma |
-
-These are conservative estimates based on **total RAM**, not a measurement of free memory. Actual speed also depends on available memory, GPU, context length, and other open programs. Download sources, hashes, and licenses are recorded in [models/catalog.json](models/catalog.json). Model weights are not tracked in this repository. Check each model's license before redistributing it.
+Qwen 2.5 0.5B is the only built-in test download (491 MB, Apache 2.0). RAM guidance is an estimate based on total RAM; actual speed also depends on GPU, context length, and other open programs. The download source, hash, and license are recorded in [models/catalog.json](models/catalog.json). Model weights are not tracked in this repository. Check each model's license before redistributing it.
 
 ## Run from source
 

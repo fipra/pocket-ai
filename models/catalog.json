@@ -1,21 +1,5 @@
 [
   {
-    "id": "llama-3.2-3b-iq3m",
-    "name": "Llama 3.2 · 3B Instruct",
-    "family": "Llama 3.2 Instruct",
-    "parameters": "3B",
-    "file": "Llama-3.2-3B-Instruct-IQ3_M.gguf",
-    "url": "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-IQ3_M.gguf",
-    "source_url": "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/blob/main/Llama-3.2-3B-Instruct-IQ3_M.gguf",
-    "size_bytes": 1599668768,
-    "download_gb": 1.60,
-    "sha256": "deac83b571f3982a12377181fdfd7780bf4ce8cbfbdcac179e4bf2ad47b1b228",
-    "minimum_ram_gb": 4,
-    "comfortable_ram_gb": 6,
-    "license": "Llama 3.2",
-    "summary": "Default starter model for chat and documents."
-  },
-  {
     "id": "qwen-0.5b",
     "name": "Qwen 2.5 · 0.5B",
     "family": "Qwen2.5 Instruct",
@@ -30,53 +14,5 @@
     "comfortable_ram_gb": 6,
     "license": "Apache 2.0",
     "summary": "Fast and light for simple questions. Limited accuracy."
-  },
-  {
-    "id": "qwen-3b",
-    "name": "Qwen 2.5 · 3B",
-    "family": "Qwen2.5 Instruct",
-    "parameters": "3B",
-    "file": "qwen2.5-3b-instruct-q4_k_m.gguf",
-    "url": "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
-    "source_url": "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/blob/main/qwen2.5-3b-instruct-q4_k_m.gguf",
-    "size_bytes": null,
-    "download_gb": 2.1,
-    "sha256": "626b4a6678b86442240e33df819e00132d3ba7dddfe1cdc4fbb18e0a9615c62d",
-    "minimum_ram_gb": 8,
-    "comfortable_ram_gb": 10,
-    "license": "Qwen Research",
-    "summary": "A good balance for chat, summaries and everyday documents."
-  },
-  {
-    "id": "qwen-7b",
-    "name": "Qwen 2.5 · 7B",
-    "family": "Qwen2.5 Instruct",
-    "parameters": "7B",
-    "file": "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
-    "url": "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/1a4d5f3809aa41370e9831c8a157851fce424123/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
-    "source_url": "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/blob/1a4d5f3809aa41370e9831c8a157851fce424123/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
-    "size_bytes": null,
-    "download_gb": 4.68,
-    "sha256": "da5c9930891bea8fef464ab3827008e1c461000d9911be8da474e0c6772f4689",
-    "minimum_ram_gb": 12,
-    "comfortable_ram_gb": 16,
-    "license": "Apache 2.0",
-    "summary": "For more complex instructions and detailed answers."
-  },
-  {
-    "id": "gemma-9b",
-    "name": "Gemma 2 · 9B",
-    "family": "Gemma 2 Instruct",
-    "parameters": "9B",
-    "file": "gemma-2-9b-it-Q4_K_M.gguf",
-    "url": "https://huggingface.co/second-state/gemma-2-9b-it-GGUF/resolve/main/gemma-2-9b-it-Q4_K_M.gguf",
-    "source_url": "https://huggingface.co/second-state/gemma-2-9b-it-GGUF/blob/main/gemma-2-9b-it-Q4_K_M.gguf",
-    "size_bytes": null,
-    "download_gb": 5.76,
-    "sha256": "4153164c9b1950a3132c6149057188f13454870905653f3d810af8495245fc45",
-    "minimum_ram_gb": 16,
-    "comfortable_ram_gb": 24,
-    "license": "Gemma",
-    "summary": "For demanding tasks. Uses more RAM and takes longer."
   }
 ]

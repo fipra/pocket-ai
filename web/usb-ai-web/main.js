@@ -30,8 +30,8 @@ const isRemote = id => String(id || '').startsWith('remote:');
 let hubResults = [], hubNext = null, hubSearching = false;
 let pendingFirstPrompt = false;
 let splitSourceFile, splitController;
-const STARTER_ID = 'llama-3.2-3b-iq3m';
-const STARTER_FILE = 'Llama-3.2-3B-Instruct-IQ3_M.gguf';
+const STARTER_ID = 'qwen-0.5b';
+const STARTER_FILE = 'qwen2.5-0.5b-instruct-q4_k_m.gguf';
 const isStarterModel = model => model?.id === STARTER_ID || [model?.filename, model?.name, model?.url].some(value => typeof value === 'string' && value.endsWith(STARTER_FILE));
 const tr = key => translations[language]?.[key] || translations.en[key] || key;
 function renderBrowserModelWarning() {
@@ -209,15 +209,12 @@ async function send() {
     return;
   }
   if (!selectedId) {
-    const starter = usesSafariCpu() ? models.find(model => model.id === 'qwen-0.5b') : models.find(isStarterModel);
+    const starter = models.find(isStarterModel);
     if (starter) {
       await chooseModel(starter.id);
     } else {
       pendingFirstPrompt = true;
-      render();
-      renderModels(); renderSearch();
-      $('models-dialog').showModal();
-      setStatus(tr('firstModelTitle'));
+      await downloadStarterForFirstPrompt();
       return;
     }
   }
@@ -317,8 +314,8 @@ $('choose-folder').onclick = () => run(async () => {
   if (selected) await chooseModel(selected.id);
   else { const message = tr('folderModelsFound').replace('{count}', ids.length); setStatus(message); $('model-progress').textContent = message; }
 });
-$('download-starter-model').onclick = () => run(async () => {
-  const id = usesSafariCpu() || navigator.deviceMemory && navigator.deviceMemory < 4 ? 'qwen-0.5b' : STARTER_ID;
+async function downloadStarterForFirstPrompt() {
+  const id = STARTER_ID;
   setBusy(true); setStatus(tr('starterDownloading'), false, true);
   $('model-progress').classList.add('loading');
   await downloadCurated(id, ({loaded,total}) => {
@@ -328,7 +325,8 @@ $('download-starter-model').onclick = () => run(async () => {
   });
   models = await allModels();
   await chooseModel(id);
-});
+}
+$('download-starter-model').onclick = () => run(downloadStarterForFirstPrompt);
 $('hub-search-form').onsubmit = event => { event.preventDefault(); searchHub(); };
 $('hub-more').onclick = () => searchHub(hubNext);
 async function uploadFiles(event) {
