@@ -836,6 +836,14 @@ fn is_lab_export_model(model: &Path) -> bool {
         .is_some_and(|name| name.starts_with("LlamaNest-") && name.ends_with(".gguf"))
 }
 
+fn uses_chat_template(model: &Path) -> bool {
+    is_lab_export_model(model)
+        || model
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.to_ascii_lowercase().contains("qwen2.5"))
+}
+
 fn lab_chat_messages(prompt: &str, question: &str) -> Result<Value, String> {
     let suffix = format!("User: {question}\nAssistant:");
     let context = prompt
@@ -1884,9 +1892,13 @@ impl App {
         if generation.cancelled.load(Ordering::SeqCst) {
             return Ok((String::new(), None));
         }
-        let body = if let Some(question) = question.filter(|_| is_lab_export_model(model)) {
+        let body = if let Some(question) = question.filter(|_| uses_chat_template(model)) {
             let formatted = apply_model_chat_template(port, prompt, question)?;
-            lab_completion_request(formatted)
+            if is_lab_export_model(model) {
+                lab_completion_request(formatted)
+            } else {
+                completion_request(&formatted, model, self.db.thinking)
+            }
         } else {
             completion_request(prompt, model, self.db.thinking)
         }
@@ -3241,6 +3253,20 @@ mod tests {
         assert_eq!(request["temperature"], 0.0);
         assert_eq!(request["n_predict"], 512);
         assert!(request.get("stop").is_none());
+    }
+    #[test]
+    fn built_in_qwen_chat_uses_its_gguf_template() {
+        assert!(uses_chat_template(Path::new(
+            "qwen2.5-0.5b-instruct-q4_k_m.gguf"
+        )));
+        assert!(uses_chat_template(Path::new("Qwen2.5-3B-Instruct.gguf")));
+        assert!(!uses_chat_template(Path::new("other-model.gguf")));
+        let question = "ciao";
+        let prompt = lab_verification_chat_prompt("it", false, question);
+        assert_eq!(
+            lab_chat_messages(&prompt, question).unwrap()[1]["content"],
+            question
+        );
     }
     #[test]
     fn language_defaults_to_english_and_persists_selection() {
