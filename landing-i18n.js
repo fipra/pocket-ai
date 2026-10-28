@@ -1,6 +1,10 @@
 (() => {
   // The Italian HTML is the readable fallback when JavaScript is unavailable.
   const rows = [
+    ["Un altro progetto FipraAI", "Another FipraAI project", "Un autre projet FipraAI", "Ein weiteres FipraAI-Projekt", "Otro proyecto de FipraAI"],
+    ["Cerchi più modelli AI?", "Looking for more AI models?", "Vous cherchez plus de modèles d’IA ?", "Du suchst mehr KI-Modelle?", "¿Buscas más modelos de IA?"],
+    ["Nessun account OpenChat: basta una chiave API OpenRouter per scegliere tra centinaia di modelli, anche gratuiti al 100%. Le richieste vengono elaborate online; gli eventuali costi dipendono dal modello scelto.", "No OpenChat account needed: just use an OpenRouter API key to choose from hundreds of models, including models that are 100% free. Requests are processed online; any costs depend on the model selected.", "Aucun compte OpenChat nécessaire : une clé API OpenRouter suffit pour choisir parmi des centaines de modèles, dont certains sont 100 % gratuits. Les requêtes sont traitées en ligne ; les frais éventuels dépendent du modèle choisi.", "Kein OpenChat-Konto nötig: Mit einem OpenRouter-API-Schlüssel kannst du aus Hunderten Modellen wählen, darunter auch 100 % kostenlose. Anfragen werden online verarbeitet; mögliche Kosten hängen vom Modell ab.", "No necesitas una cuenta de OpenChat: basta una clave API de OpenRouter para elegir entre cientos de modelos, incluidos algunos 100 % gratuitos. Las solicitudes se procesan en línea; los posibles costes dependen del modelo elegido."],
+    ["Scopri OpenChat", "Discover OpenChat", "Découvrir OpenChat", "OpenChat entdecken", "Descubre OpenChat"],
     ["Perché LlamaNest", "Why LlamaNest", "Pourquoi LlamaNest", "Warum LlamaNest", "Por qué LlamaNest"],
     ["Scegli come usarla", "Choose how to use it", "Choisissez comment l’utiliser", "Wähle, wie du es nutzt", "Elige cómo usarla"],
     ["Due modi, la tua privacy.", "Two ways, your privacy.", "Deux façons, votre vie privée.", "Zwei Wege, deine Privatsphäre.", "Dos formas, tu privacidad."],
