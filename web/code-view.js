@@ -6,6 +6,13 @@
     fr: { copy: 'Copier', copied: 'Copié', preview: 'Aperçu de l’app', close: 'Fermer', save: 'Enregistrer le ZIP', missing: 'Fichier généré manquant : ' },
     es: { copy: 'Copiar', copied: 'Copiado', preview: 'Vista previa', close: 'Cerrar', save: 'Guardar app ZIP', missing: 'Falta el archivo generado: ' }
   };
+  const incompleteLabels = {
+    en: 'The HTML may be incomplete. Finish the response before saving.',
+    it: 'Il codice HTML potrebbe essere incompleto. Completa la risposta prima di salvare.',
+    de: 'Der HTML-Code ist möglicherweise unvollständig. Vervollständige die Antwort vor dem Speichern.',
+    fr: 'Le code HTML est peut-être incomplet. Terminez la réponse avant de l’enregistrer.',
+    es: 'El código HTML puede estar incompleto. Completa la respuesta antes de guardarlo.'
+  };
   const element = (tag, text, className) => {
     const item = document.createElement(tag);
     if (text !== undefined) item.textContent = text;
@@ -165,8 +172,11 @@
     return path && !path.startsWith('/') && !path.split('/').includes('..') &&
       /^[\w./-]+$/.test(path) && !path.includes('//') ? path : null;
   };
+  const completeHtmlDocument = text => /^\s*(?:<!doctype\s+html\b|<html\b)/i.test(text) && /<\/html\s*>\s*$/i.test(text);
+  const isHtmlFile = part => part.type === 'code' &&
+    (/^(html|htm|[\w.-]+\.html?)$/.test(part.language) || (!part.language && completeHtmlDocument(part.text)));
   function appFiles(parts) {
-    const html = parts.find(part => part.type === 'code' && !part.incomplete && /^(html|htm)$/.test(part.language));
+    const html = parts.find(isHtmlFile);
     if (!html) return null;
     const css = parts.find(part => part.type === 'code' && !part.incomplete && part.language === 'css');
     const js = parts.find(part => part.type === 'code' && !part.incomplete && /^(js|javascript)$/.test(part.language));
@@ -193,7 +203,7 @@
     const files = [{ name: 'index.html', text: page }];
     if (css) files.push({ name: cssName, text: css.text });
     if (js) files.push({ name: jsName, text: js.text });
-    return { files, missing };
+    return { files, missing, incomplete: !!html.incomplete && !completeHtmlDocument(html.text) };
   }
   function previewDocument(parts, html) {
     const app = appFiles(parts) || { files: [{ name: 'index.html', text: html }], missing: [] };
@@ -248,7 +258,7 @@
     for (const chunk of chunks) { result.set(chunk, position); position += chunk.length; }
     return result;
   }
-  function showPreview(parts, translations, missing) {
+  function showPreview(parts, translations, missing, incomplete, language) {
     const dialog = element('dialog', undefined, 'app-preview-dialog');
     const head = element('div', undefined, 'app-preview-head');
     const close = element('button', translations.close);
@@ -256,6 +266,7 @@
     head.append(element('strong', translations.preview), close);
     dialog.append(head);
     if (missing.length) dialog.append(element('p', translations.missing + missing.join(', '), 'app-preview-warning'));
+    if (incomplete) dialog.append(element('p', incompleteLabels[language] || incompleteLabels.en, 'app-preview-warning'));
     const frame = element('iframe', undefined, 'app-preview-frame');
     frame.title = translations.preview;
     frame.setAttribute('sandbox', 'allow-scripts');
@@ -290,12 +301,12 @@
       copy.type = 'button';
       copy.onclick = async () => { await navigator.clipboard.writeText(part.text); copy.textContent = translations.copied; };
       bar.append(copy);
-      if (app && part === parts.find(item => item.type === 'code' && /^(html|htm)$/.test(item.language))) {
+      if (app && part === parts.find(isHtmlFile)) {
         const preview = element('button', translations.preview);
-        preview.type = 'button'; preview.onclick = () => showPreview(parts, translations, app.missing);
+        preview.type = 'button'; preview.onclick = () => showPreview(parts, translations, app.missing, app.incomplete, language);
         const save = element('button', translations.save);
-        save.type = 'button'; save.disabled = app.missing.length > 0;
-        save.title = app.missing.length ? translations.missing + app.missing.join(', ') : translations.save;
+        save.type = 'button'; save.disabled = app.missing.length > 0 || app.incomplete;
+        save.title = app.incomplete ? (incompleteLabels[language] || incompleteLabels.en) : app.missing.length ? translations.missing + app.missing.join(', ') : translations.save;
         save.onclick = () => {
           const url = URL.createObjectURL(new Blob([zipFiles(app.files)], { type: 'application/zip' }));
           const link = element('a'); link.href = url; link.download = 'usb-ai-app.zip'; link.click();

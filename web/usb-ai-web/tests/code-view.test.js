@@ -116,3 +116,32 @@ test('missing generated JavaScript prevents exporting a broken app', () => {
   const app = appFiles([{ type: 'code', language: 'html', text: '<html><script src="calcolatrice.js"></script></html>' }]);
   assert.deepEqual(app.missing, ['calcolatrice.js']);
 });
+
+test('complete HTML documents are recognized with filename or no language label', () => {
+  const { blocks, appFiles, render } = window.USB_AI_CODE_VIEW;
+  const documentText = '<!doctype html><html><body>Hello</body></html>';
+  const originalDocument = globalThis.document;
+  const makeElement = tag => ({ tagName: tag.toUpperCase(), children: [], classList: { toggle() {} },
+    append(...items) { this.children.push(...items); }, replaceChildren(...items) { this.children = items; } });
+  globalThis.document = { createElement: makeElement, createTextNode: data => ({ nodeType: 3, data }) };
+  try {
+    for (const label of ['html', 'index.html', '']) {
+      const answer = '```' + label + '\n' + documentText + '\n```';
+      assert.equal(appFiles(blocks(answer)).files[0].text, documentText);
+      const container = makeElement('div');
+      render(container, answer, 'it');
+      const bar = container.children[0].children[0];
+      assert.deepEqual(bar.children.slice(1).map(button => button.textContent), ['Copia', 'Anteprima app', 'Salva app ZIP']);
+    }
+    assert.equal(appFiles(blocks('```\n<div>fragment</div>\n```')), null);
+    assert.equal(appFiles(blocks('```html\n' + documentText)).files[0].text, documentText);
+    const partial = '```html\n<!doctype html><html><body>';
+    assert.equal(appFiles(blocks(partial)).incomplete, true);
+    const container = makeElement('div');
+    render(container, partial, 'it');
+    const buttons = container.children[0].children[0].children;
+    assert.equal(buttons[2].disabled, undefined);
+    assert.equal(buttons[3].disabled, true);
+    assert.match(buttons[3].title, /incompleto/);
+  } finally { globalThis.document = originalDocument; }
+});
