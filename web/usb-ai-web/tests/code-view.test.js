@@ -166,3 +166,26 @@ test('edit control opens a translated editor and resends the edited text', () =>
     assert.equal(button.hidden, false);
   } finally { globalThis.document = originalDocument; }
 });
+
+test('unfenced HTML renders as code with preview and ZIP controls', () => {
+  const { blocks, appFiles, render } = window.USB_AI_CODE_VIEW;
+  const originalDocument = globalThis.document;
+  const makeElement = tag => ({ tagName: tag.toUpperCase(), children: [], classList: { toggle() {} },
+    append(...items) { this.children.push(...items); }, replaceChildren(...items) { this.children = items; } });
+  globalThis.document = { createElement: makeElement, createTextNode: data => ({ nodeType: 3, data }) };
+  try {
+    const html = '<!DOCTYPE html>\n<html><body>Hello</body></html>';
+    const answer = 'Ecco la pagina:\n' + html + '\nFine.';
+    const parts = blocks(answer);
+    assert.deepEqual(parts.map(p => p.type), ['text', 'code', 'text']);
+    assert.equal(appFiles(parts).files[0].text, html);
+    const container = makeElement('div');
+    render(container, answer, 'it');
+    const bar = container.children[1].children[0];
+    assert.deepEqual(bar.children.slice(1).map(button => button.textContent), ['Copia', 'Anteprima app', 'Salva app ZIP']);
+    assert.equal(bar.children[3].disabled, false);
+    const partial = blocks('<html><body>In corso');
+    assert.equal(appFiles(partial).incomplete, true);
+    assert.equal(blocks('Spiega il tag <html> nella pagina.')[0].type, 'text');
+  } finally { globalThis.document = originalDocument; }
+});

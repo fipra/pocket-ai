@@ -65,7 +65,20 @@
       cursor = end.index + end[0].length;
     }
     if (cursor < text.length) parts.push({ type: 'text', text: text.slice(cursor) });
-    return parts;
+    return parts.flatMap(part => {
+      if (part.type !== 'text') return [part];
+      const start = /(^|\n)[ \t]*(?=<!doctype\s+html\b|<html(?:\s|>))/i.exec(part.text);
+      if (!start) return [part];
+      const index = start.index + start[1].length;
+      const html = part.text.slice(index).trimStart();
+      const close = /<\/html\s*>/i.exec(html);
+      const end = close ? close.index + close[0].length : html.length;
+      const result = [];
+      if (index) result.push({ type: 'text', text: part.text.slice(0, index) });
+      result.push({ type: 'code', language: 'html', text: html.slice(0, end), incomplete: !close });
+      if (end < html.length) result.push({ type: 'text', text: html.slice(end) });
+      return result;
+    });
   }
   const inlinePattern = /(`+)([^`\n]+?)\1|\[([^\]\n]+)\]\(([^\s)]+)\)|\*\*([^*\n]+)\*\*|__([^_\n]+)__|~~([^~\n]+)~~|\*([^*\n]+)\*|_([^_\n]+)_|(https?:\/\/[^\s<>]+)/g;
   const wordCharacter = character => /[\p{L}\p{N}]/u.test(character || '');
@@ -302,7 +315,8 @@
     dialog.showModal();
   }
   function render(container, text, language = 'en') {
-    const rich = /\n\s*\n|(^|\n) {0,3}(?:#{1,6}\s|>|[-*+]\s|\d{1,3}[.)]\s|[-*_]{3,}\s*$)|[`*_~\[\]|]|https?:\/\//m.test(text || '');
+    const parts = blocks(text || '');
+    const rich = parts.some(part => part.type === 'code') || /\n\s*\n|(^|\n) {0,3}(?:#{1,6}\s|>|[-*+]\s|\d{1,3}[.)]\s|[-*_]{3,}\s*$)|[`*_~\[\]|]|https?:\/\//m.test(text || '');
     container.classList?.toggle('markdown', rich);
     if (!rich) {
       const plain = text || '';
@@ -314,7 +328,6 @@
       return;
     }
     const translations = labels[language] || labels.en;
-    const parts = blocks(text || '');
     const app = appFiles(parts);
     container.replaceChildren();
     for (const part of parts) {
