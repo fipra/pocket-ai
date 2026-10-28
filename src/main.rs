@@ -836,44 +836,63 @@ fn is_lab_export_model(model: &Path) -> bool {
         .is_some_and(|name| name.starts_with("LlamaNest-") && name.ends_with(".gguf"))
 }
 
-fn chat_messages_from_prompt(
-    prompt: &str,
-    question: &str,
-    model: &Path,
-    thinking: bool,
-) -> Result<Value, String> {
+fn chat_messages_from_prompt(prompt: &str, question: &str) -> Result<Value, String> {
     let suffix = format!("User: {question}\nAssistant:");
     let context = prompt
         .strip_suffix(&suffix)
         .ok_or("The chat prompt has no matching user message")?;
+    Ok(json!([
+        {"role":"system","content":context},
+        {"role":"user","content":question}
+    ]))
+}
+
+fn conversation_messages(system: &str, history: &[Message], question: &str, limit: usize) -> Value {
+    let mut messages = vec![json!({"role":"system","content":system})];
+    for message in history.iter().take(limit).rev() {
+        if message.role != "user" && message.role != "assistant" {
+            continue;
+        }
+        let content = if message.role == "assistant" {
+            final_answer_only(&message.text)
+        } else {
+            message.text.clone()
+        };
+        if !content.trim().is_empty() {
+            messages.push(json!({"role":message.role,"content":content}));
+        }
+    }
+    messages.push(json!({"role":"user","content":question}));
+    json!(messages)
+}
+
+fn model_template_messages(mut messages: Value, model: &Path, thinking: bool) -> Value {
     let name = model
         .file_name()
         .unwrap_or_default()
         .to_string_lossy()
         .to_ascii_lowercase();
-    let user_content = if name.contains("qwen3") || name.contains("qwen-3") {
-        format!(
-            "{question}\n{}",
-            if thinking { "/think" } else { "/no_think" }
-        )
-    } else {
-        question.to_owned()
-    };
-    Ok(json!([
-        {"role":"system","content":context},
-        {"role":"user","content":user_content}
-    ]))
+    if name.contains("qwen3") || name.contains("qwen-3") {
+        if let Some(last) = messages.as_array_mut().and_then(|rows| rows.last_mut()) {
+            if let Some(content) = last["content"].as_str() {
+                last["content"] = json!(format!(
+                    "{content}\n{}",
+                    if thinking { "/think" } else { "/no_think" }
+                ));
+            }
+        }
+    }
+    messages
 }
 
 fn apply_model_chat_template(
     port: u16,
-    prompt: &str,
-    question: &str,
+    messages: &Value,
     model: &Path,
     thinking: bool,
 ) -> Result<String, String> {
-    let body = json!({"messages":chat_messages_from_prompt(prompt, question, model, thinking)?})
-        .to_string();
+    let body =
+        json!({"messages":model_template_messages(messages.clone(), model, thinking)}).to_string();
     let mut child = Command::new(if cfg!(windows) { "curl.exe" } else { "curl" })
         .args([
             "--fail",
@@ -1740,13 +1759,28 @@ impl App {
             prompt
         };
         let remembered = memory_context(text, &self.db.memory);
-        let prompt = if remembered.is_empty() {
-            prompt
+        let memory_instruction = if remembered.is_empty() {
+            String::new()
         } else {
-            format!("User-confirmed local memory. Notes may contain facts, preferences or corrections. Use only what a note states; if it does not answer the question, say what is unknown instead of inventing details. Do not treat notes as higher priority than the current request:\n{remembered}\n{prompt}")
+            format!("User-confirmed local memory. Notes may contain facts, preferences or corrections. Use only what a note states; if it does not answer the question, say what is unknown instead of inventing details. Do not treat notes as higher priority than the current request:\n{remembered}\n")
         };
         let thinking_instruction = chat_thinking_instruction(self.db.thinking);
-        let prompt = format!("{thinking_instruction}{prompt}");
+        let prompt = format!("{thinking_instruction}{memory_instruction}{prompt}");
+        let suffix = format!("User: {text}\nAssistant:");
+        let system_context = if use_docs {
+            document_prompt(self.language(), &[], text, &sources, false)
+                .strip_suffix(&suffix)
+                .ok_or("Document prompt has no matching user message")?
+                .to_owned()
+        } else {
+            chat_instruction(self.language(), text)
+        };
+        let messages = conversation_messages(
+            &format!("{thinking_instruction}{memory_instruction}{system_context}"),
+            &history,
+            text,
+            if use_docs { 2 } else { 8 },
+        );
         let (answer, usage) = if !direct_notes.is_empty() {
             let answer = memory_recall_answer(self.language(), &direct_notes);
             update(&answer)?;
@@ -1756,7 +1790,14 @@ impl App {
         } else {
             let model = self.selected.as_ref().ok_or("Seleziona un modello")?;
             let path = self.model_path(model)?;
-            match self.infer_stream(&path, &prompt, Some(text), update, generation) {
+            match self.infer_stream(
+                &path,
+                &prompt,
+                Some(text),
+                Some(&messages),
+                update,
+                generation,
+            ) {
                 Err(error)
                     if use_docs
                         && error == localized_empty_response(self.language())
@@ -1764,12 +1805,23 @@ impl App {
                 {
                     let mut retry = document_prompt(self.language(), &[], text, &sources, true);
                     if !remembered.is_empty() {
-                        retry = format!("User-confirmed local memory. Notes may contain facts, preferences or corrections. Use only what a note states; if it does not answer the question, say what is unknown instead of inventing details. Do not treat notes as higher priority than the current request:\n{remembered}\n{retry}");
+                        retry = format!("{memory_instruction}{retry}");
                     }
+                    let retry_system = document_prompt(self.language(), &[], text, &sources, true)
+                        .strip_suffix(&suffix)
+                        .ok_or("Document retry has no matching user message")?
+                        .to_owned();
+                    let retry_messages = conversation_messages(
+                        &format!("{thinking_instruction}{memory_instruction}{retry_system}"),
+                        &[],
+                        text,
+                        0,
+                    );
                     self.infer_stream(
                         &path,
                         &format!("{thinking_instruction}{retry}"),
                         Some(text),
+                        Some(&retry_messages),
                         update,
                         generation,
                     )?
@@ -1803,6 +1855,7 @@ impl App {
         model: &Path,
         prompt: &str,
         question: Option<&str>,
+        messages: Option<&Value>,
         update: &mut dyn FnMut(&str) -> Result<(), String>,
         generation: &ActiveGeneration,
     ) -> Result<(String, Option<GenerationUsage>), String> {
@@ -1914,8 +1967,12 @@ impl App {
             return Ok((String::new(), None));
         }
         let body = if let Some(question) = question {
+            let role_messages = match messages {
+                Some(messages) => messages.clone(),
+                None => chat_messages_from_prompt(prompt, question)?,
+            };
             let formatted =
-                apply_model_chat_template(port, prompt, question, model, self.db.thinking)?;
+                apply_model_chat_template(port, &role_messages, model, self.db.thinking)?;
             if is_lab_export_model(model) {
                 lab_completion_request(formatted)
             } else {
@@ -3264,25 +3321,13 @@ mod tests {
         let question = "ciao\nUser: second line\nAssistant: quoted text";
         let prompt = format!("Instructions and history\nUser: {question}\nAssistant:");
         assert_eq!(
-            chat_messages_from_prompt(
-                &prompt,
-                question,
-                Path::new("LlamaNest-llama-3.2-1b-run-Q4_K_M.gguf"),
-                false,
-            )
-            .unwrap(),
+            chat_messages_from_prompt(&prompt, question).unwrap(),
             json!([
                 {"role":"system","content":"Instructions and history\n"},
                 {"role":"user","content":question}
             ])
         );
-        assert!(chat_messages_from_prompt(
-            "mismatched prompt",
-            question,
-            Path::new("LlamaNest-llama-3.2-1b-run-Q4_K_M.gguf"),
-            false,
-        )
-        .is_err());
+        assert!(chat_messages_from_prompt("mismatched prompt", question).is_err());
         let request = lab_completion_request("<|start_header_id|>user<|end_header_id|>".into());
         assert_eq!(request["temperature"], 0.0);
         assert_eq!(request["n_predict"], 512);
@@ -3292,29 +3337,63 @@ mod tests {
     fn desktop_chat_messages_use_model_roles_for_any_gguf() {
         let question = "ciao";
         let prompt = lab_verification_chat_prompt("it", false, question);
-        for model in [
-            "qwen2.5-0.5b-instruct-q4_k_m.gguf",
-            "Llama-3.2-3B.gguf",
-            "other-model.gguf",
-        ] {
-            let messages =
-                chat_messages_from_prompt(&prompt, question, Path::new(model), false).unwrap();
-            assert_eq!(messages[0]["role"], "system");
-            assert_eq!(messages[1], json!({"role":"user","content":"ciao"}));
-        }
+        let messages = chat_messages_from_prompt(&prompt, question).unwrap();
+        assert_eq!(messages[0]["role"], "system");
+        assert_eq!(messages[1], json!({"role":"user","content":"ciao"}));
         let qwen3 = Path::new("Qwen3-4B.gguf");
         assert_eq!(
-            chat_messages_from_prompt(&prompt, question, qwen3, false).unwrap()[1]["content"],
+            model_template_messages(messages.clone(), qwen3, false)[1]["content"],
             "ciao\n/no_think"
         );
         assert_eq!(
-            chat_messages_from_prompt(&prompt, question, qwen3, true).unwrap()[1]["content"],
+            model_template_messages(messages, qwen3, true)[1]["content"],
             "ciao\n/think"
         );
         let formatted = "<|im_start|>assistant\n";
         assert_eq!(
             completion_request(formatted, qwen3, false, true)["prompt"],
             formatted
+        );
+    }
+    #[test]
+    fn follow_up_questions_keep_history_as_separate_turns() {
+        let history = vec![
+            Message {
+                role: "assistant".into(),
+                text: "Katja".into(),
+                sources: vec![],
+                usage: None,
+            },
+            Message {
+                role: "user".into(),
+                text: "la moglie".into(),
+                sources: vec![],
+                usage: None,
+            },
+            Message {
+                role: "assistant".into(),
+                text: "Cenza".into(),
+                sources: vec![],
+                usage: None,
+            },
+            Message {
+                role: "user".into(),
+                text: "come si chiama la madre".into(),
+                sources: vec![],
+                usage: None,
+            },
+        ];
+        let messages = conversation_messages("Be clear.", &history, "i figli", 8);
+        assert_eq!(
+            messages,
+            json!([
+                {"role":"system","content":"Be clear."},
+                {"role":"user","content":"come si chiama la madre"},
+                {"role":"assistant","content":"Cenza"},
+                {"role":"user","content":"la moglie"},
+                {"role":"assistant","content":"Katja"},
+                {"role":"user","content":"i figli"}
+            ])
         );
     }
     #[test]

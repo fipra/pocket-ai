@@ -1645,6 +1645,7 @@ pub fn start_verify(service: Arc<Mutex<Service>>, app: Arc<Mutex<App>>) -> Resul
                         &model,
                         &prompt,
                         Some(&example.prompt),
+                        None,
                         &mut |_| Ok(()),
                         &generation,
                     ) {
@@ -1877,7 +1878,7 @@ fn teacher_answer(
             }
             let mut app = app.lock().unwrap();
             let answer = app
-                .infer_stream(path, request, None, &mut |_| Ok(()), &generation)
+                .infer_stream(path, request, None, None, &mut |_| Ok(()), &generation)
                 .map(|(answer, _)| answer)?;
             job.lock().unwrap().generation = None;
             Ok(answer)
