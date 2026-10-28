@@ -50,26 +50,19 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: ggml-org/llama.cpp
-          ref: b11836
-          path: llama-converter
       - name: Install build tools
         run: |
           rustup update stable
           brew install llama.cpp poppler
       - name: Test and package
-        env:
-          LLAMANEST_CONVERTER_SOURCE_DIR: ${{ github.workspace }}/llama-converter
         run: |
           cargo test --locked
           python3 -m unittest discover -s scripts -p 'test_*.py'
           python3 scripts/package-mac.py
           folder="release/USB-AI-Rust-mac-${{ matrix.architecture }}"
           test -f "$folder/Avvia LlamaNest.command"
-          test -f "$folder/Installa Fine Tuning GGUF.command"
-          test -f "$folder/bin/converter/convert_hf_to_gguf.py"
+          test ! -e "$folder/Installa Fine Tuning GGUF.command"
+          test ! -e "$folder/bin/converter"
           test ! -e "$folder/Avvia USB AI Rust.command"
           test ! -e "$folder/Avvia Offllama.command"
           test -x "$folder/bin/usb-ai-rust"

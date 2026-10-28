@@ -2452,9 +2452,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .or_else(|| preferred.filter(|name| installed.contains(name)))
         .or_else(|| installed.first().cloned());
     let app = Arc::new(Mutex::new(app_state));
-    let lab_service = Arc::new(Mutex::new(lab::Service::new(
-        app.lock().unwrap().root.join("lab"),
-    )));
+    // The experimental Laboratory is disabled in public builds. Its saved data is
+    // left untouched so a developer can still opt in explicitly.
+    let lab_enabled = env::var("LLAMANEST_EXPERIMENTAL_LAB").as_deref() == Ok("1");
+    let lab_service = lab_enabled.then(|| {
+        Arc::new(Mutex::new(lab::Service::new(
+            app.lock().unwrap().root.join("lab"),
+        )))
+    });
     let active_generation: Arc<Mutex<Option<Arc<ActiveGeneration>>>> = Arc::new(Mutex::new(None));
     let bind_address = configured_bind_address()?;
     let (server, port) = bind_server(bind_address)?;
@@ -2600,19 +2605,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let (code, mime, body) = if method == Method::Get && url == "/" {
             (200, "text/html; charset=utf-8", INDEX.as_bytes().to_vec())
-        } else if method == Method::Get && url == "/lab" {
+        } else if lab_enabled && method == Method::Get && url == "/lab" {
             (
                 200,
                 "text/html; charset=utf-8",
                 LAB_HTML.as_bytes().to_vec(),
             )
-        } else if method == Method::Get && url == "/lab.js" {
+        } else if lab_enabled && method == Method::Get && url == "/lab.js" {
             (
                 200,
                 "text/javascript; charset=utf-8",
                 LAB_JS.as_bytes().to_vec(),
             )
-        } else if method == Method::Get && url == "/lab-i18n.js" {
+        } else if lab_enabled && method == Method::Get && url == "/lab-i18n.js" {
             (
                 200,
                 "text/javascript; charset=utf-8",
@@ -2648,7 +2653,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "text/css; charset=utf-8",
                 MESSAGE_MARKDOWN_CSS.as_bytes().to_vec(),
             )
-        } else if method == Method::Post && url.starts_with("/lab/") {
+        } else if lab_enabled && method == Method::Post && url.starts_with("/lab/") {
+            let lab_service = lab_service.as_ref().expect("Lab service enabled");
             let local_client = request
                 .remote_addr()
                 .is_some_and(|address| address.ip().is_loopback());

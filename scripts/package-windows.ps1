@@ -12,7 +12,7 @@ try {
   $bin = Join-Path $out 'bin'
   $gpuRuntime = $env:USB_AI_VULKAN_RUNTIME_DIR
   $data = Join-Path $out 'PocketAI-data'
-  foreach ($obsolete in @('Avvia USB AI Rust.cmd','Avvia Offllama.cmd','Avvia USB AI Rust GPU.cmd','Avvia Offllama GPU.cmd')) {
+  foreach ($obsolete in @('Avvia USB AI Rust.cmd','Avvia Offllama.cmd','Avvia USB AI Rust GPU.cmd','Avvia Offllama GPU.cmd','Installa Fine Tuning GPU.cmd','Installa Fine Tuning GPU.ps1')) {
     Remove-Item (Join-Path $out $obsolete) -Force -ErrorAction SilentlyContinue
   }
   if (Test-Path $bin) { Remove-Item $bin -Recurse -Force }
@@ -45,22 +45,6 @@ try {
     $openMpLicense = Join-Path $gpuRuntime 'LICENSE-LLVM-OpenMP'
     if (Test-Path $openMpLicense) { Copy-Item $openMpLicense $gpuBin }
   }
-  $converterSource = $env:LLAMANEST_CONVERTER_SOURCE_DIR
-  if (!$converterSource -or !(Test-Path (Join-Path $converterSource 'convert_hf_to_gguf.py')) -or !(Test-Path (Join-Path $converterSource 'conversion')) -or !(Test-Path (Join-Path $converterSource 'gguf-py'))) {
-    throw 'Set LLAMANEST_CONVERTER_SOURCE_DIR to the matching llama.cpp b11836 source checkout.'
-  }
-  $converter = Join-Path $bin 'converter'
-  New-Item $converter -ItemType Directory -Force | Out-Null
-  Copy-Item (Join-Path $converterSource 'convert_hf_to_gguf.py') $converter
-  Copy-Item (Join-Path $converterSource 'conversion') $converter -Recurse
-  Copy-Item (Join-Path $converterSource 'gguf-py') $converter -Recurse
-  Copy-Item (Join-Path $converterSource 'LICENSE') $converter
-  Copy-Item (Join-Path $root 'scripts\setup-windows-cuda.ps1') (Join-Path $out 'Installa Fine Tuning GPU.ps1')
-  @'
-@echo off
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Installa Fine Tuning GPU.ps1"
-if errorlevel 1 pause
-'@ | Set-Content (Join-Path $out 'Installa Fine Tuning GPU.cmd')
   Get-ChildItem (Join-Path $root 'models') -Filter '*.gguf' | ForEach-Object {
     $destination = Join-Path (Join-Path $out 'models') $_.Name
     if (-not (Test-Path $destination)) { Copy-Item $_.FullName $destination }
@@ -123,7 +107,6 @@ call "%~dp0Avvia LlamaNest GPU.cmd"
 Double-click Avvia LlamaNest.cmd. The browser opens at 127.0.0.1.
 The launcher uses a Vulkan GPU when one is detected, otherwise the CPU.
 For an explicit GPU start, use Avvia LlamaNest GPU.cmd. It reports an error if Vulkan is unavailable.
-For CUDA fine tuning, first run Installa Fine Tuning GPU.cmd with Python 3.11 installed. This downloads PyTorch and training packages into PocketAI-data\cuda-venv.
 To open LlamaNest from another computer, use Avvia LlamaNest LAN.cmd.
 For LAN with an explicit Vulkan GPU, use Avvia LlamaNest LAN GPU.cmd.
 Then visit http://SERVER-NAME:48157/ or http://SERVER-IP:48157/ from that computer; use the port printed by the app if 48157 is busy.
