@@ -43,17 +43,17 @@ async function hashBlob(blob, onProgress = () => {}) {
   return hasher.digest('hex');
 }
 
-export async function downloadVerified(item, onProgress) {
+export async function downloadVerified(item, onProgress, { preferCache = false } = {}) {
   if (!item || !/^https:\/\/huggingface\.co\//.test(item.url) || !/^[a-f0-9]{64}$/.test(item.sha256) || !Number.isSafeInteger(item.size)) throw Error('Invalid model metadata');
   if (isAuxiliaryGguf(item.url) || item.shards?.some(part => isAuxiliaryGguf(part.url))) throw Error('AUXILIARY_GGUF');
   const parts = item.shards || [item];
   if (parts.some(part => part.size > WEB_FILE_LIMIT || !Number.isSafeInteger(part.size) || !/^[a-f0-9]{64}$/.test(part.sha256))) throw Error('MODEL_NEEDS_SPLIT');
   if (parts.reduce((total, part) => total + part.size, 0) !== item.size) throw Error('Invalid model metadata');
-  if (!canSaveToFolder() && navigator.storage?.estimate) {
+  if ((!canSaveToFolder() || preferCache) && navigator.storage?.estimate) {
     const { quota, usage } = await navigator.storage.estimate();
     if (Number.isFinite(quota) && Number.isFinite(usage) && quota - usage < item.size) throw Error('MODEL_STORAGE_LOW');
   }
-  if (canSaveToFolder()) {
+  if (canSaveToFolder() && !preferCache) {
     const files = []; let completed = 0;
     for (const [index, part] of parts.entries()) {
       const file = await saveVerifiedFile(part, ({loaded}) => onProgress?.({loaded:completed+loaded,total:item.size,part:index+1,parts:parts.length}));
@@ -80,7 +80,9 @@ export async function downloadVerified(item, onProgress) {
 export async function downloadCurated(id, onProgress) {
   const item = CATALOG.find(model => model.id === id);
   if (!item) throw Error('Unknown model');
-  return downloadVerified(item, onProgress);
+  // The built-in test model must start without opening a directory picker.
+  // Users can move the verified cached GGUF to a folder afterward.
+  return downloadVerified(item, onProgress, { preferCache: true });
 }
 
 export async function moveCachedToFolder(model, onProgress) {
