@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isSafari, isFirefox, largeModelWarningBrowser, usesSafariCpu, modelOptions, needsSafariFallback } from '../browser-capability.js';
+import { isSafari, isFirefox, largeModelWarningBrowser, usesSafariCpu, modelOptions, needsSafariFallback, generationLimit } from '../browser-capability.js';
 
 const safari = 'Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15';
 const chrome = 'Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
@@ -26,6 +26,15 @@ test('Chrome and Safari with WebGPU retain the standard context', () => {
   assert.equal(isSafari(chrome), false);
   assert.equal(usesSafariCpu(safari, {}), false);
   assert.equal(modelOptions({ safariCpu: false, deviceMemory: 8 }).n_ctx, 8192);
+});
+
+test('local context and output settings apply within supported choices', () => {
+  assert.equal(modelOptions({safariCpu:false, deviceMemory:8, contextSize:16384}).n_ctx, 16384);
+  assert.equal(modelOptions({safariCpu:false, deviceMemory:8, contextSize:999999}).n_ctx, 8192);
+  assert.equal(modelOptions({safariCpu:true, contextSize:16384}).n_ctx, 2048);
+  assert.equal(generationLimit(8192), 8192);
+  assert.equal(generationLimit(999999), 3072);
+  assert.equal(generationLimit(8192, {safariCpu:true}), 768);
 });
 
 test('Safari CPU avoids automatic 3B loading while retaining small models', () => {

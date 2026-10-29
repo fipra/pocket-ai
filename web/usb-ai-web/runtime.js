@@ -5,7 +5,7 @@ import * as db from './storage.js';
 import { isSmartphone, isIPhone } from './phone-gate.js';
 import { canSaveToFolder, existingModelsFolder, saveVerifiedFile } from './folder-models.js';
 import { groupLocalGgufs, isAuxiliaryGguf, WEB_FILE_LIMIT } from './hub.js';
-import { modelOptions, usesSafariCpu } from './browser-capability.js';
+import { modelOptions, usesSafariCpu, generationLimit } from './browser-capability.js';
 import { creatorRequest } from './creator-context.js';
 import { createBackendDetector } from './backend-detection.js';
 import { iosDiagnosticsEnabled, iosDiagnostic } from './ios-diagnostics.js';
@@ -175,9 +175,12 @@ export async function deleteModel(id) {
   await db.remove('models', id);
 }
 export async function unload() { if (engine) await engine.exit(); engine = undefined; loadedId = undefined; creatorModel = undefined; backendInfo = undefined; }
-export async function loadModel(id) {
+let loadedContext;
+export async function loadModel(id, contextSize = 0) {
   if (isSmartphone() && !isIPhone()) throw Error('SMARTPHONE_DISABLED');
-  if (loadedId === id && engine) return;
+  const diagnostic = iosDiagnosticsEnabled();
+  const options = modelOptions({iosDiagnostic:diagnostic, contextSize});
+  if (loadedId === id && engine && loadedContext === options.n_ctx) return;
   const record = await db.get('models', id);
   if (record && isAuxiliaryGguf(record.filename || record.shards?.[0]?.url || record.url || record.name)) throw Error('AUXILIARY_GGUF');
   let files = record?.files || sessionFiles.get(id);
@@ -193,8 +196,6 @@ export async function loadModel(id) {
   if (!record && !files) throw Error('Model unavailable');
   if (files?.some(file => file.size > WEB_FILE_LIMIT)) throw Error('MODEL_NEEDS_SPLIT');
   await unload();
-  const diagnostic = iosDiagnosticsEnabled();
-  const options = modelOptions({iosDiagnostic:diagnostic});
   if (diagnostic) iosDiagnostic('environment', `WASM=${typeof WebAssembly !== 'undefined'} · JSPI=${typeof WebAssembly.Suspending === 'function'} · SharedArrayBuffer=${typeof SharedArrayBuffer !== 'undefined'} · crossOriginIsolated=${globalThis.crossOriginIsolated === true} · WebGPU=${!!navigator.gpu} · deviceMemory=${navigator.deviceMemory ?? 'unknown'} · threads=1 · context=512 · GPU layers=0`);
   const detector = createBackendDetector({ forceCpu: options.n_gpu_layers === 0 });
   let rejectWorker;
@@ -223,6 +224,7 @@ export async function loadModel(id) {
     if (diagnostic) { const start = Date.now(); heartbeat = setInterval(() => iosDiagnostic('waiting', `loading model/context · ${Math.floor((Date.now()-start)/1000)} s`), 15000); }
     await Promise.race([loading, workerFailure, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('LOAD_TIMEOUT')), 300_000); })]);
     const metadata = next.getModelMetadata();
+    loadedContext = options.n_ctx;
     if (diagnostic) iosDiagnostic('model/context', `initialized · training context=${metadata.hparams.nCtxTrain} · vocabulary=${metadata.hparams.nVocab} · tokenizer=${metadata.meta?.['tokenizer.ggml.model'] || 'unknown'} · threads=${next.getNumThreads()} · multithread=${next.isMultithread()} · chat template=${!!next.getChatTemplate()} · add BOS=${next.mustAddBosToken()} · add EOS=${next.mustAddEosToken()}`);
     const creatorMode = metadata.meta?.['llamanest.creator.mode'];
     creatorModel = ['qa', 'lm'].includes(creatorMode) ? { mode: creatorMode, context: metadata.hparams.nCtxTrain } : undefined;
@@ -230,13 +232,13 @@ export async function loadModel(id) {
   } catch (error) { iosDiagnostic('load error', String(error?.message || error).slice(0,300)); void next.exit().catch(() => {}); throw error; }
   finally { clearTimeout(timer); clearInterval(heartbeat); }
 }
-export async function streamChat(messages, onToken, signal, thinking = false) {
+export async function streamChat(messages, onToken, signal, thinking = false, outputLimit = 0) {
   if (!engine) throw Error('Select a model first');
   if (signal.aborted) return;
   const current = engine;
   const safariCpu = usesSafariCpu();
   let requestMessages = normalizeChatMessages(messages);
-  let maxTokens = iosDiagnosticsEnabled() ? 128 : safariCpu ? 768 : 3072;
+  let maxTokens = generationLimit(outputLimit, {iosDiagnostic:iosDiagnosticsEnabled(), safariCpu});
   if (creatorModel) {
     const request = creatorRequest(requestMessages, creatorModel.mode, creatorModel.context, maxTokens);
     requestMessages = request.messages;

@@ -23,6 +23,7 @@ let language = preferredLanguage();
 let chats = [], documents = [], models = [], memories = [], activeId, selectedId, busy = false, controller, installing;
 let pendingMemoryPrompt = null;
 let thinking = false;
+let contextSize = 0, outputLimit = 0;
 let remoteConfig, remoteEntries = [];
 let remotePanelOpen = false;
 try { remotePanelOpen = localStorage.getItem('llamanest-remote-panel-open') === '1'; } catch { /* Storage may be unavailable. */ }
@@ -48,7 +49,7 @@ const modelSize = bytes => bytes >= 1e9 ? `${(bytes/1e9).toFixed(2)} GB` : `${(b
 function setStatus(text = '', error = false, loading = false) { $('status').textContent = text; $('status').classList.toggle('error', error); $('status').classList.toggle('loading', loading); }
 function translate() { document.documentElement.lang = language; document.querySelectorAll('[data-i18n]').forEach(element => { element.textContent = tr(element.dataset.i18n); }); document.querySelectorAll('[data-placeholder]').forEach(element => { element.placeholder = tr(element.dataset.placeholder); }); $('language').value = language; $('stop').ariaLabel = tr('stop'); $('send').ariaLabel = tr('send'); }
 function closeSidebar() { $('sidebar').classList.remove('open'); }
-function saveSettings() { return db.put('settings', { id: 'main', language, selectedId, activeId, thinking, remoteConfig }); }
+function saveSettings() { return db.put('settings', { id: 'main', language, selectedId, activeId, thinking, remoteConfig, contextSize, outputLimit }); }
 function renderChats() { const list = $('chat-list'); list.replaceChildren(); if (!chats.length) list.append(node('p', tr('noChats'), 'empty')); for (const chat of [...chats].sort((a,b) => b.updated - a.updated)) { const button = node('button', chat.title, `chat-item${chat.id === activeId ? ' active' : ''}`); button.onclick = () => { activeId = chat.id; saveSettings(); render(); closeSidebar(); }; list.append(button); } }
 function renderMessages() { const box = $('messages'); box.replaceChildren(); const chat = chats.find(item => item.id === activeId); if (!chat?.messages.length) { const welcome = node('div', undefined, 'welcome'); welcome.append(node('div', '✦', 'welcome-mark'), node('h1', tr('welcome')), node('p', iosDiagnosticsEnabled() && !selectedId ? tr('iosStarterHint') : models.length ? tr('welcomeNote') : tr(usesSafariCpu() ? 'safariStarterHint' : 'starterHint'))); box.append(welcome); return; } for (const [messageIndex, message] of chat.messages.entries()) { const row = node('article', undefined, `message ${message.role}`); row.append(node('div', message.role === 'user' ? 'U' : '✦', 'avatar')); const content = node('div'); const body = node('div', undefined, 'message-body'); if (message.role === 'assistant') window.USB_AI_RESPONSE_VIEW.render(body, message, language, thinking); else window.USB_AI_CODE_VIEW.render(body, message.text, language); content.append(node('strong', message.role === 'user' ? tr('you') : tr('assistant')), body); if (message.role === 'user') window.USB_AI_CODE_VIEW.addEditButton(content, message, language, value => run(() => send(value, messageIndex, chat.id)), busy); if (message.role === 'assistant' && message.text) { const correction = node('button', tr('rememberCorrection'), 'memory-correction'); correction.onclick = () => { pendingMemoryPrompt = null; $('memory-id').value = ''; $('memory-text').value = ''; $('memory-dialog').showModal(); $('memory-text').focus(); }; content.append(correction); } if (message.sources?.length) { const details = node('details', undefined, 'source'); details.append(node('summary', `${tr('sources')} (${message.sources.length})`)); for (const source of message.sources) details.append(node('p', `${source.name}: ${source.text}`)); content.append(details); } row.append(content); box.append(row); } $('thread').scrollTop = $('thread').scrollHeight; }
 function appendModelAdvice(info, model, hardware, recommended = false) {
@@ -165,7 +166,7 @@ async function chooseModel(id) {
   }, 1000);
   let loaded = false;
   try {
-    await loadModel(id);
+    await loadModel(id, contextSize);
     selectedId = id;
     loaded = true;
     await saveSettings();
@@ -244,12 +245,12 @@ async function send(editedText, editIndex, editChatId) {
   const body = $('messages').lastElementChild?.querySelector('.message-body');
   const streamView = body && window.USB_AI_RESPONSE_VIEW.streamRenderer(body, answer, language, thinking, $('thread'));
   try {
-    if (!isRemote(selectedId) && loadedModelId() !== selectedId) {
+    if (!isRemote(selectedId)) {
       setStatus(tr('loading'), false, true);
-      await loadModel(selectedId);
+      await loadModel(selectedId, contextSize);
       setStatus(tr('generating'), false, true);
     }
-    answer.usage = await completeWithRetry(contexts, (messages, onToken, signal) => isRemote(selectedId) ? remoteChat(remoteConfig, selectedId.slice(7), messages, onToken, signal) : streamChat(messages, onToken, signal, thinking), token => {
+    answer.usage = await completeWithRetry(contexts, (messages, onToken, signal) => isRemote(selectedId) ? remoteChat(remoteConfig, selectedId.slice(7), messages, onToken, signal) : streamChat(messages, onToken, signal, thinking, outputLimit), token => {
       answer.text += token;
       streamView?.update();
     }, controller.signal, () => {
@@ -272,10 +273,12 @@ async function send(editedText, editIndex, editChatId) {
     setBusy(false); render();
   }
 }
-async function init() { if (iosDiagnosticsEnabled()) { $('ios-diagnostic').hidden = false; iosDiagnostic('diagnostics', 'experimental iPhone mode · CPU · 1 thread · context 512'); } try { const settings = await db.get('settings','main'); language = settings?.language || preferredLanguage(); selectedId = settings?.selectedId; activeId = settings?.activeId; thinking = !!settings?.thinking; remoteConfig = settings?.remoteConfig; [chats, documents, models, memories] = await Promise.all([db.all('chats'), db.all('documents'), savedModels(), db.all('memory')]); if (remoteConfig) { try { remoteEntries = await remoteModels(remoteConfig); models.push(...remoteEntries); } catch (error) { setStatus(tr('error') + ': ' + error.message, true); } } if (isAuxiliaryGguf(models.find(model => model.id === selectedId)?.filename || models.find(model => model.id === selectedId)?.url || '')) { selectedId = undefined; await saveSettings(); } if (!chats.some(chat => chat.id === activeId)) activeId = chats[0]?.id; if (iosDiagnosticsEnabled() && models.some(model => model.id === selectedId && (model.id === 'llama-3.2-1b' || [model.filename,model.name,model.url].some(value => typeof value === 'string' && value.endsWith(STARTER_FILE))))) selectedId = models.find(isStarterModel)?.id; if (!models.some(model => model.id === selectedId) && !isRemote(selectedId)) selectedId = iosDiagnosticsEnabled() ? models.find(isStarterModel)?.id : usesSafariCpu() ? undefined : models.find(isStarterModel)?.id; render(); if (needsSafariFallback(models.find(model => model.id === selectedId))) setStatus(tr('safariLargeModelWarning')); else if (isStarterModel(models.find(model => model.id === selectedId))) await run(() => chooseModel(selectedId)); } catch (error) { setStatus(`${tr('error')}: ${error.message}`, true); } }
+async function init() { if (iosDiagnosticsEnabled()) { $('ios-diagnostic').hidden = false; iosDiagnostic('diagnostics', 'experimental iPhone mode · CPU · 1 thread · context 512'); } try { const settings = await db.get('settings','main'); language = settings?.language || preferredLanguage(); selectedId = settings?.selectedId; activeId = settings?.activeId; thinking = !!settings?.thinking; contextSize = [4096,8192,16384,32768].includes(Number(settings?.contextSize)) ? Number(settings.contextSize) : 0; outputLimit = [1024,3072,4096,8192,16384].includes(Number(settings?.outputLimit)) ? Number(settings.outputLimit) : 0; $('context-size').value = String(contextSize); $('output-limit').value = String(outputLimit); remoteConfig = settings?.remoteConfig; [chats, documents, models, memories] = await Promise.all([db.all('chats'), db.all('documents'), savedModels(), db.all('memory')]); if (remoteConfig) { try { remoteEntries = await remoteModels(remoteConfig); models.push(...remoteEntries); } catch (error) { setStatus(tr('error') + ': ' + error.message, true); } } if (isAuxiliaryGguf(models.find(model => model.id === selectedId)?.filename || models.find(model => model.id === selectedId)?.url || '')) { selectedId = undefined; await saveSettings(); } if (!chats.some(chat => chat.id === activeId)) activeId = chats[0]?.id; if (iosDiagnosticsEnabled() && models.some(model => model.id === selectedId && (model.id === 'llama-3.2-1b' || [model.filename,model.name,model.url].some(value => typeof value === 'string' && value.endsWith(STARTER_FILE))))) selectedId = models.find(isStarterModel)?.id; if (!models.some(model => model.id === selectedId) && !isRemote(selectedId)) selectedId = iosDiagnosticsEnabled() ? models.find(isStarterModel)?.id : usesSafariCpu() ? undefined : models.find(isStarterModel)?.id; render(); if (needsSafariFallback(models.find(model => model.id === selectedId))) setStatus(tr('safariLargeModelWarning')); else if (isStarterModel(models.find(model => model.id === selectedId))) await run(() => chooseModel(selectedId)); } catch (error) { setStatus(`${tr('error')}: ${error.message}`, true); } }
 $('prompt-form').onsubmit = event => { event.preventDefault(); run(send); };
 $('prompt').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('prompt-form').requestSubmit(); } };
 $('stop').onclick = () => controller?.abort();
+$('context-size').onchange = () => { contextSize = Number($('context-size').value); saveSettings(); };
+$('output-limit').onchange = () => { outputLimit = Number($('output-limit').value); saveSettings(); };
 $('thinking-toggle').onclick = () => { thinking = !thinking; saveSettings(); render(); };
 $('new-chat').onclick = () => run(newChat);
 $('menu').onclick = () => $('sidebar').classList.toggle('open');
