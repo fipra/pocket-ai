@@ -7,6 +7,7 @@ import { canSaveToFolder, existingModelsFolder, saveVerifiedFile } from './folde
 import { groupLocalGgufs, isAuxiliaryGguf, WEB_FILE_LIMIT } from './hub.js';
 import { modelOptions, usesSafariCpu } from './browser-capability.js';
 import { creatorRequest } from './creator-context.js';
+import { createBackendDetector } from './backend-detection.js';
 
 const paths = { default: `${import.meta.env.BASE_URL}wasm/wllama.wasm` };
 let managerPromise;
@@ -17,14 +18,20 @@ async function modelManager() {
 let engine;
 let loadedId;
 let creatorModel;
+let backendInfo;
 export const loadedModelId = () => loadedId;
+export const loadedBackend = () => backendInfo ? { ...backendInfo } : undefined;
 
-async function instance() {
+async function instance(detector) {
   const [{ Wllama, LoggerWithoutDebug }, { default: compatWorker }] = await Promise.all([
     import('@wllama/wllama'),
     import('@wllama/wllama-compat/wasm/wllama.js?raw')
   ]);
-  const runtime = new Wllama(paths, { logger: LoggerWithoutDebug, allowOffline: true });
+  const logger = Object.fromEntries(['debug','log','warn','error'].map(level => [level, (...args) => {
+    detector.record(...args);
+    LoggerWithoutDebug[level](...args);
+  }]));
+  const runtime = new Wllama(paths, { logger, allowOffline: true });
   runtime.setCompat({ wasm: `${import.meta.env.BASE_URL}wasm/wllama-compat.wasm`, worker: { code: compatWorker } });
   return runtime;
 }
@@ -148,7 +155,7 @@ export async function deleteModel(id) {
   sessionFiles.delete(id);
   await db.remove('models', id);
 }
-export async function unload() { if (engine) await engine.exit(); engine = undefined; loadedId = undefined; creatorModel = undefined; }
+export async function unload() { if (engine) await engine.exit(); engine = undefined; loadedId = undefined; creatorModel = undefined; backendInfo = undefined; }
 export async function loadModel(id) {
   if (isSmartphone()) throw Error('SMARTPHONE_DISABLED');
   if (loadedId === id && engine) return;
@@ -167,8 +174,9 @@ export async function loadModel(id) {
   if (!record && !files) throw Error('Model unavailable');
   if (files?.some(file => file.size > WEB_FILE_LIMIT)) throw Error('MODEL_NEEDS_SPLIT');
   await unload();
-  const next = await instance();
   const options = modelOptions();
+  const detector = createBackendDetector({ forceCpu: options.n_gpu_layers === 0 });
+  const next = await instance(detector);
   let timer;
   try {
     const loading = (async () => {
@@ -184,7 +192,7 @@ export async function loadModel(id) {
     const metadata = next.getModelMetadata();
     const creatorMode = metadata.meta?.['llamanest.creator.mode'];
     creatorModel = ['qa', 'lm'].includes(creatorMode) ? { mode: creatorMode, context: metadata.hparams.nCtxTrain } : undefined;
-    engine = next; loadedId = id;
+    engine = next; loadedId = id; backendInfo = detector.value();
   } catch (error) { void next.exit().catch(() => {}); throw error; }
   finally { clearTimeout(timer); }
 }
@@ -208,7 +216,7 @@ export async function streamChat(messages, onToken, signal, thinking = false) {
   const interrupt = reason => {
     if (settled) return;
     settled = true;
-    if (engine === current) { engine = undefined; loadedId = undefined; }
+    if (engine === current) { engine = undefined; loadedId = undefined; backendInfo = undefined; }
     // Wllama terminates its worker in exit(). A busy WASM call cannot be
     // interrupted reliably with abortSignal alone on Safari.
     void current.exit().catch(() => {});

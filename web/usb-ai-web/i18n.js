@@ -265,3 +265,11 @@ translations.it.creatorPromptTooLong = 'Il prompt supera il breve contesto del m
 translations.fr.creatorPromptTooLong = 'La question dépasse le contexte court du modèle. Essayez une question plus courte.';
 translations.de.creatorPromptTooLong = 'Die Anfrage überschreitet den kurzen Kontext des Modells. Versuche eine kürzere Frage.';
 translations.es.creatorPromptTooLong = 'El mensaje supera el contexto corto del modelo. Prueba una pregunta más breve.';
+const backendStrings = {
+  en:{backendGpu:'GPU: {layers}/{total} model layers',backendCpu:'CPU: model loaded',backendUnknown:'Backend not confirmed',backendAvailable:'WebGPU available (use not confirmed)',backendUnavailable:'WebGPU unavailable',backendNotLoaded:'Load a model to check the backend'},
+  it:{backendGpu:'GPU: {layers}/{total} livelli del modello',backendCpu:'CPU: modello caricato',backendUnknown:'Dispositivo non verificato',backendAvailable:'WebGPU disponibile (uso non verificato)',backendUnavailable:'WebGPU non disponibile',backendNotLoaded:'Carica un modello per verificare il dispositivo'},
+  fr:{backendGpu:'GPU : {layers}/{total} couches du modèle',backendCpu:'CPU : modèle chargé',backendUnknown:'Appareil non confirmé',backendAvailable:'WebGPU disponible (utilisation non confirmée)',backendUnavailable:'WebGPU indisponible',backendNotLoaded:'Chargez un modèle pour vérifier l’appareil'},
+  de:{backendGpu:'GPU: {layers}/{total} Modellschichten',backendCpu:'CPU: Modell geladen',backendUnknown:'Gerät nicht bestätigt',backendAvailable:'WebGPU verfügbar (Nutzung nicht bestätigt)',backendUnavailable:'WebGPU nicht verfügbar',backendNotLoaded:'Lade ein Modell, um das Gerät zu prüfen'},
+  es:{backendGpu:'GPU: {layers}/{total} capas del modelo',backendCpu:'CPU: modelo cargado',backendUnknown:'Dispositivo no confirmado',backendAvailable:'WebGPU disponible (uso no confirmado)',backendUnavailable:'WebGPU no disponible',backendNotLoaded:'Carga un modelo para comprobar el dispositivo'}
+};
+for (const language of Object.keys(backendStrings)) Object.assign(translations[language], backendStrings[language]);
