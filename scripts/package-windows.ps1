@@ -53,7 +53,7 @@ try {
     $file = Join-Path (Join-Path $root 'models') $name
     if (Test-Path $file) { Copy-Item $file (Join-Path $out 'models') }
   }
-  foreach ($name in @('LICENSE','LICENSE-MIT-LEGACY','COMMERCIAL_LICENSE.md','LICENSING_HISTORY.md')) {
+  foreach ($name in @('LICENSE','LICENSE-MIT-LEGACY','COMMERCIAL_LICENSE.md','LICENSING_HISTORY.md','MODEL_CREATOR.md')) {
     Copy-Item (Join-Path $root $name) (Join-Path $out $name)
   }
   @'

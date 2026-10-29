@@ -1,6 +1,7 @@
 /target/
 /release/
 /PocketAI-data/
+/.venv-creator/
 /models/*.gguf
 /remote/models/
 /remote/token.local.txt

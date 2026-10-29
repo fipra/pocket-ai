@@ -139,7 +139,7 @@ def main():
         source = ROOT / "models" / name
         if source.is_file():
             shutil.copy2(source, OUT / "models" / name)
-    for name in ["LICENSE", "LICENSE-MIT-LEGACY", "COMMERCIAL_LICENSE.md", "LICENSING_HISTORY.md"]:
+    for name in ["LICENSE", "LICENSE-MIT-LEGACY", "COMMERCIAL_LICENSE.md", "LICENSING_HISTORY.md", "MODEL_CREATOR.md"]:
         shutil.copy2(ROOT / name, OUT / name)
     launcher = OUT / "Avvia LlamaNest.command"
     shutil.copy2(ROOT / "scripts/mac-launcher.command", launcher)

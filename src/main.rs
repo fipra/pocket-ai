@@ -14,6 +14,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tiny_http::{Header, Method, Response, Server, StatusCode};
+mod creator;
 mod lab;
 mod quantize;
 
@@ -27,6 +28,8 @@ const MESSAGE_MARKDOWN_CSS: &str = include_str!("../web/message-markdown.css");
 const LAB_HTML: &str = include_str!("../web/lab.html");
 const LAB_JS: &str = include_str!("../web/lab.js");
 const LAB_I18N: &str = include_str!("../web/lab-i18n.js");
+const CREATOR_HTML: &str = include_str!("../web/creator.html");
+const CREATOR_JS: &str = include_str!("../web/creator.js");
 const MAX_FILE: usize = 20 * 1024 * 1024;
 
 fn normalize_language(value: &str) -> &'static str {
@@ -2472,14 +2475,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .or_else(|| preferred.filter(|name| installed.contains(name)))
         .or_else(|| installed.first().cloned());
     let app = Arc::new(Mutex::new(app_state));
-    // The experimental Laboratory is disabled in public builds. Its saved data is
-    // left untouched so a developer can still opt in explicitly.
-    let lab_enabled = env::var("LLAMANEST_EXPERIMENTAL_LAB").as_deref() == Ok("1");
+    // The Laboratory and its APIs remain restricted to local clients.
+    let lab_enabled = true;
     let lab_service = lab_enabled.then(|| {
         Arc::new(Mutex::new(lab::Service::new(
             app.lock().unwrap().root.join("lab"),
         )))
     });
+    let creator_service = Arc::new(Mutex::new(creator::Creator::new(
+        app.lock().unwrap().root.join("model-creator"),
+    )));
     let active_generation: Arc<Mutex<Option<Arc<ActiveGeneration>>>> = Arc::new(Mutex::new(None));
     let bind_address = configured_bind_address()?;
     let (server, port) = bind_server(bind_address)?;
@@ -2509,6 +2514,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .find(|h| h.field.equiv("Origin"))
             .map(|h| origin_matches_host(h.value.as_str(), host))
             .unwrap_or(true);
+        let local_client = request
+            .remote_addr()
+            .is_some_and(|address| address.ip().is_loopback());
+        if method == Method::Get && url.starts_with("/creator/export/") {
+            let result = if local_client {
+                creator_service.lock().unwrap().export(&url[16..])
+            } else {
+                Err("Local access only".into())
+            };
+            match result.and_then(|path| fs::File::open(path).map_err(|e| e.to_string())) {
+                Ok(file) => {
+                    let response = Response::from_file(file)
+                        .with_header(
+                            Header::from_bytes("Content-Type", "application/octet-stream").unwrap(),
+                        )
+                        .with_header(
+                            Header::from_bytes(
+                                "Content-Disposition",
+                                "attachment; filename=llamanest-model.pt",
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(Header::from_bytes("Cache-Control", "no-store").unwrap());
+                    let _ = request.respond(response);
+                }
+                Err(error) => {
+                    let _ = request.respond(Response::from_string(error).with_status_code(400));
+                }
+            }
+            continue;
+        }
         if method == Method::Post && url == "/api/stop" && allowed_origin {
             let mut body = Vec::new();
             let stopped = request
@@ -2625,6 +2661,59 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let (code, mime, body) = if method == Method::Get && url == "/" {
             (200, "text/html; charset=utf-8", INDEX.as_bytes().to_vec())
+        } else if method == Method::Get && url == "/creator" && local_client {
+            (
+                200,
+                "text/html; charset=utf-8",
+                CREATOR_HTML.as_bytes().to_vec(),
+            )
+        } else if method == Method::Get && url == "/creator.js" && local_client {
+            (
+                200,
+                "text/javascript; charset=utf-8",
+                CREATOR_JS.as_bytes().to_vec(),
+            )
+        } else if method == Method::Post && url == "/creator/api" {
+            let strict_origin = request
+                .headers()
+                .iter()
+                .any(|h| h.field.equiv("Origin") && origin_matches_host(h.value.as_str(), host));
+            let mut bytes = Vec::new();
+            let result = if !local_client || !strict_origin {
+                Err("Local origin required".to_owned())
+            } else if request
+                .as_reader()
+                .take(2_500_001)
+                .read_to_end(&mut bytes)
+                .is_err()
+                || bytes.len() > 2_500_000
+            {
+                Err("Request too large".into())
+            } else {
+                serde_json::from_slice::<Value>(&bytes)
+                    .map_err(|e| e.to_string())
+                    .and_then(|data| {
+                        let action = data["action"].as_str().unwrap_or("");
+                        let mut service = creator_service.lock().unwrap();
+                        match action {
+                            "status" => Ok(service.status()),
+                            "cancel" => Ok(service.cancel()),
+                            _ => service.start(action, &data),
+                        }
+                    })
+            };
+            match result {
+                Ok(value) => (200, "application/json", serde_json::to_vec(&value).unwrap()),
+                Err(error) => (
+                    if !local_client || !strict_origin {
+                        403
+                    } else {
+                        400
+                    },
+                    "application/json",
+                    serde_json::to_vec(&json!({"error":error})).unwrap(),
+                ),
+            }
         } else if lab_enabled && method == Method::Get && url == "/lab" {
             (
                 200,
@@ -2681,7 +2770,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let strict_origin = request.headers().iter().any(|header| {
                 header.field.equiv("Origin") && origin_matches_host(header.value.as_str(), host)
             });
-            if !strict_origin {
+            if !strict_origin || !local_client {
                 (
                     403,
                     "application/json",

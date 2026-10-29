@@ -96,3 +96,7 @@ cargo build --release --locked
 ```
 
 Vedi [VERIFICHE.md](VERIFICHE.md) per lo stato dei controlli e [README.md](README.md) per la guida principale in inglese.
+
+## Model Creator Lab (sperimentale)
+
+Il Laboratorio desktop include Model Creator per addestrare un piccolo Transformer da zero sui propri dati, con Python e PyTorch locali. Per installazione, formati, limiti, valutazione ed esportazione consulta [MODEL_CREATOR.md](MODEL_CREATOR.md). I modelli nativi creati non sono GGUF e non sono ancora utilizzabili nella versione Web.

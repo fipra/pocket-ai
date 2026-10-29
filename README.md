@@ -100,3 +100,7 @@ cargo build --release --locked
 ```
 
 See [VERIFICHE.md](VERIFICHE.md) for verification status and the licensing section above before using or distributing a future version.
+
+## Model Creator Lab (experimental)
+
+The desktop Laboratory includes Model Creator for training a small Transformer from scratch with local Python and PyTorch. See [MODEL_CREATOR.md](MODEL_CREATOR.md) for setup, data formats, limitations, evaluation and export. Native checkpoints are not GGUF and cannot yet be used in the Web app.
