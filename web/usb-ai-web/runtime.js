@@ -23,7 +23,7 @@ let backendInfo;
 export const loadedModelId = () => loadedId;
 export const loadedBackend = () => backendInfo ? { ...backendInfo } : undefined;
 
-async function instance(detector) {
+async function instance(detector, onWorkerError = () => {}) {
   const [{ Wllama, LoggerWithoutDebug }, { default: compatWorker }] = await Promise.all([
     import('@wllama/wllama'),
     import('@wllama/wllama-compat/wasm/wllama.js?raw')
@@ -32,7 +32,13 @@ async function instance(detector) {
     detector.record(...args);
     if (iosDiagnosticsEnabled()) {
       const line = args.map(String).join(' ');
-      if (/calling wllamaStart|loading model\.\.\.|compatibility mode|(?:using|not using) compat mode|llama_context: constructing|llama_context: n_ctx\s|llama_model_loader: loaded meta data|load_tensors:.*model buffer|tokenizer.*(?:error|failed)|failed to (?:load|initialize)|out of memory/i.test(line)) iosDiagnostic('runtime', line.slice(0,300));
+      if (/calling wllamaStart|loading model\.\.\.|multithread enabled|loading "wllama\.wasm"|compatibility mode|(?:using|not using) compat mode|llama_context: constructing|llama_context: n_ctx\s|llama_model_loader: loaded meta data|load_tensors:.*model buffer|tokenizer.*(?:error|failed)|failed to (?:load|initialize)|out of memory/i.test(line)) iosDiagnostic('runtime', line.slice(0,300));
+      for (const arg of args) {
+        if (level === 'error' && arg && typeof arg === 'object' && arg.type === 'error' && typeof arg.message === 'string') {
+          iosDiagnostic('worker error', arg.message.slice(0,300) || 'Worker error without details');
+          onWorkerError(arg.message || 'WebAssembly worker failed');
+        }
+      }
     }
     LoggerWithoutDebug[level](...args);
   }]));
@@ -189,10 +195,12 @@ export async function loadModel(id) {
   await unload();
   const diagnostic = iosDiagnosticsEnabled();
   const options = modelOptions({iosDiagnostic:diagnostic});
-  if (diagnostic) iosDiagnostic('environment', `WASM=${typeof WebAssembly !== 'undefined'} · SharedArrayBuffer=${typeof SharedArrayBuffer !== 'undefined'} · crossOriginIsolated=${globalThis.crossOriginIsolated === true} · WebGPU=${!!navigator.gpu} · deviceMemory=${navigator.deviceMemory ?? 'unknown'} · threads=1 · context=512 · GPU layers=0`);
+  if (diagnostic) iosDiagnostic('environment', `WASM=${typeof WebAssembly !== 'undefined'} · JSPI=${typeof WebAssembly.Suspending === 'function'} · SharedArrayBuffer=${typeof SharedArrayBuffer !== 'undefined'} · crossOriginIsolated=${globalThis.crossOriginIsolated === true} · WebGPU=${!!navigator.gpu} · deviceMemory=${navigator.deviceMemory ?? 'unknown'} · threads=1 · context=512 · GPU layers=0`);
   const detector = createBackendDetector({ forceCpu: options.n_gpu_layers === 0 });
+  let rejectWorker;
+  const workerFailure = new Promise((_, reject) => { rejectWorker = reject; });
   let next;
-  try { next = await instance(detector); }
+  try { next = await instance(detector, message => rejectWorker(Error(message))); }
   catch (error) { iosDiagnostic('engine error', String(error?.message || error).slice(0,300)); throw error; }
   let timer, heartbeat;
   try {
@@ -213,7 +221,7 @@ export async function loadModel(id) {
     // Safari's compatibility WASM can spend well over 90 seconds compiling on a
     // phone. A short deadline incorrectly reported a healthy load as a failure.
     if (diagnostic) { const start = Date.now(); heartbeat = setInterval(() => iosDiagnostic('waiting', `loading model/context · ${Math.floor((Date.now()-start)/1000)} s`), 15000); }
-    await Promise.race([loading, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('LOAD_TIMEOUT')), 300_000); })]);
+    await Promise.race([loading, workerFailure, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('LOAD_TIMEOUT')), 300_000); })]);
     const metadata = next.getModelMetadata();
     if (diagnostic) iosDiagnostic('model/context', `initialized · training context=${metadata.hparams.nCtxTrain} · vocabulary=${metadata.hparams.nVocab} · tokenizer=${metadata.meta?.['tokenizer.ggml.model'] || 'unknown'} · threads=${next.getNumThreads()} · multithread=${next.isMultithread()} · chat template=${!!next.getChatTemplate()} · add BOS=${next.mustAddBosToken()} · add EOS=${next.mustAddEosToken()}`);
     const creatorMode = metadata.meta?.['llamanest.creator.mode'];
