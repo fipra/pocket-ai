@@ -9,13 +9,14 @@ Neither the training nor model generation uses an external model or API.
 
 The desktop Model Creator Lab is reachable from the main sidebar under
 **Laboratory**. Python 3 and PyTorch must already be installed on the computer that
-runs LlamaNest. PyTorch and model weights are not bundled in the portable ZIP.
+runs LlamaNest. GGUF export additionally requires the `gguf` Python package in
+the same Python environment. These packages are not bundled in the portable ZIP.
 The model creator worker is embedded in the Rust binary and written into the
 local workspace when needed. For example, on macOS:
 
 ```sh
 python3 -m venv .venv-creator
-.venv-creator/bin/python -m pip install torch
+.venv-creator/bin/python -m pip install torch gguf
 LLAMANEST_CREATOR_PYTHON="$PWD/.venv-creator/bin/python" cargo run --release
 ```
 
@@ -24,7 +25,7 @@ path before launching `bin/usb-ai-rust` from the package directory. On Windows:
 
 ```powershell
 py -3 -m venv .venv-creator
-.\.venv-creator\Scripts\python.exe -m pip install torch
+.\.venv-creator\Scripts\python.exe -m pip install torch gguf
 $env:LLAMANEST_CREATOR_PYTHON = (Resolve-Path .\.venv-creator\Scripts\python.exe).Path
 .\bin\usb-ai-rust.exe
 ```
@@ -95,8 +96,15 @@ restarts. Export downloads a native `.pt` checkpoint containing architecture,
 tokenizer, weights, optimizer, split data and training metadata; it therefore
 contains the user's training examples. Treat it as private. Importing an
 exported checkpoint into another installation is not yet supported. Do not load
-untrusted checkpoints. This is a custom architecture: it is **not GGUF** and
-cannot currently be opened in the main GGUF chat or in LlamaNest Web.
+untrusted checkpoints.
+
+For LlamaNest Web, select a trained model and click **Create GGUF**, then
+**Download GGUF**. In the Web app, use the local GGUF import control and select
+the downloaded file. The exporter preserves the trained GPT-style weights and
+the dataset-derived byte vocabulary and creates an F32 GGUF; it does not use
+pretrained assets. The web runtime uses the most recent user prompt only and
+limits generation to the model's small training context. Prompts that exceed
+that context are rejected. This conversion does not improve model quality.
 
 ## Tests and observed result
 
@@ -117,6 +125,5 @@ scored 1/3 exact match. The other predictions were `lungs` instead of `heart`
 and `braings` instead of `brain`. This tiny controlled example is not a
 benchmark and does not establish semantic generalization.
 
-Windows packaging, CUDA execution and browser-based model loading require
-separate validation on their target systems. Do not claim Web or llama.cpp
-compatibility without implementing and testing an appropriate runtime/exporter.
+CUDA execution and testing on physical Windows hardware require separate
+validation on their target systems.

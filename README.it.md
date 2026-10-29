@@ -99,4 +99,4 @@ Vedi [VERIFICHE.md](VERIFICHE.md) per lo stato dei controlli e [README.md](READM
 
 ## Model Creator Lab (sperimentale)
 
-Il Laboratorio desktop include Model Creator per addestrare un piccolo Transformer da zero sui propri dati, con Python e PyTorch locali. Per installazione, formati, limiti, valutazione ed esportazione consulta [MODEL_CREATOR.md](MODEL_CREATOR.md). I modelli nativi creati non sono GGUF e non sono ancora utilizzabili nella versione Web.
+Il Laboratorio desktop include Model Creator per addestrare un piccolo Transformer da zero sui propri dati, con Python e PyTorch locali. Può esportare un GGUF F32 per LlamaNest Web installando il pacchetto Python `gguf`. Per installazione, limiti, valutazione ed esportazione consulta [MODEL_CREATOR.md](MODEL_CREATOR.md).

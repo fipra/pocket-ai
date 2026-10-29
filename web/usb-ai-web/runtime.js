@@ -6,6 +6,7 @@ import { isSmartphone } from './phone-gate.js';
 import { canSaveToFolder, existingModelsFolder, saveVerifiedFile } from './folder-models.js';
 import { groupLocalGgufs, isAuxiliaryGguf, WEB_FILE_LIMIT } from './hub.js';
 import { modelOptions, usesSafariCpu } from './browser-capability.js';
+import { creatorRequest } from './creator-context.js';
 
 const paths = { default: `${import.meta.env.BASE_URL}wasm/wllama.wasm` };
 let managerPromise;
@@ -15,6 +16,7 @@ async function modelManager() {
 }
 let engine;
 let loadedId;
+let creatorModel;
 export const loadedModelId = () => loadedId;
 
 async function instance() {
@@ -146,7 +148,7 @@ export async function deleteModel(id) {
   sessionFiles.delete(id);
   await db.remove('models', id);
 }
-export async function unload() { if (engine) await engine.exit(); engine = undefined; loadedId = undefined; }
+export async function unload() { if (engine) await engine.exit(); engine = undefined; loadedId = undefined; creatorModel = undefined; }
 export async function loadModel(id) {
   if (isSmartphone()) throw Error('SMARTPHONE_DISABLED');
   if (loadedId === id && engine) return;
@@ -179,6 +181,9 @@ export async function loadModel(id) {
     // Safari's compatibility WASM can spend well over 90 seconds compiling on a
     // phone. A short deadline incorrectly reported a healthy load as a failure.
     await Promise.race([loading, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('LOAD_TIMEOUT')), 300_000); })]);
+    const metadata = next.getModelMetadata();
+    const creatorMode = metadata.meta?.['llamanest.creator.mode'];
+    creatorModel = ['qa', 'lm'].includes(creatorMode) ? { mode: creatorMode, context: metadata.hparams.nCtxTrain } : undefined;
     engine = next; loadedId = id;
   } catch (error) { void next.exit().catch(() => {}); throw error; }
   finally { clearTimeout(timer); }
@@ -188,6 +193,13 @@ export async function streamChat(messages, onToken, signal, thinking = false) {
   if (signal.aborted) return;
   const current = engine;
   const safariCpu = usesSafariCpu();
+  let requestMessages = normalizeChatMessages(messages);
+  let maxTokens = safariCpu ? 768 : 3072;
+  if (creatorModel) {
+    const request = creatorRequest(requestMessages, creatorModel.mode, creatorModel.context, maxTokens);
+    requestMessages = request.messages;
+    maxTokens = request.maxTokens;
+  }
   let settled = false;
   let timer;
   let usage;
@@ -210,8 +222,8 @@ export async function streamChat(messages, onToken, signal, thinking = false) {
   // starts streaming, slow local generation can finish normally.
   if (safariCpu && !settled) timer = setTimeout(() => interrupt('GENERATION_TIMEOUT'), 90_000);
   const generation = current.createChatCompletion({
-    messages: normalizeChatMessages(messages),
-    max_tokens: safariCpu ? 768 : 3072,
+    messages: requestMessages,
+    max_tokens: maxTokens,
     temperature: 0.7,
     stream: true,
     chat_template_kwargs: { enable_thinking: thinking },

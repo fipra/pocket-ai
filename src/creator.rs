@@ -84,7 +84,7 @@ impl Creator {
                     continue;
                 }
                 if let Some(meta) = read_json(&entry.path().join("model.json")) {
-                    models.push(json!({"id":name,"name":meta["name"],"config":meta["config"],"settings":meta["settings"],"checkpoint":entry.path().join("checkpoint.pt").is_file(),"dataset":entry.path().join("dataset.json").is_file(),"progress":read_json(&entry.path().join("status.json"))}));
+                    models.push(json!({"id":name,"name":meta["name"],"config":meta["config"],"settings":meta["settings"],"checkpoint":entry.path().join("checkpoint.pt").is_file(),"gguf":entry.path().join("model.gguf").is_file(),"dataset":entry.path().join("dataset.json").is_file(),"progress":read_json(&entry.path().join("status.json"))}));
                 }
             }
         }
@@ -119,6 +119,15 @@ impl Creator {
         }
         Ok(file)
     }
+    pub fn export_gguf(&self, model: &str) -> Result<PathBuf, String> {
+        let file = path(&self.root, model)?.join("model.gguf");
+        if fs::symlink_metadata(&file).map_or(true, |meta| {
+            meta.file_type().is_symlink() || !meta.is_file()
+        }) {
+            return Err("GGUF not available; export the model first".into());
+        }
+        Ok(file)
+    }
     pub fn start(&mut self, action: &str, data: &Value) -> Result<Value, String> {
         if self
             .job
@@ -127,7 +136,16 @@ impl Creator {
         {
             return Err("A Model Creator task is already running".into());
         }
-        if !["prepare", "train", "generate", "evaluate", "devices"].contains(&action) {
+        if ![
+            "prepare",
+            "train",
+            "generate",
+            "evaluate",
+            "devices",
+            "export_gguf",
+        ]
+        .contains(&action)
+        {
             return Err("Unknown Model Creator action".into());
         }
         fs::create_dir_all(&self.root).map_err(|e| e.to_string())?;
@@ -170,8 +188,15 @@ impl Creator {
         if action == "train" && data["resume"] == true && !folder.join("checkpoint.pt").is_file() {
             return Err("No checkpoint to resume.".into());
         }
-        if ["generate", "evaluate"].contains(&action) && !folder.join("checkpoint.pt").is_file() {
+        if ["generate", "evaluate", "export_gguf"].contains(&action) && !self.export(&model).is_ok()
+        {
             return Err("Train the model first".into());
+        }
+        if action == "train" {
+            let gguf = folder.join("model.gguf");
+            if gguf.exists() {
+                fs::remove_file(gguf).map_err(|e| e.to_string())?;
+            }
         }
         if action == "train" && data["resume"] != true {
             let mut meta = read_json(&folder.join("model.json")).ok_or("Model metadata missing")?;
@@ -333,6 +358,15 @@ mod tests {
             .as_f64()
             .unwrap()
             .is_finite());
+        if std::env::var_os("LLAMANEST_CREATOR_TEST_GGUF").is_some() {
+            reopened
+                .start("export_gguf", &json!({"id": model}))
+                .unwrap();
+            wait(&reopened);
+            let exported = reopened.export_gguf(&model).unwrap();
+            assert_eq!(&fs::read(&exported).unwrap()[..4], b"GGUF");
+            assert!(reopened.export_gguf("../outside").is_err());
+        }
         fs::remove_dir_all(root).unwrap();
     }
 }

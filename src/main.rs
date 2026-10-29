@@ -2516,9 +2516,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let local_client = request
             .remote_addr()
             .is_some_and(|address| address.ip().is_loopback());
-        if method == Method::Get && url.starts_with("/creator/export/") {
+        if method == Method::Get
+            && (url.starts_with("/creator/export/") || url.starts_with("/creator/gguf/"))
+        {
+            let is_gguf = url.starts_with("/creator/gguf/");
             let result = if local_client {
-                creator_service.lock().unwrap().export(&url[16..])
+                let service = creator_service.lock().unwrap();
+                if is_gguf {
+                    service.export_gguf(&url[14..])
+                } else {
+                    service.export(&url[16..])
+                }
             } else {
                 Err("Local access only".into())
             };
@@ -2531,7 +2539,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .with_header(
                             Header::from_bytes(
                                 "Content-Disposition",
-                                "attachment; filename=llamanest-model.pt",
+                                if is_gguf {
+                                    "attachment; filename=llamanest-model.gguf"
+                                } else {
+                                    "attachment; filename=llamanest-model.pt"
+                                },
                             )
                             .unwrap(),
                         )

@@ -1,6 +1,9 @@
 import json
 import tempfile
 import unittest
+import importlib.util
+import shutil
+import subprocess
 from pathlib import Path
 
 try:
@@ -66,6 +69,26 @@ class CreatorTests(unittest.TestCase):
             x=m.generate(loaded,self.tokenizer,'abc',torch.device('cpu'),temperature=0,max_tokens=5)
             y=m.generate(loaded,self.tokenizer,'abc',torch.device('cpu'),temperature=0,max_tokens=5)
             self.assertEqual(x['text'],y['text']);self.assertGreaterEqual(x['tokensPerSecond'],0)
+
+    @unittest.skipUnless(importlib.util.find_spec('gguf'), 'gguf package unavailable')
+    def test_gguf_export_preserves_weights_and_tokenizer(self):
+        import gguf
+        rows=[{'question':'Quando?','answer':'Nel 1939.'}]
+        tokenizer=m.ByteTokenizer.from_rows(rows)
+        optimizer=torch.optim.AdamW(self.model.parameters())
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint=Path(tmp)/'checkpoint.pt'; output=Path(tmp)/'model.gguf'
+            m.save_checkpoint(checkpoint,self.model,optimizer,self.c,tokenizer,{'mode':'qa'},{'train':rows,'validation':[]})
+            m.export_gguf(checkpoint,output)
+            reader=gguf.GGUFReader(output)
+            tensors={t.name:t.data for t in reader.tensors}
+            self.assertTrue(torch.equal(torch.from_numpy(tensors['output.weight'].copy()),self.model.head.weight))
+            self.assertEqual(reader.fields['llamanest.creator.mode'].contents(),'qa')
+            executable=shutil.which('llama-tokenize')
+            if executable:
+                text='Caffè 🫀 — 1939'
+                result=subprocess.run([executable,'-m',str(output),'--no-bos','--ids','--log-disable','-p',text],capture_output=True,text=True,check=True)
+                self.assertEqual(json.loads(result.stdout),tokenizer.encode(text))
 
     def test_training_overfits_then_reports_unseen(self):
         rows=[{'question':q,'answer':a} for q,a in [('heart pumps?','heart'),('what pumps blood?','heart'),('pumping organ?','heart'),('lungs breathe?','lungs'),('what helps breathing?','lungs'),('breathing organ?','lungs'),('brain thinks?','brain'),('organ of thought?','brain'),('what controls thinking?','brain')]]

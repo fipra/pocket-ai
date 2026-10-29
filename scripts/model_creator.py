@@ -370,8 +370,73 @@ def evaluate(model, saved, rows, device):
     return {'tokenLoss':mean,'perplexity':math.exp(min(mean, 80)), 'exactMatch':exact/len(results) if results else None,'examples':results,'questionOverlaps':sum(e['questionSeen'] for e in results),'exampleOverlaps':sum(row_key(row) in train_pairs for row in rows),'semanticEvaluation':'Not performed. Review meaning manually; exact match is not a semantic score.'}
 
 
+def export_gguf(checkpoint, output):
+    """Export this exact architecture and its dataset-ordered byte vocabulary."""
+    try:
+        import gguf
+    except ModuleNotFoundError as error:
+        if error.name != 'gguf': raise
+        raise ValueError('GGUF export needs the gguf Python package. Install it in the same Python as PyTorch.') from error
+    model, saved = load_checkpoint(checkpoint, torch.device('cpu'))
+    c = model.config
+    byte_order = saved['tokenizer']['byte_order']
+    visible = list(range(33, 127)) + list(range(161, 173)) + list(range(174, 256))
+    codepoints = visible[:]
+    for byte in range(256):
+        if byte not in visible:
+            visible.append(byte)
+            codepoints.append(256 + len(codepoints) - 188)
+    byte_chars = dict(zip(visible, map(chr, codepoints)))
+    tokens = [byte_chars[byte] for byte in byte_order]
+    tokens += ['<|pad|>', '<|question|>', '<|answer|>', '<|end|>']
+    tokens += [f'<|unused{i}|>' for i in range(260, c.vocab_size)]
+    tmp = output.with_name(output.name + '.tmp')
+    writer = gguf.GGUFWriter(str(tmp), 'gpt2')
+    try:
+        writer.add_name('LlamaNest Model Creator')
+        writer.add_string('llamanest.creator.mode', saved['training']['mode'])
+        writer.add_context_length(c.context)
+        writer.add_embedding_length(c.dim)
+        writer.add_block_count(c.layers)
+        writer.add_head_count(c.heads)
+        writer.add_feed_forward_length(4*c.dim)
+        writer.add_layer_norm_eps(1e-5)
+        writer.add_file_type(0)
+        writer.add_tokenizer_model('gpt2')
+        writer.add_tokenizer_pre('default')
+        writer.add_token_list(tokens)
+        writer.add_token_types([1]*256 + [3,4,4,3] + [3]*(c.vocab_size-260))
+        # llama.cpp requires a merge table. This special-token pair cannot occur
+        # in ordinary byte text and does not merge any dataset bytes.
+        writer.add_token_merges(['<|pad|> <|pad|>'])
+        writer.add_eos_token_id(END)
+        writer.add_bos_token_id(END)
+        writer.add_pad_token_id(PAD)
+        writer.add_add_bos_token(False)
+        if saved['training']['mode'] == 'qa':
+            template = "{% for message in messages %}{% if message['role'] == 'user' %}{{ '<|question|>' + message['content'] + '<|answer|>' }}{% endif %}{% endfor %}"
+        else:
+            template = "{% for message in messages %}{% if message['role'] == 'user' %}{{ message['content'] }}{% endif %}{% endfor %}"
+        writer.add_chat_template(template)
+        names = {'token.weight':'token_embd.weight','position.weight':'position_embd.weight','norm.weight':'output_norm.weight','norm.bias':'output_norm.bias','head.weight':'output.weight'}
+        blocks = {'norm1':'attn_norm','attention.qkv':'attn_qkv','attention.proj':'attn_output','norm2':'ffn_norm','mlp.0':'ffn_up','mlp.2':'ffn_down'}
+        for key, tensor in model.state_dict().items():
+            name = names.get(key)
+            if name is None:
+                bits = key.split('.')
+                name = f"blk.{bits[1]}.{blocks['.'.join(bits[2:-1])]}.{bits[-1]}"
+            writer.add_tensor(name, tensor.detach().cpu().float().numpy())
+        writer.write_header_to_file(); writer.write_kv_data_to_file(); writer.write_tensors_to_file()
+        writer.close()
+        tmp.replace(output)
+    finally:
+        writer.close()
+        tmp.unlink(missing_ok=True)
+    return {'file':'model.gguf','context':c.context,'mode':saved['training']['mode']}
+
+
 def main():
-    parser=argparse.ArgumentParser(); parser.add_argument('action', choices=['prepare','train','generate','evaluate','devices']);parser.add_argument('--request');parser.add_argument('--output');args=parser.parse_args()
+    parser=argparse.ArgumentParser(); parser.add_argument('action', choices=['prepare','train','generate','evaluate','devices','export_gguf']);parser.add_argument('--request');parser.add_argument('--output');args=parser.parse_args()
     if args.action == 'devices':
         print(json.dumps({'cpu':True,'cuda':torch.cuda.is_available(),'mps':torch.backends.mps.is_available()})); return
     request=json.loads(Path(args.request).read_text(encoding='utf-8')); output=Path(args.output); output.mkdir(parents=True,exist_ok=True)
@@ -384,6 +449,8 @@ def main():
         print(json.dumps({'count':len(rows),'training':len(training),'validation':len(validation),'duplicates':duplicates,'preview':rows[:5]},ensure_ascii=False));return
     if args.action == 'train':
         dataset=json.loads((output/'dataset.json').read_text(encoding='utf-8')); request['rows']=dataset['rows'];request['mode']=dataset['mode'];train(request,output);return
+    if args.action == 'export_gguf':
+        print(json.dumps(export_gguf(output/'checkpoint.pt', output/'model.gguf'))); return
     device=device_for(request['device']); model,saved=load_checkpoint(output/'checkpoint.pt',device)
     if args.action == 'generate':
         result=generate(model,ByteTokenizer(saved['tokenizer']['byte_order']),request['prompt'],device,temperature=float(request.get('temperature',.8)),top_k=int(request.get('top_k',40)),top_p=float(request.get('top_p',.9)),max_tokens=int(request.get('max_tokens',100)),seed=int(request.get('seed',42)),mode=saved['training']['mode'])
