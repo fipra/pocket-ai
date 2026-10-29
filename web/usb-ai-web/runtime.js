@@ -1,6 +1,6 @@
 import { createSHA256 } from 'hash-wasm';
 import { normalizeChatMessages } from './chat-messages.js';
-import { CATALOG } from './catalog.js';
+import { CATALOG, IOS_DIAGNOSTIC_MODEL } from './catalog.js';
 import * as db from './storage.js';
 import { isSmartphone, isIPhone } from './phone-gate.js';
 import { canSaveToFolder, existingModelsFolder, saveVerifiedFile } from './folder-models.js';
@@ -32,7 +32,7 @@ async function instance(detector) {
     detector.record(...args);
     if (iosDiagnosticsEnabled()) {
       const line = args.map(String).join(' ');
-      if (/(?:using|not using) compat mode|llama_context: constructing|llama_context: n_ctx\s|llama_model_loader: loaded meta data|load_tensors:.*model buffer|tokenizer.*(?:error|failed)|failed to (?:load|initialize)|out of memory/i.test(line)) iosDiagnostic('runtime', line.slice(0,300));
+      if (/calling wllamaStart|loading model\.\.\.|compatibility mode|(?:using|not using) compat mode|llama_context: constructing|llama_context: n_ctx\s|llama_model_loader: loaded meta data|load_tensors:.*model buffer|tokenizer.*(?:error|failed)|failed to (?:load|initialize)|out of memory/i.test(line)) iosDiagnostic('runtime', line.slice(0,300));
     }
     LoggerWithoutDebug[level](...args);
   }]));
@@ -92,7 +92,7 @@ export async function downloadVerified(item, onProgress, { preferCache = false }
   } catch (error) { await model.remove(); throw error; }
 }
 export async function downloadCurated(id, onProgress) {
-  const item = CATALOG.find(model => model.id === id);
+  const item = [...CATALOG, ...(iosDiagnosticsEnabled() ? [IOS_DIAGNOSTIC_MODEL] : [])].find(model => model.id === id);
   if (!item) throw Error('Unknown model');
   // The built-in test model must start without opening a directory picker.
   // Users can move the verified cached GGUF to a folder afterward.
@@ -194,17 +194,25 @@ export async function loadModel(id) {
   let next;
   try { next = await instance(detector); }
   catch (error) { iosDiagnostic('engine error', String(error?.message || error).slice(0,300)); throw error; }
-  let timer;
+  let timer, heartbeat;
   try {
     const loading = (async () => {
       if (files) { iosDiagnostic('file', `${files.length} GGUF part(s), ${files.reduce((n, f) => n + f.size, 0)} bytes ready`); iosDiagnostic('model/context', 'initialization started'); return next.loadModel(files, options); }
       const models = await (await modelManager()).getModels();
       const cached = models.find(model => model.url === record.url || model.source?.url === record.url);
       if (!cached) throw Error('Cached model unavailable. Download it again.');
-      iosDiagnostic('file', 'cached GGUF selected'); iosDiagnostic('model/context', 'initialization started'); return next.loadModel(cached, options);
+      iosDiagnostic('file', 'opening cached GGUF');
+      if (diagnostic) {
+        const blobs = await cached.open();
+        iosDiagnostic('file', `cache opened · ${blobs.length} part(s), ${blobs.reduce((n, f) => n + f.size, 0)} bytes`);
+        iosDiagnostic('model/context', 'initialization started');
+        return next.loadModel(blobs, options);
+      }
+      return next.loadModel(cached, options);
     })();
     // Safari's compatibility WASM can spend well over 90 seconds compiling on a
     // phone. A short deadline incorrectly reported a healthy load as a failure.
+    if (diagnostic) { const start = Date.now(); heartbeat = setInterval(() => iosDiagnostic('waiting', `loading model/context · ${Math.floor((Date.now()-start)/1000)} s`), 15000); }
     await Promise.race([loading, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('LOAD_TIMEOUT')), 300_000); })]);
     const metadata = next.getModelMetadata();
     if (diagnostic) iosDiagnostic('model/context', `initialized · training context=${metadata.hparams.nCtxTrain} · vocabulary=${metadata.hparams.nVocab} · tokenizer=${metadata.meta?.['tokenizer.ggml.model'] || 'unknown'} · threads=${next.getNumThreads()} · multithread=${next.isMultithread()} · chat template=${!!next.getChatTemplate()} · add BOS=${next.mustAddBosToken()} · add EOS=${next.mustAddEosToken()}`);
@@ -212,7 +220,7 @@ export async function loadModel(id) {
     creatorModel = ['qa', 'lm'].includes(creatorMode) ? { mode: creatorMode, context: metadata.hparams.nCtxTrain } : undefined;
     engine = next; loadedId = id; backendInfo = detector.value();
   } catch (error) { iosDiagnostic('load error', String(error?.message || error).slice(0,300)); void next.exit().catch(() => {}); throw error; }
-  finally { clearTimeout(timer); }
+  finally { clearTimeout(timer); clearInterval(heartbeat); }
 }
 export async function streamChat(messages, onToken, signal, thinking = false) {
   if (!engine) throw Error('Select a model first');

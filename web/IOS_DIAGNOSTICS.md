@@ -18,6 +18,10 @@ set of relevant loading, context and error events. Sending the request is not
 proof that prefill completed; a first visible token is evidence of decoding.
 Device memory is frequently unavailable in Safari and browser storage estimates
 do not prove enough RAM is available. The log is not automatically uploaded.
+The diagnostic model selector also offers SmolLM2 135M Q4 (105 MB), pinned by
+revision, exact size and SHA-256. It is substantially smaller than the 808 MB
+starter and is primarily English; its successful use does not prove larger
+models will load. The download and execution remain local to the device.
 
 On supported Safari CPU and iPhone diagnostic sessions, generation waits up to
 90 seconds for the first visible token before aborting and reporting a timeout.
