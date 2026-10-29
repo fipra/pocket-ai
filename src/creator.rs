@@ -196,6 +196,7 @@ impl Creator {
         let mut command = Command::new(python());
         command
             .env("PYTORCH_ENABLE_MPS_FALLBACK", "0")
+            .env("PYTHONUTF8", "1")
             .arg(worker)
             .arg(action);
         if action != "devices" {
