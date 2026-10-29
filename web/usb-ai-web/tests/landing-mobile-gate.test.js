@@ -14,10 +14,10 @@ function run(userAgent) {
   runInNewContext(script,{document,navigator:{userAgent},window:{alert:message=>alerts.push(message)}});
   return {web,download,note,alerts};
 }
-test('iPhone Web link opens experimental diagnostics, while desktop download remains blocked', () => {
+test('iPhone Web link and desktop download are blocked', () => {
   const {web,download,note,alerts}=run('Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)');
-  assert.equal(web.href,'/app/?iosdiag=1');assert.equal(web.handlers.length,0);
-  assert.equal(note.lastChild.textContent,'Web su iPhone: prova sperimentale');
+  assert.equal(web.href,'/app/');assert.equal(web.handlers.length,1);
+  assert.equal(note.lastChild.textContent,'Solo per PC e Mac');
   let prevented=false;download.handlers[0]({preventDefault:()=>{prevented=true}});
   assert.equal(prevented,true);assert.equal(alerts.length,1);
 });
