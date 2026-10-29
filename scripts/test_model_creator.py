@@ -4,6 +4,7 @@ import unittest
 import importlib.util
 import shutil
 import subprocess
+import gc
 from pathlib import Path
 
 try:
@@ -89,6 +90,8 @@ class CreatorTests(unittest.TestCase):
                 text='Caffè 🫀 — 1939'
                 result=subprocess.run([executable,'-m',str(output),'--no-bos','--ids','--log-disable','-p',text],capture_output=True,text=True,check=True)
                 self.assertEqual(json.loads(result.stdout),tokenizer.encode(text))
+            del tensors, reader
+            gc.collect()
 
     def test_training_overfits_then_reports_unseen(self):
         rows=[{'question':q,'answer':a} for q,a in [('heart pumps?','heart'),('what pumps blood?','heart'),('pumping organ?','heart'),('lungs breathe?','lungs'),('what helps breathing?','lungs'),('breathing organ?','lungs'),('brain thinks?','brain'),('organ of thought?','brain'),('what controls thinking?','brain')]]
