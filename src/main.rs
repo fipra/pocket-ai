@@ -25,7 +25,6 @@ const CODE_VIEW: &str = include_str!("../web/code-view.js");
 const RESPONSE_VIEW: &str = include_str!("../web/response-view.js");
 const RESPONSE_VIEW_CSS: &str = include_str!("../web/response-view.css");
 const MESSAGE_MARKDOWN_CSS: &str = include_str!("../web/message-markdown.css");
-const LAB_HTML: &str = include_str!("../web/lab.html");
 const LAB_JS: &str = include_str!("../web/lab.js");
 const LAB_I18N: &str = include_str!("../web/lab-i18n.js");
 const CREATOR_HTML: &str = include_str!("../web/creator.html");
@@ -2718,7 +2717,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             (
                 200,
                 "text/html; charset=utf-8",
-                LAB_HTML.as_bytes().to_vec(),
+                CREATOR_HTML.as_bytes().to_vec(),
             )
         } else if lab_enabled && method == Method::Get && url == "/lab.js" {
             (

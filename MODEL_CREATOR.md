@@ -7,8 +7,8 @@ Neither the training nor model generation uses an external model or API.
 
 ## Installation and launch
 
-The desktop Lab is reachable from the main sidebar under **Laboratory → Model
-Creator**. Python 3 and PyTorch must already be installed on the computer that
+The desktop Model Creator Lab is reachable from the main sidebar under
+**Laboratory**. Python 3 and PyTorch must already be installed on the computer that
 runs LlamaNest. PyTorch and model weights are not bundled in the portable ZIP.
 The model creator worker is embedded in the Rust binary and written into the
 local workspace when needed. For example, on macOS:
