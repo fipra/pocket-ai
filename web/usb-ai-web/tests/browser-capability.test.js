@@ -18,6 +18,9 @@ test('Safari without WebGPU uses a smaller CPU context', () => {
   assert.equal(usesSafariCpu(safari, undefined), true);
   assert.deepEqual(modelOptions({ safariCpu: true }), { n_ctx: 2048, n_batch: 64, n_threads: 1, n_gpu_layers: 0, jinja: true, reasoning: true });
 });
+test('iPhone diagnostics request CPU, a single thread and 512 tokens', () => {
+  assert.deepEqual(modelOptions({iosDiagnostic:true}), {n_ctx:512,n_batch:64,n_threads:1,n_gpu_layers:0,jinja:true,reasoning:true});
+});
 
 test('Chrome and Safari with WebGPU retain the standard context', () => {
   assert.equal(isSafari(chrome), false);

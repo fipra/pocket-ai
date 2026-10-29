@@ -1,5 +1,6 @@
 (() => {
   const phone = navigator.userAgentData?.mobile === true || /iPhone|iPod|Android.*Mobile/i.test(navigator.userAgent);
+  const iphone = /iPhone|iPod/i.test(navigator.userAgent);
   if (!phone) return;
 
   const copy = {
@@ -12,9 +13,12 @@
   const language = document.documentElement.lang.slice(0, 2).toLowerCase();
   const [label, message] = copy[language] || copy.en;
   const heroNote = document.querySelector('.hero-note');
-  if (heroNote?.lastChild) heroNote.lastChild.textContent = label;
+  const experimental = {it:'Web su iPhone: prova sperimentale',en:'Web on iPhone: experimental',fr:'Web sur iPhone : expérimental',de:'Web auf iPhone: experimentell',es:'Web en iPhone: experimental'};
+  if (heroNote?.lastChild) heroNote.lastChild.textContent = iphone ? (experimental[language] || experimental.en) : label;
+  if (iphone) for (const link of document.querySelectorAll('a[href="/app/"]')) link.href = '/app/?iosdiag=1';
 
-  for (const link of document.querySelectorAll('a[href="#download"], a[href="/app/"], a.download-card, .footer-links a[href*="/releases/tag/rust-"]')) {
+  const blocked = iphone ? 'a[href="#download"], a.download-card, .footer-links a[href*="/releases/tag/rust-"]' : 'a[href="#download"], a[href="/app/"], a.download-card, .footer-links a[href*="/releases/tag/rust-"]';
+  for (const link of document.querySelectorAll(blocked)) {
     link.addEventListener('click', event => {
       event.preventDefault();
       window.alert(message);

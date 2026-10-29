@@ -273,3 +273,11 @@ const backendStrings = {
   es:{backendGpu:'GPU: {layers}/{total} capas del modelo',backendCpu:'CPU: modelo cargado',backendUnknown:'Dispositivo no confirmado',backendAvailable:'WebGPU disponible (uso no confirmado)',backendUnavailable:'WebGPU no disponible',backendNotLoaded:'Carga un modelo para comprobar el dispositivo'}
 };
 for (const language of Object.keys(backendStrings)) Object.assign(translations[language], backendStrings[language]);
+const iosDiagnosticStrings = {
+  en:{iosDiagnosticTitle:'iPhone diagnostics (experimental)',iosDiagnosticHelp:'Runs locally with CPU, one thread and a 512-token context. The log stays on this device.'},
+  it:{iosDiagnosticTitle:'Diagnostica iPhone (sperimentale)',iosDiagnosticHelp:'Funziona in locale con CPU, un thread e contesto di 512 token. Il registro resta sul dispositivo.'},
+  fr:{iosDiagnosticTitle:'Diagnostic iPhone (expérimental)',iosDiagnosticHelp:'Exécution locale sur CPU, un thread et contexte de 512 tokens. Le journal reste sur cet appareil.'},
+  de:{iosDiagnosticTitle:'iPhone-Diagnose (experimentell)',iosDiagnosticHelp:'Läuft lokal mit CPU, einem Thread und 512 Token Kontext. Das Protokoll bleibt auf dem Gerät.'},
+  es:{iosDiagnosticTitle:'Diagnóstico iPhone (experimental)',iosDiagnosticHelp:'Funciona localmente con CPU, un hilo y contexto de 512 tokens. El registro permanece en el dispositivo.'}
+};
+for (const language of Object.keys(iosDiagnosticStrings)) Object.assign(translations[language], iosDiagnosticStrings[language]);

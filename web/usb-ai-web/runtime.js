@@ -2,12 +2,13 @@ import { createSHA256 } from 'hash-wasm';
 import { normalizeChatMessages } from './chat-messages.js';
 import { CATALOG } from './catalog.js';
 import * as db from './storage.js';
-import { isSmartphone } from './phone-gate.js';
+import { isSmartphone, isIPhone } from './phone-gate.js';
 import { canSaveToFolder, existingModelsFolder, saveVerifiedFile } from './folder-models.js';
 import { groupLocalGgufs, isAuxiliaryGguf, WEB_FILE_LIMIT } from './hub.js';
 import { modelOptions, usesSafariCpu } from './browser-capability.js';
 import { creatorRequest } from './creator-context.js';
 import { createBackendDetector } from './backend-detection.js';
+import { iosDiagnosticsEnabled, iosDiagnostic } from './ios-diagnostics.js';
 
 const paths = { default: `${import.meta.env.BASE_URL}wasm/wllama.wasm` };
 let managerPromise;
@@ -29,6 +30,10 @@ async function instance(detector) {
   ]);
   const logger = Object.fromEntries(['debug','log','warn','error'].map(level => [level, (...args) => {
     detector.record(...args);
+    if (iosDiagnosticsEnabled()) {
+      const line = args.map(String).join(' ');
+      if (/(?:using|not using) compat mode|llama_context: constructing|llama_context: n_ctx\s|llama_model_loader: loaded meta data|load_tensors:.*model buffer|tokenizer.*(?:error|failed)|failed to (?:load|initialize)|out of memory/i.test(line)) iosDiagnostic('runtime', line.slice(0,300));
+    }
     LoggerWithoutDebug[level](...args);
   }]));
   const runtime = new Wllama(paths, { logger, allowOffline: true });
@@ -91,7 +96,15 @@ export async function downloadCurated(id, onProgress) {
   if (!item) throw Error('Unknown model');
   // The built-in test model must start without opening a directory picker.
   // Users can move the verified cached GGUF to a folder afterward.
-  return downloadVerified(item, onProgress, { preferCache: true });
+  iosDiagnostic('file', `download started · ${item.size} bytes`);
+  try {
+    const result = await downloadVerified(item, onProgress, { preferCache: true });
+    iosDiagnostic('file', 'download and checksum verified');
+    return result;
+  } catch (error) {
+    iosDiagnostic('file error', String(error?.message || error).slice(0,300));
+    throw error;
+  }
 }
 
 export async function moveCachedToFolder(model, onProgress) {
@@ -157,7 +170,7 @@ export async function deleteModel(id) {
 }
 export async function unload() { if (engine) await engine.exit(); engine = undefined; loadedId = undefined; creatorModel = undefined; backendInfo = undefined; }
 export async function loadModel(id) {
-  if (isSmartphone()) throw Error('SMARTPHONE_DISABLED');
+  if (isSmartphone() && !isIPhone()) throw Error('SMARTPHONE_DISABLED');
   if (loadedId === id && engine) return;
   const record = await db.get('models', id);
   if (record && isAuxiliaryGguf(record.filename || record.shards?.[0]?.url || record.url || record.name)) throw Error('AUXILIARY_GGUF');
@@ -174,26 +187,31 @@ export async function loadModel(id) {
   if (!record && !files) throw Error('Model unavailable');
   if (files?.some(file => file.size > WEB_FILE_LIMIT)) throw Error('MODEL_NEEDS_SPLIT');
   await unload();
-  const options = modelOptions();
+  const diagnostic = iosDiagnosticsEnabled();
+  const options = modelOptions({iosDiagnostic:diagnostic});
+  if (diagnostic) iosDiagnostic('environment', `WASM=${typeof WebAssembly !== 'undefined'} · SharedArrayBuffer=${typeof SharedArrayBuffer !== 'undefined'} · crossOriginIsolated=${globalThis.crossOriginIsolated === true} · WebGPU=${!!navigator.gpu} · deviceMemory=${navigator.deviceMemory ?? 'unknown'} · threads=1 · context=512 · GPU layers=0`);
   const detector = createBackendDetector({ forceCpu: options.n_gpu_layers === 0 });
-  const next = await instance(detector);
+  let next;
+  try { next = await instance(detector); }
+  catch (error) { iosDiagnostic('engine error', String(error?.message || error).slice(0,300)); throw error; }
   let timer;
   try {
     const loading = (async () => {
-      if (files) return next.loadModel(files, options);
+      if (files) { iosDiagnostic('file', `${files.length} GGUF part(s), ${files.reduce((n, f) => n + f.size, 0)} bytes ready`); iosDiagnostic('model/context', 'initialization started'); return next.loadModel(files, options); }
       const models = await (await modelManager()).getModels();
       const cached = models.find(model => model.url === record.url || model.source?.url === record.url);
       if (!cached) throw Error('Cached model unavailable. Download it again.');
-      return next.loadModel(cached, options);
+      iosDiagnostic('file', 'cached GGUF selected'); iosDiagnostic('model/context', 'initialization started'); return next.loadModel(cached, options);
     })();
     // Safari's compatibility WASM can spend well over 90 seconds compiling on a
     // phone. A short deadline incorrectly reported a healthy load as a failure.
     await Promise.race([loading, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('LOAD_TIMEOUT')), 300_000); })]);
     const metadata = next.getModelMetadata();
+    if (diagnostic) iosDiagnostic('model/context', `initialized · training context=${metadata.hparams.nCtxTrain} · vocabulary=${metadata.hparams.nVocab} · tokenizer=${metadata.meta?.['tokenizer.ggml.model'] || 'unknown'} · threads=${next.getNumThreads()} · multithread=${next.isMultithread()} · chat template=${!!next.getChatTemplate()} · add BOS=${next.mustAddBosToken()} · add EOS=${next.mustAddEosToken()}`);
     const creatorMode = metadata.meta?.['llamanest.creator.mode'];
     creatorModel = ['qa', 'lm'].includes(creatorMode) ? { mode: creatorMode, context: metadata.hparams.nCtxTrain } : undefined;
     engine = next; loadedId = id; backendInfo = detector.value();
-  } catch (error) { void next.exit().catch(() => {}); throw error; }
+  } catch (error) { iosDiagnostic('load error', String(error?.message || error).slice(0,300)); void next.exit().catch(() => {}); throw error; }
   finally { clearTimeout(timer); }
 }
 export async function streamChat(messages, onToken, signal, thinking = false) {
@@ -202,7 +220,7 @@ export async function streamChat(messages, onToken, signal, thinking = false) {
   const current = engine;
   const safariCpu = usesSafariCpu();
   let requestMessages = normalizeChatMessages(messages);
-  let maxTokens = safariCpu ? 768 : 3072;
+  let maxTokens = iosDiagnosticsEnabled() ? 128 : safariCpu ? 768 : 3072;
   if (creatorModel) {
     const request = creatorRequest(requestMessages, creatorModel.mode, creatorModel.context, maxTokens);
     requestMessages = request.messages;
@@ -216,6 +234,7 @@ export async function streamChat(messages, onToken, signal, thinking = false) {
   const interrupt = reason => {
     if (settled) return;
     settled = true;
+    iosDiagnostic('generation interrupted', reason);
     if (engine === current) { engine = undefined; loadedId = undefined; backendInfo = undefined; }
     // Wllama terminates its worker in exit(). A busy WASM call cannot be
     // interrupted reliably with abortSignal alone on Safari.
@@ -228,8 +247,9 @@ export async function streamChat(messages, onToken, signal, thinking = false) {
   if (signal.aborted) abort();
   // The deadline is only for receiving the first visible token. Once text
   // starts streaming, slow local generation can finish normally.
-  if (safariCpu && !settled) timer = setTimeout(() => interrupt('GENERATION_TIMEOUT'), 90_000);
-  const generation = current.createChatCompletion({
+  if ((safariCpu || iosDiagnosticsEnabled()) && !settled) timer = setTimeout(() => interrupt('GENERATION_TIMEOUT'), 90_000);
+  iosDiagnostic('prefill', 'generation request submitted; waiting for first visible token');
+  const generation = Promise.resolve().then(() => current.createChatCompletion({
     messages: requestMessages,
     max_tokens: maxTokens,
     temperature: 0.7,
@@ -249,16 +269,20 @@ export async function streamChat(messages, onToken, signal, thinking = false) {
       const choice = chunk.choices?.[0];
       const token = choice?.delta?.content ?? choice?.message?.content;
       const reasoning = choice?.delta?.reasoning_content;
-      if (reasoning && thinking) { clearTimeout(timer); firstTokenAt ??= performance.now(); onToken(`<think>${reasoning}</think>`); }
-      if (token) { clearTimeout(timer); firstTokenAt ??= performance.now(); onToken(token); }
+      if (reasoning && thinking) { if (!firstTokenAt) iosDiagnostic('decoding', 'first reasoning token received'); clearTimeout(timer); firstTokenAt ??= performance.now(); onToken(`<think>${reasoning}</think>`); }
+      if (token) { if (!firstTokenAt) iosDiagnostic('decoding', 'first visible token received'); clearTimeout(timer); firstTokenAt ??= performance.now(); onToken(token); }
     }
-  });
+  }));
   try {
     await Promise.race([generation, interrupted]);
+    iosDiagnostic('generation', firstTokenAt ? 'completed' : 'completed without visible tokens');
     if (usage && !Number.isFinite(usage.tokensPerSecond) && firstTokenAt) {
       usage.tokensPerSecond = usage.outputTokens / Math.max((performance.now() - firstTokenAt) / 1000, 0.001);
     }
     return usage;
+  } catch (error) {
+    iosDiagnostic('generation error', String(error?.message || error).slice(0,300));
+    throw error;
   } finally {
     settled = true;
     clearTimeout(timer);

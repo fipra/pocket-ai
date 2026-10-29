@@ -1,6 +1,9 @@
 export function isSmartphone(userAgent = navigator.userAgent, mobileHint = navigator.userAgentData?.mobile) {
   return mobileHint === true || /iPhone|iPod|Android.*Mobile/i.test(userAgent);
 }
+export function isIPhone(userAgent = navigator.userAgent) {
+  return /iPhone|iPod/i.test(userAgent);
+}
 
 const copy = {
   en: ['PC and Mac only', 'Not available for smartphones yet, but we are working on it.'],
