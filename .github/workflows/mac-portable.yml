@@ -50,12 +50,19 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PyTorch for Model Creator tests
+        if: ${{ matrix.architecture == 'arm64' }}
+        run: python3 -m pip install 'torch==2.6.0'
       - name: Install build tools
         run: |
           rustup update stable
           brew install llama.cpp poppler
       - name: Test and package
         run: |
+          if [ '${{ matrix.architecture }}' = 'arm64' ]; then export LLAMANEST_CREATOR_PYTHON="$(command -v python3)"; fi
           cargo test --locked
           python3 -m unittest discover -s scripts -p 'test_*.py'
           python3 scripts/package-mac.py

@@ -3,7 +3,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import torch
+try:
+    import torch
+except ModuleNotFoundError as error:
+    if error.name != 'torch':
+        raise
+    raise unittest.SkipTest('Model Creator tests require PyTorch; install torch to run them.') from error
 import model_creator as m
 
 torch.set_num_threads(1)
