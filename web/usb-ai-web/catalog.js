@@ -15,3 +15,6 @@ export const IOS_DIAGNOSTIC_MODEL = {
   sha256:'8030f04528538d47bda434f6f0bdf3952c40a58123e4d5e755332f23731a8684',
   license:'Apache-2.0', mobile:true
 };
+export function starterModelForMode(iosDiagnostic = false) {
+  return iosDiagnostic ? IOS_DIAGNOSTIC_MODEL : CATALOG[0];
+}

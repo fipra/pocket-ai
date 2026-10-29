@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { isSmartphone, isIPhone } from '../phone-gate.js';
 import { iosDiagnosticsEnabled } from '../ios-diagnostics.js';
-import { IOS_DIAGNOSTIC_MODEL } from '../catalog.js';
+import { IOS_DIAGNOSTIC_MODEL, starterModelForMode } from '../catalog.js';
 
 test('identifies phones and retains the Android gate', () => {
   assert.equal(isSmartphone('Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)', undefined), true);
@@ -23,4 +23,6 @@ test('the iPhone diagnostic model has a pinned source, size and hash', () => {
   assert.match(IOS_DIAGNOSTIC_MODEL.url, /resolve\/[a-f0-9]{40}\//);
   assert.match(IOS_DIAGNOSTIC_MODEL.sha256, /^[a-f0-9]{64}$/);
   assert.equal(IOS_DIAGNOSTIC_MODEL.size,105454144);
+  assert.equal(starterModelForMode(true).id, IOS_DIAGNOSTIC_MODEL.id);
+  assert.equal(starterModelForMode(false).id, 'llama-3.2-1b');
 });
