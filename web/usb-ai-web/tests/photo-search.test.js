@@ -7,6 +7,10 @@ test('photo selection accepts common local images and rejects unsupported or exc
   assert.equal(validPhotoFiles([image, {type:'image/png',size:1024}]), true);
   assert.equal(validPhotoFiles([]), false);
   assert.equal(validPhotoFiles([{type:'image/svg+xml',size:100}]), false);
+  assert.equal(validPhotoFiles([{name:'FOTO.JPG',type:'',size:100}]), true);
+  assert.equal(validPhotoFiles([{name:'foto.webp',type:'',size:100}]), true);
+  assert.equal(validPhotoFiles([{name:'foto.jpg',type:'text/html',size:100}]), false);
+  assert.equal(validPhotoFiles([{name:'foto.heic',type:'',size:100}]), false);
   assert.equal(validPhotoFiles([{type:'image/jpeg',size:20_000_001}]), false);
   assert.equal(validPhotoFiles(Array(21).fill(image)), false);
 });

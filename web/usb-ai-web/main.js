@@ -318,11 +318,13 @@ $('menu').onclick = () => $('sidebar').classList.toggle('open');
 for (const id of ['models-open','model-trigger']) $(id).onclick = () => { closeSidebar(); renderModels(); renderSearch(); $('models-dialog').showModal(); };
 $('docs-open').onclick = () => { closeSidebar(); renderDocs(); $('docs-dialog').showModal(); };
 $('photos-open').onclick = () => { closeSidebar(); $('photo-dialog').showModal(); };
+$('photo-choose').onclick = () => $('photo-files').click();
 let photoWorker, photoFiles = [], photoSelection = 0, photoUrls = [], photoBusy = false;
 function photoSetBusy(value) {
   photoBusy = value;
   $('photo-submit').disabled = value;
   $('photo-files').disabled = value;
+  $('photo-choose').disabled = value;
   $('photo-stop').hidden = !value;
 }
 function photoClearResults() {
