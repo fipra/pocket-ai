@@ -547,6 +547,10 @@ struct Workspace {
     external_models: Vec<ExternalModel>,
     #[serde(default)]
     thinking: bool,
+    #[serde(default)]
+    inference_backend: String,
+    #[serde(default)]
+    inference_threads: u32,
 }
 
 fn choose_existing_model_file() -> Result<Option<PathBuf>, String> {
@@ -1273,6 +1277,62 @@ fn app_request(question: &str) -> bool {
     terms.iter().any(|term| build.contains(&term.as_str()))
         && terms.iter().any(|term| target.contains(&term.as_str()))
 }
+// llama.cpp discovers split GGUF files from the first, conventionally named part.
+fn split_gguf_name(name: &str) -> Option<(&str, usize, usize)> {
+    let stem = name
+        .strip_suffix(".gguf")
+        .or_else(|| name.strip_suffix(".GGUF"))?;
+    let (prefix, total) = stem.rsplit_once("-of-")?;
+    let (base, index) = prefix.rsplit_once('-')?;
+    if base.is_empty()
+        || index.len() != 5
+        || total.len() != 5
+        || !index.bytes().all(|b| b.is_ascii_digit())
+        || !total.bytes().all(|b| b.is_ascii_digit())
+    {
+        return None;
+    }
+    let index: usize = index.parse().ok()?;
+    let total: usize = total.parse().ok()?;
+    if index == 0 || total < 2 || index > total || total > 9999 {
+        return None;
+    }
+    Some((base, index, total))
+}
+
+fn model_parts(path: &Path) -> Result<Vec<PathBuf>, String> {
+    let name = path
+        .file_name()
+        .and_then(|v| v.to_str())
+        .ok_or("Invalid GGUF filename")?;
+    let Some((base, index, total)) = split_gguf_name(name) else {
+        return Ok(vec![path.to_owned()]);
+    };
+    if index != 1 {
+        return Err("Select the first GGUF part (00001)".into());
+    }
+    let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("gguf");
+    let dir = path.parent().ok_or("Invalid GGUF folder")?;
+    let mut parts = Vec::with_capacity(total);
+    for n in 1..=total {
+        let part = dir.join(format!("{base}-{n:05}-of-{total:05}.{extension}"));
+        let mut file = fs::File::open(&part).map_err(|_| {
+            format!(
+                "Missing GGUF part: {}",
+                part.file_name().unwrap_or_default().to_string_lossy()
+            )
+        })?;
+        let mut head = [0; 4];
+        file.read_exact(&mut head)
+            .map_err(|_| format!("Invalid GGUF part: {}", part.display()))?;
+        if &head != b"GGUF" {
+            return Err(format!("Invalid GGUF part: {}", part.display()));
+        }
+        parts.push(part);
+    }
+    Ok(parts)
+}
+
 impl App {
     fn language(&self) -> &'static str {
         normalize_language(&self.db.language)
@@ -1309,6 +1369,9 @@ impl App {
                             if !name.starts_with("._")
                                 && !name.to_ascii_lowercase().contains("mmproj")
                                 && !out.contains(&name.to_owned())
+                                && split_gguf_name(name).map_or(true, |(_, index, _)| {
+                                    index == 1 && model_parts(&path).is_ok()
+                                })
                             {
                                 out.push(name.to_owned());
                             }
@@ -1356,6 +1419,7 @@ impl App {
         for dir in [&self.models, &self.root.join("models")] {
             let path = dir.join(name);
             if path.is_file() {
+                model_parts(&path)?;
                 return Ok(path);
             }
         }
@@ -1366,6 +1430,7 @@ impl App {
             .find(|model| model.name == name)
         {
             if model.path.is_file() {
+                model_parts(&model.path)?;
                 return Ok(model.path.clone());
             }
         }
@@ -1474,8 +1539,10 @@ impl App {
             }
             fs::rename(&temporary, &target).map_err(|e| e.to_string())?;
             self.db.external_models.retain(|model| model.name != name);
-            self.inference = None;
-            self.selected = Some(name.to_owned());
+            if split_gguf_name(name).is_none() || model_parts(&target).is_ok() {
+                self.inference = None;
+                self.selected = Some(name.to_owned());
+            }
             self.save()?;
             Ok(self.state())
         })();
@@ -1487,7 +1554,8 @@ impl App {
     fn state(&self) -> Value {
         let installed = self.models();
         let model_details = installed.iter().filter_map(|name| {
-            let bytes = fs::metadata(self.model_path(name).ok()?).ok()?.len();
+            let path = self.model_path(name).ok()?;
+            let bytes = model_parts(&path).ok()?.iter().try_fold(0u64, |sum, part| Some(sum.checked_add(fs::metadata(part).ok()?.len())?))?;
             let gib = bytes as f64 / 1_073_741_824.0;
             let minimum = (gib + 2.0).ceil() as u64;
             let comfortable = (gib * 1.3 + 4.0).ceil() as u64;
@@ -1503,7 +1571,7 @@ impl App {
                 "installed":installed.contains(&model.file),"fit":fit,"recommended":recommendation==Some(model.id.as_str())})
         }).collect::<Vec<_>>();
         json!({"chats":self.db.chats,"memory":self.db.memory,"documents":self.db.documents.iter().map(|d|json!({"id":d.id,"name":d.name,"count":d.chunks.len(),"chatId":d.chat_id})).collect::<Vec<_>>(),
-            "models":installed,"modelDetails":model_details,"ignoredModelFiles":self.ignored_model_files(),"modelsDir":self.models,"model":self.selected,"root":self.root,"language":self.language(),"thinking":self.db.thinking,"catalog":catalog,"hardware":self.hardware,
+            "models":installed,"modelDetails":model_details,"ignoredModelFiles":self.ignored_model_files(),"modelsDir":self.models,"model":self.selected,"root":self.root,"language":self.language(),"thinking":self.db.thinking,"inferenceBackend":if self.db.inference_backend.is_empty() { "auto" } else { &self.db.inference_backend },"inferenceThreads":self.db.inference_threads,"catalog":catalog,"hardware":self.hardware,
             "download":self.download_status(),"quantizeAvailable":quantize_available(),"quantize":self.quantization.as_ref().map(|job|job.lock().unwrap().status())})
     }
     fn download_status(&self) -> Value {
@@ -1587,6 +1655,23 @@ impl App {
                 }
                 self.db.language = value.to_owned();
                 self.save()?;
+                Ok(self.state())
+            }
+            "set-inference-options" => {
+                let backend = data["backend"].as_str().ok_or("Missing backend")?;
+                let threads = data["threads"].as_u64().ok_or("Invalid thread count")?;
+                if !["auto", "cpu", "gpu"].contains(&backend) || ![0, 1, 2, 4, 8].contains(&threads)
+                {
+                    return Err("Invalid inference options".into());
+                }
+                if self.db.inference_backend != backend
+                    || self.db.inference_threads != threads as u32
+                {
+                    self.inference = None;
+                    self.db.inference_backend = backend.to_owned();
+                    self.db.inference_threads = threads as u32;
+                    self.save()?;
+                }
                 Ok(self.state())
             }
             "select-model" => {
@@ -1903,7 +1988,12 @@ impl App {
         }
         if self.inference.is_none() {
             let mut load_error = String::new();
-            for cpu_only in [false, true] {
+            let modes: &[bool] = match self.db.inference_backend.as_str() {
+                "cpu" => &[true],
+                "gpu" => &[false],
+                _ => &[false, true],
+            };
+            for &cpu_only in modes {
                 if cpu_only && env::var_os("USB_AI_REQUIRE_GPU").is_some_and(|value| value == "1") {
                     break;
                 }
@@ -1916,9 +2006,14 @@ impl App {
                     .args(["--host", "127.0.0.1", "--port", &port.to_string(), "-m"])
                     .arg(model)
                     .args(["-c", "8192", "--no-webui"]);
+                if self.db.inference_threads > 0 {
+                    command.args(["--threads", &self.db.inference_threads.to_string()]);
+                }
                 if cpu_only {
                     command.args(["--device", "none", "-ngl", "0"]);
-                } else if env::var_os("USB_AI_GPU").is_some_and(|value| value == "1") {
+                } else if self.db.inference_backend == "gpu"
+                    || env::var_os("USB_AI_GPU").is_some_and(|value| value == "1")
+                {
                     command.args(["-ngl", "999"]);
                 }
                 let child = match command
@@ -3258,6 +3353,42 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
     #[test]
+    fn split_gguf_requires_all_parts_and_counts_total_size() {
+        let root = env::temp_dir().join(format!("usb-ai-split-model-{}", id()));
+        let models = root.join("models");
+        fs::create_dir_all(&models).unwrap();
+        let first = "example-00001-of-00002.gguf";
+        let second = "example-00002-of-00002.gguf";
+        let mut app = App {
+            root: root.clone(),
+            models: models.clone(),
+            db: Workspace::default(),
+            selected: None,
+            catalog: model_catalog(),
+            hardware: detect_hardware(),
+            downloading: None,
+            download_error: None,
+            inference: None,
+            quantization: None,
+        };
+        app.import_model(second, &mut io::Cursor::new(b"GGUFsecond"), 10)
+            .unwrap();
+        assert!(app.models().is_empty());
+        assert!(app.selected.is_none());
+        app.import_model(first, &mut io::Cursor::new(b"GGUFfirst"), 9)
+            .unwrap();
+        assert_eq!(app.models(), vec![first.to_string()]);
+        assert_eq!(app.selected.as_deref(), Some(first));
+        assert_eq!(app.state()["modelDetails"][0]["sizeBytes"], 19);
+        assert!(app.model_path(second).is_err());
+        fs::remove_file(models.join(second)).unwrap();
+        assert!(app.models().is_empty());
+        assert!(app.model_path(first).is_err());
+        fs::write(models.join(second), b"bad!").unwrap();
+        assert!(app.model_path(first).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
     fn download_progress_reads_the_visible_models_folder() {
         let root = env::temp_dir().join(format!("usb-ai-download-path-{}", id()));
         let models = root.join("models");
@@ -3571,6 +3702,32 @@ mod tests {
             serde_json::from_slice(&fs::read(root.join("workspace.json")).unwrap()).unwrap();
         assert_eq!(saved.language, "de");
         assert_eq!(app.state()["thinking"], false);
+        assert_eq!(app.state()["inferenceBackend"], "auto");
+        assert_eq!(app.state()["inferenceThreads"], 0);
+        let settings = app
+            .command(
+                "set-inference-options",
+                json!({"backend":"cpu","threads":4}),
+            )
+            .unwrap();
+        assert_eq!(settings["inferenceBackend"], "cpu");
+        assert_eq!(settings["inferenceThreads"], 4);
+        let saved: Workspace =
+            serde_json::from_slice(&fs::read(root.join("workspace.json")).unwrap()).unwrap();
+        assert_eq!(saved.inference_backend, "cpu");
+        assert_eq!(saved.inference_threads, 4);
+        assert!(app
+            .command(
+                "set-inference-options",
+                json!({"backend":"invalid","threads":4})
+            )
+            .is_err());
+        assert!(app
+            .command(
+                "set-inference-options",
+                json!({"backend":"cpu","threads":1000})
+            )
+            .is_err());
         assert_eq!(
             app.command("set-thinking", json!({"enabled":true}))
                 .unwrap()["thinking"],

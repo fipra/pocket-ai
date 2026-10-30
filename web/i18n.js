@@ -148,3 +148,21 @@ const thinkingStrings = {
   es: { thinkingOn: 'Razonamiento activado', thinkingOff: 'Razonamiento desactivado' }
 };
 for (const language of Object.keys(thinkingStrings)) Object.assign(window.USB_AI_I18N[language], thinkingStrings[language]);
+
+const splitModelStrings = {
+ en:{splitInvalid:'Select all numbered GGUF parts of the same model together.',splitHint:'For a split model, select all numbered GGUF files together.'},
+ it:{splitInvalid:'Seleziona insieme tutte le parti GGUF numerate dello stesso modello.',splitHint:'Per un modello diviso, seleziona insieme tutti i file GGUF numerati.'},
+ fr:{splitInvalid:'Sélectionnez ensemble toutes les parties GGUF numérotées du même modèle.',splitHint:'Pour un modèle divisé, sélectionnez tous les fichiers GGUF numérotés.'},
+ de:{splitInvalid:'Wähle alle nummerierten GGUF-Teile desselben Modells zusammen aus.',splitHint:'Wähle bei einem geteilten Modell alle nummerierten GGUF-Dateien zusammen aus.'},
+ es:{splitInvalid:'Selecciona juntas todas las partes GGUF numeradas del mismo modelo.',splitHint:'Para un modelo dividido, selecciona todos los archivos GGUF numerados juntos.'}
+};
+for (const language of Object.keys(splitModelStrings)) Object.assign(window.USB_AI_I18N[language], splitModelStrings[language]);
+
+const inferenceSettingsStrings = {
+ en:{inferenceSettings:'Inference settings',inferenceBackend:'Device',inferenceThreads:'CPU threads',inferenceAuto:'Automatic',inferenceHelp:'Automatic keeps the existing behavior. CPU disables GPU offloading; GPU requests GPU offloading and requires a compatible llama-server build. Changes reload the model on the next message.'},
+ it:{inferenceSettings:'Impostazioni di inferenza',inferenceBackend:'Dispositivo',inferenceThreads:'Thread CPU',inferenceAuto:'Automatico',inferenceHelp:'Automatico mantiene il comportamento attuale. CPU disattiva la GPU; GPU richiede l’accelerazione e una versione compatibile di llama-server. Le modifiche ricaricano il modello al prossimo messaggio.'},
+ fr:{inferenceSettings:'Paramètres d’inférence',inferenceBackend:'Périphérique',inferenceThreads:'Threads CPU',inferenceAuto:'Automatique',inferenceHelp:'Automatique conserve le comportement actuel. CPU désactive le GPU ; GPU demande une version compatible de llama-server. Le modèle sera rechargé au prochain message.'},
+ de:{inferenceSettings:'Inferenz-Einstellungen',inferenceBackend:'Gerät',inferenceThreads:'CPU-Threads',inferenceAuto:'Automatisch',inferenceHelp:'Automatisch behält das bisherige Verhalten bei. CPU deaktiviert die GPU; GPU benötigt eine kompatible llama-server-Version. Das Modell wird bei der nächsten Nachricht neu geladen.'},
+ es:{inferenceSettings:'Configuración de inferencia',inferenceBackend:'Dispositivo',inferenceThreads:'Hilos de CPU',inferenceAuto:'Automático',inferenceHelp:'Automático mantiene el comportamiento actual. CPU desactiva la GPU; GPU requiere una versión compatible de llama-server. El modelo se recargará en el siguiente mensaje.'}
+};
+for (const language of Object.keys(inferenceSettingsStrings)) Object.assign(window.USB_AI_I18N[language], inferenceSettingsStrings[language]);
