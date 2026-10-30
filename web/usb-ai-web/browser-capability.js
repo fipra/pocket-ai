@@ -25,6 +25,15 @@ export function isWindows(userAgent = globalThis.navigator?.userAgent || '', pla
   return /windows/i.test(platform) || /windows nt/i.test(userAgent);
 }
 
+export function inferencePreferences(settings = {}, windows = isWindows()) {
+  const threads = String(settings?.cpuThreads);
+  const backend = settings?.windowsBackend;
+  return {
+    cpuThreads: ['1', '2', '4', 'auto'].includes(threads) ? threads : windows ? '4' : '1',
+    windowsBackend: ['auto', 'cpu', 'gpu'].includes(backend) ? backend : windows ? 'cpu' : 'auto'
+  };
+}
+
 export function modelOptions({ safariCpu = usesSafariCpu(), deviceMemory = navigator.deviceMemory, iosDiagnostic = false, contextSize: requestedContext = 0, threads = 1, hardwareConcurrency = globalThis.navigator?.hardwareConcurrency, backend = 'auto', windows = isWindows() } = {}) {
   if (iosDiagnostic) return { n_ctx: 512, n_batch: 64, n_threads: 1, n_gpu_layers: 0, jinja: true, reasoning: true };
   if (safariCpu) return { n_ctx: 2048, n_batch: 64, n_threads: 1, n_gpu_layers: 0, jinja: true, reasoning: true };
