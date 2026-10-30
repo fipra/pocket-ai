@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isSafari, isFirefox, largeModelWarningBrowser, usesSafariCpu, modelOptions, needsSafariFallback, generationLimit, threadCount, isWindows, inferencePreferences } from '../browser-capability.js';
+import { isSafari, isFirefox, largeModelWarningBrowser, usesSafariCpu, modelOptions, needsSafariFallback, generationLimit, threadCount, isWindows, inferencePreferences, hasUsableWebGpu } from '../browser-capability.js';
 
 const safari = 'Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15';
 const chrome = 'Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
@@ -57,11 +57,22 @@ test('backend choice is limited to Windows and leaves the default unchanged', ()
   assert.equal(modelOptions({iosDiagnostic:true, windows:true, backend:'gpu'}).n_gpu_layers, 0);
 });
 
-test('fresh Windows uses CPU and four threads while saved preferences are respected', () => {
+test('Windows chooses automatic GPU when available while preserving saved preferences', () => {
   assert.deepEqual(inferencePreferences({}, true), {cpuThreads:'4', windowsBackend:'cpu'});
+  assert.deepEqual(inferencePreferences({}, true, true), {cpuThreads:'4', windowsBackend:'auto'});
   assert.deepEqual(inferencePreferences({}, false), {cpuThreads:'1', windowsBackend:'auto'});
-  assert.deepEqual(inferencePreferences({cpuThreads:'1', windowsBackend:'gpu'}, true), {cpuThreads:'1', windowsBackend:'gpu'});
-  assert.deepEqual(inferencePreferences({cpuThreads:'2', windowsBackend:'auto'}, true), {cpuThreads:'2', windowsBackend:'auto'});
+  assert.deepEqual(inferencePreferences({cpuThreads:'1', windowsBackend:'cpu'}, true, true), {cpuThreads:'1', windowsBackend:'cpu'});
+  assert.deepEqual(inferencePreferences({cpuThreads:'1', windowsBackend:'gpu'}, true, false), {cpuThreads:'1', windowsBackend:'gpu'});
+  assert.deepEqual(inferencePreferences({cpuThreads:'2', windowsBackend:'auto'}, true, false), {cpuThreads:'2', windowsBackend:'auto'});
+});
+
+test('GPU detection checks the adapter, rejects software fallback and cannot hang startup', async () => {
+  assert.equal(await hasUsableWebGpu(undefined, 5), false);
+  assert.equal(await hasUsableWebGpu({requestAdapter:async () => ({isFallbackAdapter:false})}, 5), true);
+  assert.equal(await hasUsableWebGpu({requestAdapter:async () => ({isFallbackAdapter:true})}, 5), false);
+  assert.equal(await hasUsableWebGpu({requestAdapter:async () => null}, 5), false);
+  assert.equal(await hasUsableWebGpu({requestAdapter:async () => {throw Error('unavailable')}}, 5), false);
+  assert.equal(await hasUsableWebGpu({requestAdapter:() => new Promise(() => {})}, 5), false);
 });
 
 test('Safari CPU avoids automatic 3B loading while retaining small models', () => {

@@ -25,12 +25,28 @@ export function isWindows(userAgent = globalThis.navigator?.userAgent || '', pla
   return /windows/i.test(platform) || /windows nt/i.test(userAgent);
 }
 
-export function inferencePreferences(settings = {}, windows = isWindows()) {
+export async function hasUsableWebGpu(gpu = globalThis.navigator?.gpu, timeoutMs = 3000) {
+  if (!gpu || typeof gpu.requestAdapter !== 'function') return false;
+  let timeout;
+  try {
+    const adapter = await Promise.race([
+      gpu.requestAdapter(),
+      new Promise(resolve => { timeout = setTimeout(() => resolve(null), timeoutMs); })
+    ]);
+    return !!adapter && adapter.isFallbackAdapter !== true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export function inferencePreferences(settings = {}, windows = isWindows(), webGpuAvailable = false) {
   const threads = String(settings?.cpuThreads);
   const backend = settings?.windowsBackend;
   return {
     cpuThreads: ['1', '2', '4', 'auto'].includes(threads) ? threads : windows ? '4' : '1',
-    windowsBackend: ['auto', 'cpu', 'gpu'].includes(backend) ? backend : windows ? 'cpu' : 'auto'
+    windowsBackend: ['auto', 'cpu', 'gpu'].includes(backend) ? backend : windows && !webGpuAvailable ? 'cpu' : 'auto'
   };
 }
 
