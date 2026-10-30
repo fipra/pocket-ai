@@ -3,6 +3,8 @@
 /PocketAI-data/
 /.venv-creator/
 /models/*.gguf
+/*.gguf
+/llama-b11836-bin-macos-arm64.tar.gz
 /remote/models/
 /remote/token.local.txt
 /remote/downloads/

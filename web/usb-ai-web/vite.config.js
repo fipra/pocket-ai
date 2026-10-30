@@ -31,7 +31,7 @@ export default defineConfig({
     copyFileSync(resolve(import.meta.dirname, '..', 'node_modules', '@wllama', 'wllama-compat', 'wasm', 'wllama.wasm'), resolve(dest, 'wllama-compat.wasm'));
     const dist = resolve(import.meta.dirname, '..', 'dist');
     const assets = readdirSync(resolve(dist, 'assets'))
-      .filter(name => !name.startsWith('pdf-') && !name.startsWith('pdf.worker.'))
+      .filter(name => !name.startsWith('pdf-') && !name.startsWith('pdf.worker.') && !name.startsWith('ort-wasm-') && !name.startsWith('transformers.web-'))
       .map(name => `${basePath}assets/${name}`);
     const worker = resolve(dist, 'sw.js');
     writeFileSync(worker, readFileSync(worker, 'utf8').replace('__PRECACHE__', JSON.stringify(assets)).replaceAll('__BASE__', basePath));
