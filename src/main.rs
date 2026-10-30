@@ -881,7 +881,7 @@ fn model_template_messages(mut messages: Value, model: &Path, thinking: bool) ->
         .unwrap_or_default()
         .to_string_lossy()
         .to_ascii_lowercase();
-    if name.contains("qwen3") || name.contains("qwen-3") {
+    if (name.contains("qwen3") || name.contains("qwen-3")) && !is_qwen35(model) {
         if let Some(last) = messages.as_array_mut().and_then(|rows| rows.last_mut()) {
             if let Some(content) = last["content"].as_str() {
                 last["content"] = json!(format!(
@@ -894,14 +894,54 @@ fn model_template_messages(mut messages: Value, model: &Path, thinking: bool) ->
     messages
 }
 
+fn is_qwen35(model: &Path) -> bool {
+    let name = model
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_ascii_lowercase();
+    name.contains("qwen3.5") || name.contains("qwen-3.5")
+}
+
+// Some llama-server versions leave the opening reasoning tag in the prompt,
+// so it never appears in completion tokens. Qwen 3.5's template uses an empty
+// thinking block when thinking is disabled. Preserve the template's prefix
+// for other models and when no opening marker is present.
+fn qwen35_reasoning_prompt(formatted: String, model: &Path, thinking: bool) -> (String, bool) {
+    if !is_qwen35(model) {
+        return (formatted, false);
+    }
+    let trimmed = formatted.trim_end();
+    if trimmed.ends_with("<think>") {
+        return if thinking {
+            (formatted, true)
+        } else {
+            (format!("{trimmed}\n</think>\n\n"), false)
+        };
+    }
+    if trimmed.ends_with("<|im_start|>assistant") {
+        let marker = if thinking {
+            "<think>\n"
+        } else {
+            "<think>\n\n</think>\n\n"
+        };
+        return (format!("{trimmed}\n{marker}"), thinking);
+    }
+    (formatted, false)
+}
+
 fn apply_model_chat_template(
     port: u16,
     messages: &Value,
     model: &Path,
     thinking: bool,
 ) -> Result<String, String> {
-    let body =
-        json!({"messages":model_template_messages(messages.clone(), model, thinking)}).to_string();
+    let mut request =
+        json!({"messages":model_template_messages(messages.clone(), model, thinking)});
+    if is_qwen35(model) {
+        request["chat_template_kwargs"] = json!({"enable_thinking":thinking});
+    }
+    let body = request.to_string();
     let mut child = Command::new(if cfg!(windows) { "curl.exe" } else { "curl" })
         .args([
             "--fail",
@@ -2006,6 +2046,9 @@ impl App {
                     .args(["--host", "127.0.0.1", "--port", &port.to_string(), "-m"])
                     .arg(model)
                     .args(["-c", "8192", "--no-webui"]);
+                if is_qwen35(model) {
+                    command.arg("--jinja");
+                }
                 if self.db.inference_threads > 0 {
                     command.args(["--threads", &self.db.inference_threads.to_string()]);
                 }
@@ -2086,6 +2129,7 @@ impl App {
         if generation.cancelled.load(Ordering::SeqCst) {
             return Ok((String::new(), None));
         }
+        let mut prefixed_thinking = false;
         let body = if let Some(question) = question {
             let role_messages = match messages {
                 Some(messages) => messages.clone(),
@@ -2093,6 +2137,9 @@ impl App {
             };
             let formatted =
                 apply_model_chat_template(port, &role_messages, model, self.db.thinking)?;
+            let (formatted, thinking_in_prompt) =
+                qwen35_reasoning_prompt(formatted, model, self.db.thinking);
+            prefixed_thinking = thinking_in_prompt;
             if is_lab_export_model(model) {
                 lab_completion_request(formatted)
             } else {
@@ -2144,6 +2191,10 @@ impl App {
             child.stdout.take().unwrap()
         };
         let mut answer = String::new();
+        if prefixed_thinking {
+            answer.push_str("<think>");
+            update("<think>")?;
+        }
         let stream_result = read_completion_stream(BufReader::new(stdout), &mut answer, update);
         let mut child = generation.curl.lock().unwrap().take().unwrap();
         if stream_result.is_err() || generation.cancelled.load(Ordering::SeqCst) {
@@ -3568,6 +3619,40 @@ mod tests {
             )
             .unwrap(),
             "Ciao!"
+        );
+    }
+    #[test]
+    fn qwen35_respects_reasoning_mode_when_template_prefills_think_tag() {
+        let model = Path::new("Qwen3.5-9B-UD-IQ2_M-00001-of-00002.gguf");
+        let prompt = "<|im_start|>user\nciao<|im_end|>\n<|im_start|>assistant\n<think>\n";
+        let (disabled, mark_thinking) = qwen35_reasoning_prompt(prompt.into(), model, false);
+        assert_eq!(disabled, format!("{}\n</think>\n\n", prompt.trim_end()));
+        assert!(!mark_thinking);
+        let (enabled, mark_thinking) = qwen35_reasoning_prompt(prompt.into(), model, true);
+        assert_eq!(enabled, prompt);
+        assert!(mark_thinking);
+        let already_closed = "<|im_start|>assistant\n<think>\n\n</think>\n\n";
+        assert_eq!(
+            qwen35_reasoning_prompt(already_closed.into(), model, false),
+            (already_closed.into(), false)
+        );
+        assert_eq!(
+            qwen35_reasoning_prompt(prompt.into(), Path::new("other.gguf"), false),
+            (prompt.into(), false)
+        );
+        let legacy = "<|im_start|>assistant\n";
+        assert_eq!(
+            qwen35_reasoning_prompt(legacy.into(), model, false),
+            (format!("{legacy}<think>\n\n</think>\n\n"), false)
+        );
+        assert_eq!(
+            qwen35_reasoning_prompt(legacy.into(), model, true),
+            (format!("{legacy}<think>\n"), true)
+        );
+        let messages = json!([{"role":"user","content":"ciao"}]);
+        assert_eq!(
+            model_template_messages(messages.clone(), model, false),
+            messages
         );
     }
     #[test]
