@@ -55,7 +55,19 @@ function translate() { document.documentElement.lang = language; document.queryS
 function closeSidebar() { $('sidebar').classList.remove('open'); }
 function saveSettings() { return db.put('settings', { id: 'main', language, selectedId, activeId, thinking, remoteConfig, contextSize, outputLimit, cpuThreads, windowsBackend, semanticEnabled }); }
 function renderChats() { const list = $('chat-list'); list.replaceChildren(); if (!chats.length) list.append(node('p', tr('noChats'), 'empty')); for (const chat of [...chats].sort((a,b) => b.updated - a.updated)) { const button = node('button', chat.title, `chat-item${chat.id === activeId ? ' active' : ''}`); button.onclick = () => { activeId = chat.id; saveSettings(); render(); closeSidebar(); }; list.append(button); } }
-function renderMessages() { const box = $('messages'); box.replaceChildren(); const chat = chats.find(item => item.id === activeId); $('chat-actions').hidden = !chat?.messages.length; if (!chat?.messages.length) { const welcome = node('div', undefined, 'welcome'); welcome.append(node('div', '✦', 'welcome-mark'), node('h1', tr('welcome')), node('p', iosDiagnosticsEnabled() && !selectedId ? tr('iosStarterHint') : models.length ? tr('welcomeNote') : tr(usesSafariCpu() ? 'safariStarterHint' : 'starterHint'))); box.append(welcome); return; } for (const [messageIndex, message] of chat.messages.entries()) { const row = node('article', undefined, `message ${message.role}`); row.append(node('div', message.role === 'user' ? 'U' : '✦', 'avatar')); const content = node('div'); const body = node('div', undefined, 'message-body'); if (message.role === 'assistant') window.USB_AI_RESPONSE_VIEW.render(body, message, language, thinking); else window.USB_AI_CODE_VIEW.render(body, message.text, language); content.append(node('strong', message.role === 'user' ? tr('you') : tr('assistant')), body); if (message.role === 'user') window.USB_AI_CODE_VIEW.addEditButton(content, message, language, value => run(() => send(value, messageIndex, chat.id)), busy); if (message.role === 'assistant' && message.text) { const correction = node('button', tr('rememberCorrection'), 'memory-correction'); correction.onclick = () => { pendingMemoryPrompt = null; $('memory-id').value = ''; $('memory-text').value = ''; $('memory-dialog').showModal(); $('memory-text').focus(); }; content.append(correction); } if (message.sources?.length) { const details = node('details', undefined, 'source'); details.append(node('summary', `${tr('sources')} (${message.sources.length})`)); for (const source of message.sources) details.append(node('p', `${source.name}: ${source.text}`)); content.append(details); } row.append(content); box.append(row); } $('thread').scrollTop = $('thread').scrollHeight; }
+function renderMessages() { const box = $('messages'); box.replaceChildren(); const chat = chats.find(item => item.id === activeId); $('chat-actions').hidden = !chat?.messages.length; if (!chat?.messages.length) { const welcome = node('div', undefined, 'welcome'); welcome.append(node('div', '✦', 'welcome-mark'), node('h1', tr('welcome')), node('p', iosDiagnosticsEnabled() && !selectedId ? tr('iosStarterHint') : models.length ? tr('welcomeNote') : tr(usesSafariCpu() ? 'safariStarterHint' : 'starterHint'))); box.append(welcome); return; } for (const [messageIndex, message] of chat.messages.entries()) { const row = node('article', undefined, `message ${message.role}`); row.append(node('div', message.role === 'user' ? 'U' : '✦', 'avatar')); const content = node('div'); const body = node('div', undefined, 'message-body'); if (message.role === 'assistant') window.USB_AI_RESPONSE_VIEW.render(body, message, language, thinking); else window.USB_AI_CODE_VIEW.render(body, message.text, language); content.append(node('strong', message.role === 'user' ? tr('you') : tr('assistant')), body); if (message.role === 'user') window.USB_AI_CODE_VIEW.addEditButton(content, message, language, value => run(() => send(value, messageIndex, chat.id)), busy); if (message.role === 'assistant' && message.text) { const correction = node('button', tr('rememberCorrection'), 'memory-correction'); correction.onclick = () => { pendingMemoryPrompt = null; $('memory-id').value = ''; $('memory-text').value = ''; $('memory-dialog').showModal(); $('memory-text').focus(); }; content.append(correction); } if (message.sources?.length) { const details = node('details', undefined, 'source'); details.append(node('summary', `${tr('sources')} (${message.sources.length})`)); for (const source of message.sources) details.append(node('p', `${source.name}: ${source.text}`)); content.append(details); } if (message.text) content.append(messageActions(chat, message)); row.append(content); box.append(row); } $('thread').scrollTop = $('thread').scrollHeight; }
+function messageActions(chat, message) {
+  const actions = node('div', undefined, 'message-actions');
+  for (const [label, path, action] of [
+    ['copyMessage', 'M8 4h10a2 2 0 0 1 2 2v11h-2V6H8z M5 8h10a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z', async () => { try { await navigator.clipboard.writeText(message.text); setStatus(tr('messageCopied')); } catch { setStatus(tr('chatCopyError'), true); } }],
+    ['shareMessage', 'M12 15V3 M8 7l4-4 4 4 M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6', () => openChatShare({title:chat.title, messages:[message]})]
+  ]) {
+    const button = node('button', undefined, 'message-action'); button.type = 'button'; button.title = tr(label); button.setAttribute('aria-label', tr(label));
+    const svg = document.createElementNS('http://www.w3.org/2000/svg','svg'); svg.setAttribute('viewBox','0 0 24 24'); svg.setAttribute('aria-hidden','true');
+    const shape = document.createElementNS('http://www.w3.org/2000/svg','path'); shape.setAttribute('d',path); svg.append(shape); button.append(svg); button.onclick = action; actions.append(button);
+  }
+  return actions;
+}
 function appendModelAdvice(info, model, hardware, recommended = false) {
   const advice = modelGuidance(model, hardware);
   const detail = tr(advice.reason).replace('{minimum}', advice.memory.minimum).replace('{recommended}', advice.memory.recommended);
@@ -400,8 +412,8 @@ async function importChatFromLink() {
   catch { setStatus(tr('shareInvalid'), true); }
 }
 let shareData, shareLink;
-$('share-chat').onclick = async () => {
-  const chat = chats.find(item => item.id === activeId);
+$('share-chat').onclick = () => openChatShare(chats.find(item => item.id === activeId));
+async function openChatShare(chat) {
   if (!chat?.messages.length) { setStatus(tr('chatCopyEmpty')); return; }
   try { shareData = sharedChat(chat); }
   catch { setStatus(tr('shareTooLarge'), true); return; }
@@ -413,7 +425,7 @@ $('share-chat').onclick = async () => {
   $('share-link').value = shareLink || ''; $('share-link').hidden = !shareLink;
   $('share-copy').hidden = !shareLink; $('share-whatsapp').hidden = !shareLink;
   $('share-status').textContent = tr(shareLink ? 'shareLinkReady' : 'shareUseFile');
-};
+}
 $('share-copy').onclick = async () => {
   try { await navigator.clipboard.writeText(shareLink); $('share-status').textContent = tr('shareLinkCopied'); }
   catch { $('share-status').textContent = tr('chatCopyError'); }

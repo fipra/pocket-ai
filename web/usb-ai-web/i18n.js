@@ -337,3 +337,12 @@ const shareStrings = {
  es:{shareChat:'Compartir chat',importChat:'Importar archivo de chat',shareHelp:'Comparte los mensajes mediante enlace o archivo. El destinatario usa su propio modelo.',sharePreparing:'Preparando enlace…',shareLinkReady:'El enlace está listo.',shareUseFile:'El chat es demasiado largo para un enlace fiable o la compresión no está disponible. Envía el archivo.',shareCopyLink:'Copiar enlace',shareWhatsapp:'Abrir WhatsApp',shareFile:'Descargar archivo del chat',sharePrivacy:'Cualquiera con el enlace o el archivo puede leer la conversación. No incluye modelos ni adjuntos.',shareLinkCopied:'Enlace copiado.',shareImportConfirm:'¿Importar una copia de «{title}»?',shareImported:'Chat importado.',shareInvalid:'El chat no es válido, no es compatible o es demasiado grande.',shareTooLarge:'El chat supera el límite de 2 MB.'}
 };
 for (const language of Object.keys(shareStrings)) Object.assign(translations[language], shareStrings[language]);
+
+const messageActionStrings = {
+ en:{copyMessage:'Copy message',shareMessage:'Share message',messageCopied:'Message copied.'},
+ it:{copyMessage:'Copia messaggio',shareMessage:'Condividi messaggio',messageCopied:'Messaggio copiato.'},
+ fr:{copyMessage:'Copier le message',shareMessage:'Partager le message',messageCopied:'Message copié.'},
+ de:{copyMessage:'Nachricht kopieren',shareMessage:'Nachricht teilen',messageCopied:'Nachricht kopiert.'},
+ es:{copyMessage:'Copiar mensaje',shareMessage:'Compartir mensaje',messageCopied:'Mensaje copiado.'}
+};
+for (const language of Object.keys(messageActionStrings)) Object.assign(translations[language], messageActionStrings[language]);
