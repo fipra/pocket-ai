@@ -7,6 +7,7 @@ export default defineConfig({
   base: basePath,
   root: resolve(import.meta.dirname),
   publicDir: resolve(import.meta.dirname, 'public'),
+  worker: { format: 'es' },
   build: { outDir: resolve(import.meta.dirname, '..', 'dist'), emptyOutDir: true },
   plugins: [{ name: 'copy-wllama-wasm-and-precache', configureServer(server) {
     server.middlewares.use('/wasm/wllama.wasm', (request, response, next) => {

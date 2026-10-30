@@ -19,6 +19,7 @@ import { remoteModels, remoteDownload, remoteChat } from './remote.js';
 import { iosDiagnosticsEnabled, iosDiagnostic } from './ios-diagnostics.js';
 import { ensureSemanticIndex, semanticResults, embeddingQuery } from './semantic-search.js';
 import { loadEmbeddingModel, unloadEmbeddingModel, embedText, EMBEDDING_MODEL_ID } from './embedding-runtime.js';
+import { validPhotoFiles } from './photo-search.js';
 
 const $ = id => document.getElementById(id);
 let language = preferredLanguage();
@@ -316,6 +317,66 @@ $('new-chat').onclick = () => run(newChat);
 $('menu').onclick = () => $('sidebar').classList.toggle('open');
 for (const id of ['models-open','model-trigger']) $(id).onclick = () => { closeSidebar(); renderModels(); renderSearch(); $('models-dialog').showModal(); };
 $('docs-open').onclick = () => { closeSidebar(); renderDocs(); $('docs-dialog').showModal(); };
+$('photos-open').onclick = () => { closeSidebar(); $('photo-dialog').showModal(); };
+let photoWorker, photoFiles = [], photoSelection = 0, photoUrls = [], photoBusy = false;
+function photoSetBusy(value) {
+  photoBusy = value;
+  $('photo-submit').disabled = value;
+  $('photo-files').disabled = value;
+  $('photo-stop').hidden = !value;
+}
+function photoClearResults() {
+  for (const url of photoUrls) URL.revokeObjectURL(url);
+  photoUrls = [];
+  $('photo-results').replaceChildren();
+}
+function photoTerminate() { photoWorker?.terminate(); photoWorker = undefined; photoSetBusy(false); }
+$('photo-dialog').addEventListener('close', () => {
+  photoTerminate(); photoClearResults(); photoFiles = []; photoSelection++;
+  $('photo-files').value = ''; $('photo-query').value = ''; $('photo-count').textContent = ''; $('photo-status').textContent = '';
+});
+$('photo-files').onchange = event => {
+  const files = [...event.target.files];
+  if (!files.length) return;
+  if (!validPhotoFiles(files)) {
+    event.target.value = ''; photoFiles = []; photoTerminate(); photoClearResults(); $('photo-count').textContent = ''; $('photo-status').textContent = tr('photoSelectError'); return;
+  }
+  photoTerminate(); photoClearResults(); photoFiles = files; photoSelection++;
+  $('photo-count').textContent = tr('photoCount').replace('{count}',files.length); $('photo-status').textContent = '';
+};
+$('photo-stop').onclick = () => { photoTerminate(); $('photo-status').textContent = tr('photoCancelled'); };
+$('photo-form').onsubmit = event => {
+  event.preventDefault();
+  if (photoBusy) return;
+  const query = $('photo-query').value.trim();
+  if (!photoFiles.length) { $('photo-status').textContent = tr('photoNeedFiles'); return; }
+  if (!query) return;
+  if (!navigator.gpu) { $('photo-status').textContent = tr('photoGpuError'); return; }
+  photoClearResults(); photoSetBusy(true); $('photo-status').textContent = tr('photoLoading');
+  if (!photoWorker) {
+    photoWorker = new Worker(new URL('./photo-worker.js', import.meta.url), {type:'module'});
+    photoWorker.onerror = () => { photoTerminate(); $('photo-status').textContent = tr('photoError').replace('{error}',tr('error')); };
+    photoWorker.onmessage = event => {
+      const message = event.data;
+      if (message.type === 'progress') {
+        $('photo-status').textContent = message.stage === 'download' ? tr('photoDownloading').replace('{file}',message.file)
+          : message.stage === 'index' ? tr('photoIndexing').replace('{done}',message.done+1).replace('{total}',message.total)
+          : message.stage === 'query' ? tr('photoSearching') : tr('photoLoading');
+      } else if (message.type === 'result') {
+        for (const [rank, item] of message.results.entries()) {
+          const file = photoFiles[item.index]; if (!file) continue;
+          const url = URL.createObjectURL(file); photoUrls.push(url);
+          const card = node('div',undefined,'photo-result'), img = node('img');
+          img.src = url; img.alt = file.name; card.append(img,node('small',String(rank+1)),node('span',file.name)); $('photo-results').append(card);
+        }
+        photoSetBusy(false); $('photo-status').textContent = tr('photoDone');
+      } else if (message.type === 'error') {
+        photoTerminate(); $('photo-status').textContent = message.message === 'PHOTO_WEBGPU_UNAVAILABLE' ? tr('photoGpuError') : tr('photoError').replace('{error}',message.message);
+      }
+    };
+  }
+  photoWorker.postMessage({type:'search',files:photoFiles,query,selectionId:photoSelection});
+};
 $('memory-open').onclick = () => { pendingMemoryPrompt = null; closeSidebar(); renderMemory(); $('memory-dialog').showModal(); };
 $('memory-dialog').addEventListener('close', () => { pendingMemoryPrompt = null; });
 $('memory-form').onsubmit = event => run(async () => { event.preventDefault(); const text = $('memory-text').value.replace(/\s+/g, ' ').trim(); if (!text || text.length > 500) return; if (!$('memory-id').value && memories.length >= 100) throw Error(tr('memoryFull')); const id = $('memory-id').value || crypto.randomUUID(); const note = { id, text, updated:Date.now() }; await db.put('memory', note); memories = memories.filter(item => item.id !== id); memories.push(note); if (pendingMemoryPrompt === $('prompt').value.trim()) $('prompt').value = ''; pendingMemoryPrompt = null; $('memory-id').value = ''; $('memory-text').value = ''; renderMemory(); $('memory-dialog').close(); setStatus(tr('memorySaved')); });
