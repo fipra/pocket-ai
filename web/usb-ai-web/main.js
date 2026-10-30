@@ -20,6 +20,7 @@ import { iosDiagnosticsEnabled, iosDiagnostic } from './ios-diagnostics.js';
 import { ensureSemanticIndex, semanticResults, embeddingQuery } from './semantic-search.js';
 import { loadEmbeddingModel, unloadEmbeddingModel, embedText, EMBEDDING_MODEL_ID } from './embedding-runtime.js';
 import { validPhotoFiles } from './photo-search.js';
+import { sharedChat, parseSharedChat, createShareLink, parseShareLink, MAX_CHAT_BYTES } from './chat-share.js';
 
 const $ = id => document.getElementById(id);
 let language = preferredLanguage();
@@ -291,7 +292,7 @@ async function send(editedText, editIndex, editChatId) {
     setBusy(false); render();
   }
 }
-async function init() { if (iosDiagnosticsEnabled()) { $('ios-diagnostic').hidden = false; iosDiagnostic('diagnostics', 'experimental iPhone mode · CPU · 1 thread · context 512'); } try { const settings = await db.get('settings','main'); language = settings?.language || preferredLanguage(); selectedId = settings?.selectedId; activeId = settings?.activeId; thinking = !!settings?.thinking; semanticEnabled = !!settings?.semanticEnabled; contextSize = [4096,8192,16384,32768].includes(Number(settings?.contextSize)) ? Number(settings.contextSize) : 0; outputLimit = [1024,3072,4096,8192,16384].includes(Number(settings?.outputLimit)) ? Number(settings.outputLimit) : 0; const webGpuAvailable = isWindows() && !['auto','cpu','gpu'].includes(settings?.windowsBackend) ? await hasUsableWebGpu() : false; ({cpuThreads, windowsBackend} = inferencePreferences(settings, isWindows(), webGpuAvailable)); $('windows-backend').value = windowsBackend; $('windows-backend-settings').hidden = !isWindows(); $('cpu-threads').value = cpuThreads; $('context-size').value = String(contextSize); $('output-limit').value = String(outputLimit); remoteConfig = settings?.remoteConfig; [chats, documents, models, memories] = await Promise.all([db.all('chats'), db.all('documents'), savedModels(), db.all('memory')]); if (remoteConfig) { try { remoteEntries = await remoteModels(remoteConfig); models.push(...remoteEntries); } catch (error) { setStatus(tr('error') + ': ' + error.message, true); } } if (isAuxiliaryGguf(models.find(model => model.id === selectedId)?.filename || models.find(model => model.id === selectedId)?.url || '')) { selectedId = undefined; await saveSettings(); } if (!chats.some(chat => chat.id === activeId)) activeId = chats[0]?.id; if (iosDiagnosticsEnabled() && models.some(model => model.id === selectedId && (model.id === 'llama-3.2-1b' || [model.filename,model.name,model.url].some(value => typeof value === 'string' && value.endsWith(STARTER_FILE))))) selectedId = models.find(isStarterModel)?.id; if (!models.some(model => model.id === selectedId) && !isRemote(selectedId)) selectedId = iosDiagnosticsEnabled() ? models.find(isStarterModel)?.id : usesSafariCpu() ? undefined : models.find(isStarterModel)?.id; render(); if (needsSafariFallback(models.find(model => model.id === selectedId))) setStatus(tr('safariLargeModelWarning')); else if (isStarterModel(models.find(model => model.id === selectedId))) await run(() => chooseModel(selectedId)); } catch (error) { setStatus(`${tr('error')}: ${error.message}`, true); } }
+async function init() { if (iosDiagnosticsEnabled()) { $('ios-diagnostic').hidden = false; iosDiagnostic('diagnostics', 'experimental iPhone mode · CPU · 1 thread · context 512'); } try { const settings = await db.get('settings','main'); language = settings?.language || preferredLanguage(); selectedId = settings?.selectedId; activeId = settings?.activeId; thinking = !!settings?.thinking; semanticEnabled = !!settings?.semanticEnabled; contextSize = [4096,8192,16384,32768].includes(Number(settings?.contextSize)) ? Number(settings.contextSize) : 0; outputLimit = [1024,3072,4096,8192,16384].includes(Number(settings?.outputLimit)) ? Number(settings.outputLimit) : 0; const webGpuAvailable = isWindows() && !['auto','cpu','gpu'].includes(settings?.windowsBackend) ? await hasUsableWebGpu() : false; ({cpuThreads, windowsBackend} = inferencePreferences(settings, isWindows(), webGpuAvailable)); $('windows-backend').value = windowsBackend; $('windows-backend-settings').hidden = !isWindows(); $('cpu-threads').value = cpuThreads; $('context-size').value = String(contextSize); $('output-limit').value = String(outputLimit); remoteConfig = settings?.remoteConfig; [chats, documents, models, memories] = await Promise.all([db.all('chats'), db.all('documents'), savedModels(), db.all('memory')]); if (remoteConfig) { try { remoteEntries = await remoteModels(remoteConfig); models.push(...remoteEntries); } catch (error) { setStatus(tr('error') + ': ' + error.message, true); } } if (isAuxiliaryGguf(models.find(model => model.id === selectedId)?.filename || models.find(model => model.id === selectedId)?.url || '')) { selectedId = undefined; await saveSettings(); } if (!chats.some(chat => chat.id === activeId)) activeId = chats[0]?.id; if (iosDiagnosticsEnabled() && models.some(model => model.id === selectedId && (model.id === 'llama-3.2-1b' || [model.filename,model.name,model.url].some(value => typeof value === 'string' && value.endsWith(STARTER_FILE))))) selectedId = models.find(isStarterModel)?.id; if (!models.some(model => model.id === selectedId) && !isRemote(selectedId)) selectedId = iosDiagnosticsEnabled() ? models.find(isStarterModel)?.id : usesSafariCpu() ? undefined : models.find(isStarterModel)?.id; render(); await importChatFromLink(); if (needsSafariFallback(models.find(model => model.id === selectedId))) setStatus(tr('safariLargeModelWarning')); else if (isStarterModel(models.find(model => model.id === selectedId))) await run(() => chooseModel(selectedId)); } catch (error) { setStatus(`${tr('error')}: ${error.message}`, true); } }
 $('prompt-form').onsubmit = event => { event.preventDefault(); run(send); };
 $('prompt').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('prompt-form').requestSubmit(); } };
 $('stop').onclick = () => controller?.abort();
@@ -385,6 +386,59 @@ $('memory-form').onsubmit = event => run(async () => { event.preventDefault(); c
 $('memory-export').onclick = () => { const url = URL.createObjectURL(new Blob([memoryMarkdown(memories)], {type:'text/markdown'})); const link = node('a'); link.href = url; link.download = 'usb-ai-memory.md'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); };
 $('memory-import').onchange = event => run(async () => { const file = event.target.files?.[0]; event.target.value = ''; if (!file || file.size > 100_000) return; for (const text of parseMemoryMarkdown(await file.text())) { if (memories.length >= 100) break; if (memories.some(note => note.text === text)) continue; const note = { id:crypto.randomUUID(), text, updated:Date.now() }; await db.put('memory', note); memories.push(note); } renderMemory(); });
 document.querySelectorAll('[data-close]').forEach(button => button.onclick = () => $(button.dataset.close).close());
+async function importSharedChat(data) {
+  if (!confirm(tr('shareImportConfirm').replace('{title}', data.title))) return;
+  const chat = {id:crypto.randomUUID(), title:data.title, messages:data.messages, updated:Date.now()};
+  await db.put('chats', chat); chats.unshift(chat); activeId = chat.id;
+  await saveSettings(); render(); setStatus(tr('shareImported'));
+}
+async function importChatFromLink() {
+  if (!location.hash.startsWith('#chat=')) return;
+  const hash = location.hash;
+  history.replaceState(history.state, '', location.pathname + location.search);
+  try { await importSharedChat(await parseShareLink(hash)); }
+  catch { setStatus(tr('shareInvalid'), true); }
+}
+let shareData, shareLink;
+$('share-chat').onclick = async () => {
+  const chat = chats.find(item => item.id === activeId);
+  if (!chat?.messages.length) { setStatus(tr('chatCopyEmpty')); return; }
+  try { shareData = sharedChat(chat); }
+  catch { setStatus(tr('shareTooLarge'), true); return; }
+  shareLink = null; $('share-link').value = ''; $('share-link').hidden = true;
+  $('share-copy').hidden = true; $('share-whatsapp').hidden = true;
+  $('share-status').textContent = tr('sharePreparing'); $('share-dialog').showModal();
+  try { shareLink = await createShareLink(shareData, location.href); } catch { /* File export remains available. */ }
+  if (!$('share-dialog').open) return;
+  $('share-link').value = shareLink || ''; $('share-link').hidden = !shareLink;
+  $('share-copy').hidden = !shareLink; $('share-whatsapp').hidden = !shareLink;
+  $('share-status').textContent = tr(shareLink ? 'shareLinkReady' : 'shareUseFile');
+};
+$('share-copy').onclick = async () => {
+  try { await navigator.clipboard.writeText(shareLink); $('share-status').textContent = tr('shareLinkCopied'); }
+  catch { $('share-status').textContent = tr('chatCopyError'); }
+};
+$('share-whatsapp').onclick = () => { if (shareLink) window.open('https://wa.me/?text=' + encodeURIComponent(shareLink), '_blank', 'noopener,noreferrer'); };
+$('share-file').onclick = () => {
+  if (!shareData) return;
+  const url = URL.createObjectURL(new Blob([JSON.stringify(shareData)], {type:'application/json'}));
+  const link = node('a'); link.href = url; link.download = 'llamanest-chat.json'; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+$('import-chat').onclick = () => $('import-chat-file').click();
+$('import-chat-file').onchange = async event => {
+  const file = event.target.files?.[0]; event.target.value = '';
+  if (!file) return;
+  try { if (file.size > MAX_CHAT_BYTES) throw Error('INVALID_CHAT'); await importSharedChat(parseSharedChat(await file.text())); }
+  catch { setStatus(tr('shareInvalid'), true); }
+};
+$('copy-chat').onclick = async () => {
+  const chat = chats.find(item => item.id === activeId);
+  if (!chat?.messages.length) { setStatus(tr('chatCopyEmpty')); return; }
+  const content = chat.messages.map(item => `${item.role === 'user' ? tr('you') : tr('assistant')}:\n${item.text}`).join('\n\n');
+  try { await navigator.clipboard.writeText(content); setStatus(tr('chatCopied')); }
+  catch { setStatus(tr('chatCopyError'), true); }
+};
 $('language').onchange = () => { language = $('language').value; saveSettings(); render(); };
 $('attach-files').onclick = () => $('chat-files').click();
 $('model-file').onchange = event => run(async () => { const files = [...event.target.files]; event.target.value = ''; const result = await addLocalModel(files); models = await allModels(); if (!result.persistent) models.push({ id:result.id, name:result.name, size:files.reduce((n,f) => n+f.size,0) }); renderModels(); setStatus(result.persistent ? tr('modelSaved') : tr('modelSession')); await chooseModel(result.id); });
