@@ -175,12 +175,12 @@ export async function deleteModel(id) {
   await db.remove('models', id);
 }
 export async function unload() { if (engine) await engine.exit(); engine = undefined; loadedId = undefined; creatorModel = undefined; backendInfo = undefined; }
-let loadedContext;
-export async function loadModel(id, contextSize = 0) {
+let loadedContext, loadedThreads;
+export async function loadModel(id, contextSize = 0, threads = 1) {
   if (isSmartphone() && !isIPhone()) throw Error('SMARTPHONE_DISABLED');
   const diagnostic = iosDiagnosticsEnabled();
-  const options = modelOptions({iosDiagnostic:diagnostic, contextSize});
-  if (loadedId === id && engine && loadedContext === options.n_ctx) return;
+  const options = modelOptions({iosDiagnostic:diagnostic, contextSize, threads});
+  if (loadedId === id && engine && loadedContext === options.n_ctx && loadedThreads === options.n_threads) return;
   const record = await db.get('models', id);
   if (record && isAuxiliaryGguf(record.filename || record.shards?.[0]?.url || record.url || record.name)) throw Error('AUXILIARY_GGUF');
   let files = record?.files || sessionFiles.get(id);
@@ -225,6 +225,7 @@ export async function loadModel(id, contextSize = 0) {
     await Promise.race([loading, workerFailure, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('LOAD_TIMEOUT')), 300_000); })]);
     const metadata = next.getModelMetadata();
     loadedContext = options.n_ctx;
+    loadedThreads = options.n_threads;
     if (diagnostic) iosDiagnostic('model/context', `initialized · training context=${metadata.hparams.nCtxTrain} · vocabulary=${metadata.hparams.nVocab} · tokenizer=${metadata.meta?.['tokenizer.ggml.model'] || 'unknown'} · threads=${next.getNumThreads()} · multithread=${next.isMultithread()} · chat template=${!!next.getChatTemplate()} · add BOS=${next.mustAddBosToken()} · add EOS=${next.mustAddEosToken()}`);
     const creatorMode = metadata.meta?.['llamanest.creator.mode'];
     creatorModel = ['qa', 'lm'].includes(creatorMode) ? { mode: creatorMode, context: metadata.hparams.nCtxTrain } : undefined;
