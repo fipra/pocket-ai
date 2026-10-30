@@ -297,3 +297,11 @@ const cpuThreadStrings = {
   es:{cpuThreads:'Hilos de CPU (experimental)',threadsDefault:'1 (predeterminado)',cpuThreadsHelp:'Prueba de rendimiento opcional. El modelo se vuelve a cargar con el siguiente mensaje. Automático elige hasta 4 hilos. El navegador debe admitirlo; CPU de Safari y diagnóstico de iPhone mantienen 1. Los modelos remotos no cambian.'}
 };
 for (const language of Object.keys(cpuThreadStrings)) Object.assign(translations[language], cpuThreadStrings[language]);
+const windowsBackendStrings = {
+  en:{windowsBackend:'Windows inference device',backendDefault:'Automatic (default)',windowsBackendHelp:'CPU disables GPU layers. GPU requests WebGPU; check the device indicator after loading. The model reloads on the next message. Only local models are affected.'},
+  it:{windowsBackend:'Dispositivo di inferenza Windows',backendDefault:'Automatico (predefinito)',windowsBackendHelp:'CPU disattiva i livelli sulla GPU. GPU richiede WebGPU: controlla l’indicatore dopo il caricamento. Il modello si ricarica al prossimo messaggio. Vale solo per i modelli locali.'},
+  fr:{windowsBackend:'Périphérique d’inférence Windows',backendDefault:'Automatique (par défaut)',windowsBackendHelp:'CPU désactive les couches GPU. GPU demande WebGPU : vérifiez l’indicateur après le chargement. Le modèle est rechargé au prochain message. Concerne uniquement les modèles locaux.'},
+  de:{windowsBackend:'Windows-Inferenzgerät',backendDefault:'Automatisch (Standard)',windowsBackendHelp:'CPU deaktiviert GPU-Layer. GPU fordert WebGPU an; prüfe die Anzeige nach dem Laden. Das Modell wird bei der nächsten Nachricht neu geladen. Nur lokale Modelle sind betroffen.'},
+  es:{windowsBackend:'Dispositivo de inferencia Windows',backendDefault:'Automático (predeterminado)',windowsBackendHelp:'CPU desactiva las capas de GPU. GPU solicita WebGPU: comprueba el indicador después de cargar. El modelo se vuelve a cargar con el siguiente mensaje. Solo afecta a modelos locales.'}
+};
+for (const language of Object.keys(windowsBackendStrings)) Object.assign(translations[language], windowsBackendStrings[language]);

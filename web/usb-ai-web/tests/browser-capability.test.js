@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isSafari, isFirefox, largeModelWarningBrowser, usesSafariCpu, modelOptions, needsSafariFallback, generationLimit, threadCount } from '../browser-capability.js';
+import { isSafari, isFirefox, largeModelWarningBrowser, usesSafariCpu, modelOptions, needsSafariFallback, generationLimit, threadCount, isWindows } from '../browser-capability.js';
 
 const safari = 'Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15';
 const chrome = 'Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
@@ -45,6 +45,16 @@ test('optional CPU threads preserve the default and protect diagnostic modes', (
   assert.equal(threadCount('auto', 8), 4);
   assert.equal(threadCount('auto', 2), 1);
   assert.equal(threadCount(999, 8), 1);
+});
+
+test('backend choice is limited to Windows and leaves the default unchanged', () => {
+  assert.equal(isWindows('Mozilla/5.0 (Windows NT 10.0; Win64; x64)', ''), true);
+  assert.equal(isWindows('Mozilla/5.0 (Macintosh; Intel Mac OS X)', 'macOS'), false);
+  assert.equal(modelOptions({safariCpu:false, deviceMemory:8, windows:true}).n_gpu_layers, undefined);
+  assert.equal(modelOptions({safariCpu:false, deviceMemory:8, windows:true, backend:'cpu'}).n_gpu_layers, 0);
+  assert.equal(modelOptions({safariCpu:false, deviceMemory:8, windows:true, backend:'gpu'}).n_gpu_layers, 99999);
+  assert.equal(modelOptions({safariCpu:false, deviceMemory:8, windows:false, backend:'cpu'}).n_gpu_layers, undefined);
+  assert.equal(modelOptions({iosDiagnostic:true, windows:true, backend:'gpu'}).n_gpu_layers, 0);
 });
 
 test('Safari CPU avoids automatic 3B loading while retaining small models', () => {

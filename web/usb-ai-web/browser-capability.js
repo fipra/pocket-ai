@@ -21,11 +21,18 @@ export function threadCount(value, hardwareConcurrency = globalThis.navigator?.h
   return [1, 2, 4].includes(Number(value)) ? Number(value) : 1;
 }
 
-export function modelOptions({ safariCpu = usesSafariCpu(), deviceMemory = navigator.deviceMemory, iosDiagnostic = false, contextSize: requestedContext = 0, threads = 1, hardwareConcurrency = globalThis.navigator?.hardwareConcurrency } = {}) {
+export function isWindows(userAgent = globalThis.navigator?.userAgent || '', platform = globalThis.navigator?.userAgentData?.platform || '') {
+  return /windows/i.test(platform) || /windows nt/i.test(userAgent);
+}
+
+export function modelOptions({ safariCpu = usesSafariCpu(), deviceMemory = navigator.deviceMemory, iosDiagnostic = false, contextSize: requestedContext = 0, threads = 1, hardwareConcurrency = globalThis.navigator?.hardwareConcurrency, backend = 'auto', windows = isWindows() } = {}) {
   if (iosDiagnostic) return { n_ctx: 512, n_batch: 64, n_threads: 1, n_gpu_layers: 0, jinja: true, reasoning: true };
   if (safariCpu) return { n_ctx: 2048, n_batch: 64, n_threads: 1, n_gpu_layers: 0, jinja: true, reasoning: true };
   const contextSize = [4096, 8192, 16384, 32768].includes(Number(requestedContext)) ? Number(requestedContext) : deviceMemory && deviceMemory <= 4 ? 4096 : 8192;
-  return { n_ctx: contextSize, n_threads: threadCount(threads, hardwareConcurrency), jinja: true, reasoning: true };
+  const options = { n_ctx: contextSize, n_threads: threadCount(threads, hardwareConcurrency), jinja: true, reasoning: true };
+  if (windows && backend === 'cpu') options.n_gpu_layers = 0;
+  if (windows && backend === 'gpu') options.n_gpu_layers = 99999;
+  return options;
 }
 
 export function needsSafariFallback(model, safariCpu = usesSafariCpu()) {
