@@ -1,6 +1,7 @@
 (() => {
   // The Italian HTML is the readable fallback when JavaScript is unavailable.
   const rows = [
+    ["Prova le versioni Mac preliminari con copia e condivisione", "Try the preliminary Mac versions with copy and sharing", "Essayer les versions Mac préliminaires avec copie et partage", "Vorläufige Mac-Versionen mit Kopieren und Teilen testen", "Prueba las versiones preliminares para Mac con copia y uso compartido"],
     ["Apri PrismML Web", "Open PrismML Web", "Ouvrir PrismML Web", "PrismML Web öffnen", "Abrir PrismML Web"],
     ["PrismML Web", "PrismML Web", "PrismML Web", "PrismML Web", "PrismML Web"],
     ["Porta i modelli ternari compatibili, come Bonsai 2, direttamente nel browser.", "Run compatible ternary models such as Bonsai 2 directly in your browser.", "Exécutez des modèles ternaires compatibles, comme Bonsai 2, directement dans votre navigateur.", "Führe kompatible ternäre Modelle wie Bonsai 2 direkt im Browser aus.", "Ejecuta modelos ternarios compatibles, como Bonsai 2, directamente en el navegador."],
