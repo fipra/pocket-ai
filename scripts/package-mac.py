@@ -97,6 +97,9 @@ def package_prism(source_server):
 
 
 def main():
+    prism_only = os.environ.get("LLAMA_PRISM_ONLY") == "1"
+    if prism_only and not os.environ.get("LLAMA_PRISM_SERVER"):
+        raise RuntimeError("LLAMA_PRISM_ONLY requires LLAMA_PRISM_SERVER")
     subprocess.run(["cargo", "build", "--release", "--locked"], cwd=ROOT, check=True)
     tools = {"llama-cli": shutil.which("llama-cli"), "llama-server": shutil.which("llama-server"), "llama-quantize": shutil.which("llama-quantize"), "pdftotext": shutil.which("pdftotext")}
     for name, path in tools.items():
@@ -163,6 +166,11 @@ def main():
         run("codesign", "--verify", "--strict", str(path))
     if os.environ.get("LLAMA_PRISM_SERVER"):
         package_prism(os.environ["LLAMA_PRISM_SERVER"])
+    marker = OUT / "PRISM_ONLY"
+    if prism_only:
+        marker.write_text("PrismML engine only.\n")
+    else:
+        marker.unlink(missing_ok=True)
     for model in (ROOT / "models").glob("*.gguf"):
         dest = OUT / "models" / model.name
         try:

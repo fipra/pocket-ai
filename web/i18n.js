@@ -175,3 +175,12 @@ const engineStrings = {
  es:{inferenceEngine:'Motor del modelo',engineStandard:'Estándar',prismUnavailable:'El motor PrismML no está instalado en este paquete.'}
 };
 for (const language of Object.keys(engineStrings)) Object.assign(window.USB_AI_I18N[language], engineStrings[language]);
+
+const releaseModelStrings = {
+ en:{releaseModelMemory:'Release model memory',releasingModel:'Releasing model memory…',modelMemoryReleased:'Model unloaded. It will load again on the next message.'},
+ it:{releaseModelMemory:'Libera memoria del modello',releasingModel:'Liberazione della memoria…',modelMemoryReleased:'Modello scaricato dalla memoria. Si ricaricherà al prossimo messaggio.'},
+ fr:{releaseModelMemory:'Libérer la mémoire du modèle',releasingModel:'Libération de la mémoire…',modelMemoryReleased:'Modèle déchargé. Il sera rechargé au prochain message.'},
+ de:{releaseModelMemory:'Modellspeicher freigeben',releasingModel:'Speicher wird freigegeben…',modelMemoryReleased:'Modell entladen. Es wird bei der nächsten Nachricht neu geladen.'},
+ es:{releaseModelMemory:'Liberar memoria del modelo',releasingModel:'Liberando memoria…',modelMemoryReleased:'Modelo descargado de la memoria. Se cargará con el próximo mensaje.'}
+};
+for (const language of Object.keys(releaseModelStrings)) Object.assign(window.USB_AI_I18N[language], releaseModelStrings[language]);
