@@ -90,7 +90,10 @@
     ["© 2026 Fabrizio Casula · Copie precedenti MIT; distribuzioni future con licenza per uso personale", "© 2026 Fabrizio Casula · Earlier copies: MIT; future distributions: personal-use license", "© 2026 Fabrizio Casula · Copies antérieures : MIT ; futures distributions : licence d'utilisation personnelle", "© 2026 Fabrizio Casula · Frühere Kopien: MIT; zukünftige Distributionen: Lizenz für private Nutzung", "© 2026 Fabrizio Casula · Copias anteriores: MIT; futuras distribuciones: licencia de uso personal"],
     ["Codice su GitHub", "Code on GitHub", "Code sur GitHub", "Code auf GitHub", "Código en GitHub"],
     ["Release Mac", "Mac releases", "Versions Mac", "Mac-Releases", "Versiones Mac"],
-    ["Release Windows", "Windows releases", "Versions Windows", "Windows-Releases", "Versiones Windows"]
+    ["Release Windows", "Windows releases", "Versions Windows", "Windows-Releases", "Versiones Windows"],
+    ["PrismML sperimentale:", "Experimental PrismML:", "PrismML expérimental :", "Experimentelles PrismML:", "PrismML experimental:"],
+    ["Apri il codice su GitHub", "View the code on GitHub", "Voir le code sur GitHub", "Code auf GitHub ansehen", "Ver el código en GitHub"],
+    ["In sviluppo: non è ancora disponibile un pacchetto pronto da scaricare.", "In development: a ready-to-download package is not yet available.", "En développement : aucun paquet prêt à télécharger n’est encore disponible.", "In Entwicklung: Ein fertiges Download-Paket ist noch nicht verfügbar.", "En desarrollo: aún no hay un paquete listo para descargar."]
   ];
 
   const attributes = [
