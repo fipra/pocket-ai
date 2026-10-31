@@ -1,10 +1,17 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "buildCommand": "npm ci --prefix web && USB_AI_WEB_BASE=/app/ npm run build --prefix web && mkdir -p .vercel-static/app && cp index.html landing-i18n.js landing-mobile-gate.js landing-demo.js robots.txt sitemap.xml .vercel-static/ && cp -R web/dist/. .vercel-static/app/",
+  "buildCommand": "npm ci --prefix web && USB_AI_WEB_BASE=/app/ npm run build --prefix web && mkdir -p .vercel-static/app && cp index.html landing-i18n.js landing-mobile-gate.js landing-demo.js robots.txt sitemap.xml .vercel-static/ && cp -R web/dist/. .vercel-static/app/ && python3 scripts/build-prism-web.py",
   "outputDirectory": ".vercel-static",
   "headers": [{
     "source": "/app/(.*)",
+    "headers": [
+      { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
+      { "key": "Cross-Origin-Embedder-Policy", "value": "require-corp" },
+      { "key": "Cross-Origin-Resource-Policy", "value": "same-origin" }
+    ]
+  }, {
+    "source": "/prism-web/(.*)",
     "headers": [
       { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
       { "key": "Cross-Origin-Embedder-Policy", "value": "require-corp" },

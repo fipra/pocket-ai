@@ -92,6 +92,8 @@
     ["Release Mac", "Mac releases", "Versions Mac", "Mac-Releases", "Versiones Mac"],
     ["Release Windows", "Windows releases", "Versions Windows", "Windows-Releases", "Versiones Windows"],
     ["PrismML sperimentale:", "Experimental PrismML:", "PrismML expérimental :", "Experimentelles PrismML:", "PrismML experimental:"],
+    ["Prova PrismML Web", "Try PrismML Web", "Essayer PrismML Web", "PrismML Web ausprobieren", "Probar PrismML Web"],
+    ["Versione Web sperimentale: usa la CPU e può essere lenta.", "Experimental web version: uses the CPU and may be slow.", "Version Web expérimentale : utilise le processeur et peut être lente.", "Experimentelle Webversion: nutzt die CPU und kann langsam sein.", "Versión web experimental: usa la CPU y puede ser lenta."],
     ["Scarica per Mac Apple Silicon", "Download for Apple Silicon Mac", "Télécharger pour Mac Apple Silicon", "Für Apple Silicon Mac herunterladen", "Descargar para Mac Apple Silicon"],
     ["Include i motori Standard e PrismML; PrismML usa la CPU. I modelli non sono inclusi.", "Includes the Standard and PrismML engines; PrismML uses the CPU. Models are not included.", "Inclut les moteurs Standard et PrismML ; PrismML utilise le processeur. Les modèles ne sont pas inclus.", "Enthält die Standard- und PrismML-Engines; PrismML nutzt die CPU. Modelle sind nicht enthalten.", "Incluye los motores Estándar y PrismML; PrismML usa la CPU. Los modelos no están incluidos."],
     ["Apri il codice su GitHub", "View the code on GitHub", "Voir le code sur GitHub", "Code auf GitHub ansehen", "Ver el código en GitHub"],
