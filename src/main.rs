@@ -902,7 +902,10 @@ fn is_qwen35(model: &Path) -> bool {
         .unwrap_or_default()
         .to_string_lossy()
         .to_ascii_lowercase();
-    name.contains("qwen3.5") || name.contains("qwen-3.5")
+    name.contains("qwen3.5")
+        || name.contains("qwen-3.5")
+        || name.contains("bonsai-2")
+        || name.contains("bonsai_2")
 }
 
 // Some llama-server versions leave the opening reasoning tag in the prompt,
@@ -3696,6 +3699,20 @@ mod tests {
         assert_eq!(
             model_template_messages(messages.clone(), model, false),
             messages
+        );
+    }
+    #[test]
+    fn bonsai2_uses_qwen35_reasoning_template() {
+        let model = Path::new("Ternary-Bonsai-2-2B-PQ2_0.gguf");
+        let prompt = "<|im_start|>assistant\n<think>\n";
+        assert!(is_qwen35(model));
+        assert_eq!(
+            qwen35_reasoning_prompt(prompt.into(), model, false),
+            ("<|im_start|>assistant\n<think>\n</think>\n\n".into(), false)
+        );
+        assert_eq!(
+            qwen35_reasoning_prompt(prompt.into(), model, true),
+            (prompt.into(), true)
         );
     }
     #[test]
