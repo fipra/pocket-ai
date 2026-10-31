@@ -92,6 +92,8 @@
     ["Release Mac", "Mac releases", "Versions Mac", "Mac-Releases", "Versiones Mac"],
     ["Release Windows", "Windows releases", "Versions Windows", "Windows-Releases", "Versiones Windows"],
     ["PrismML sperimentale:", "Experimental PrismML:", "PrismML expérimental :", "Experimentelles PrismML:", "PrismML experimental:"],
+    ["Scarica per Mac Apple Silicon", "Download for Apple Silicon Mac", "Télécharger pour Mac Apple Silicon", "Für Apple Silicon Mac herunterladen", "Descargar para Mac Apple Silicon"],
+    ["Include i motori Standard e PrismML; PrismML usa la CPU. I modelli non sono inclusi.", "Includes the Standard and PrismML engines; PrismML uses the CPU. Models are not included.", "Inclut les moteurs Standard et PrismML ; PrismML utilise le processeur. Les modèles ne sont pas inclus.", "Enthält die Standard- und PrismML-Engines; PrismML nutzt die CPU. Modelle sind nicht enthalten.", "Incluye los motores Estándar y PrismML; PrismML usa la CPU. Los modelos no están incluidos."],
     ["Apri il codice su GitHub", "View the code on GitHub", "Voir le code sur GitHub", "Code auf GitHub ansehen", "Ver el código en GitHub"],
     ["In sviluppo: non è ancora disponibile un pacchetto pronto da scaricare.", "In development: a ready-to-download package is not yet available.", "En développement : aucun paquet prêt à télécharger n’est encore disponible.", "In Entwicklung: Ein fertiges Download-Paket ist noch nicht verfügbar.", "En desarrollo: aún no hay un paquete listo para descargar."]
   ];
