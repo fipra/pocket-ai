@@ -1,0 +1,183 @@
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+index e01a417..17a1aab 100644
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1656,6 +1656,7 @@ class ggml_webgpu_shader_lib {
+                     switch (key.src_type) {
+                         case GGML_TYPE_Q1_0:
+                         case GGML_TYPE_Q2_0:
++                        case GGML_TYPE_PQ2_0:
+                         case GGML_TYPE_Q4_0:
+                         case GGML_TYPE_Q5_0:
+                         case GGML_TYPE_Q8_0:
+@@ -1695,7 +1696,7 @@ class ggml_webgpu_shader_lib {
+ 
+                     defines.push_back("DST_TYPE=f32");
+ 
+-                    if (key.src_type == GGML_TYPE_Q1_0) {
++                    if (key.src_type == GGML_TYPE_Q1_0 || key.src_type == GGML_TYPE_PQ2_0) {
+                         defines.push_back("BLOCK_SIZE=128u");
+                     } else if ((key.src_type >= GGML_TYPE_Q4_0 && key.src_type <= GGML_TYPE_Q8_1) ||
+                                key.src_type == GGML_TYPE_IQ4_NL || key.src_type == GGML_TYPE_MXFP4) {
+diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+index 5c696c6..450fef5 100644
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -4400,6 +4400,7 @@ static bool ggml_webgpu_supported_qtype(ggml_type type) {
+     switch (type) {
+         case GGML_TYPE_Q1_0:
+         case GGML_TYPE_Q2_0:
++        case GGML_TYPE_PQ2_0:
+         case GGML_TYPE_Q4_0:
+         case GGML_TYPE_Q4_1:
+         case GGML_TYPE_Q5_0:
+@@ -4506,6 +4507,7 @@ static bool ggml_backend_webgpu_device_supports_op(ggml_backend_dev_t dev, const
+                             case GGML_TYPE_BF16:
+                             case GGML_TYPE_Q1_0:
+                             case GGML_TYPE_Q2_0:
++        case GGML_TYPE_PQ2_0:
+                             case GGML_TYPE_Q4_0:
+                             case GGML_TYPE_Q4_1:
+                             case GGML_TYPE_Q5_0:
+@@ -4742,17 +4744,7 @@ static bool ggml_backend_webgpu_device_supports_op(ggml_backend_dev_t dev, const
+                           src0->ne[0] <= ctx->webgpu_global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup;
+             break;
+         case GGML_OP_GATED_DELTA_NET:
+-            {
+-                if (op->src[6] != nullptr || ggml_get_op_params_i32(op, 1) != 0) {
+-                    supports_op = false; // rows-indexed state read / raw gates not implemented here
+-                    break;
+-                }
+-                const uint32_t s_v = (uint32_t) src2->ne[0];
+-                supports_op = op->type == GGML_TYPE_F32 && src0->type == GGML_TYPE_F32 && src1->type == GGML_TYPE_F32 &&
+-                              src2->type == GGML_TYPE_F32 && op->src[3]->type == GGML_TYPE_F32 &&
+-                              op->src[4]->type == GGML_TYPE_F32 && op->src[5]->type == GGML_TYPE_F32 &&
+-                              s_v <= ctx->webgpu_global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup;
+-            }
++            supports_op = false;
+             break;
+         case GGML_OP_CLAMP:
+             supports_op = (op->type == GGML_TYPE_F32 || op->type == GGML_TYPE_F16) && (src0->type == op->type);
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/get_rows.wgsl b/ggml/src/ggml-webgpu/wgsl-shaders/get_rows.wgsl
+index 4bf3c93..5b65583 100644
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/get_rows.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/get_rows.wgsl
+@@ -65,6 +65,20 @@ fn copy_elements(src_base: u32, dst_base: u32, offset: u32) {
+ }
+ #endif
+ 
++#ifdef PQ2_0
++fn copy_elements(src_base: u32, dst_base: u32, offset: u32) {
++    let block_byte_base = (src_base + offset) * 34u;
++    let d = load_f16_as_f32_at_src(block_byte_base);
++    for (var j = 0u; j < 8u; j++) {
++        let q_packed = load_u32_at_src(block_byte_base + 2u + j * 4u);
++        for (var k = 0u; k < 16u; k++) {
++            let q = (q_packed >> (2u * k)) & 3u;
++            dst[dst_base + offset * 128u + j * 16u + k] = (f32(q) - 1.0) * d;
++        }
++    }
++}
++#endif
++
+ #ifdef Q4_0
+ fn copy_elements(src_base: u32, dst_base: u32, offset: u32) {
+     let block_byte_base = (src_base + offset) * 18; // Block stride: 18 bytes
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_decls.tmpl b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_decls.tmpl
+index 1af6286..6f27acc 100644
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_decls.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_decls.tmpl
+@@ -134,6 +134,29 @@ fn init_shmem_src0(thread_id: u32, batch_offset: u32, offset_m: u32, k_outer: u3
+ }
+ #endif // INIT_SRC0_SHMEM_Q2_0
+ 
++#ifdef INIT_SRC0_SHMEM_PQ2_0
++const BLOCK_SIZE = 128u;
++const BLOCK_SIZE_BYTES = 34u;
++const NQ = 16u;
++
++fn init_shmem_src0(thread_id: u32, batch_offset: u32, offset_m: u32, k_outer: u32) {
++    for (var i = thread_id * NQ; i < TILE_SRC0_SHMEM; i += TOTAL_WORKGROUP_SIZE * NQ) {
++        let global_m = offset_m + i / TILE_K;
++        let global_k = k_outer + i % TILE_K;
++        if (global_m < params.m && global_k < params.k) {
++            let block_idx = batch_offset + global_m * params.stride_01 + global_k / BLOCK_SIZE;
++            let block_byte_base = block_idx * BLOCK_SIZE_BYTES;
++            let d = load_f16_at_src0(block_byte_base);
++            let q_packed = load_u32_at_src0(block_byte_base + 2u + (global_k % BLOCK_SIZE) / 4u);
++            for (var k = 0u; k < NQ; k++) {
++                let q = (q_packed >> (2u * k)) & 3u;
++                shmem[i + k] = (f16(q) - 1.0) * d;
++            }
++        }
++    }
++}
++#endif // INIT_SRC0_SHMEM_PQ2_0
++
+ // legacy-quants
+ #if defined(INIT_SRC0_SHMEM_Q4_0) || defined(INIT_SRC0_SHMEM_Q4_1) || defined(INIT_SRC0_SHMEM_Q5_0) || defined(INIT_SRC0_SHMEM_Q5_1) || defined(INIT_SRC0_SHMEM_Q8_0) || defined(INIT_SRC0_SHMEM_Q8_1) || defined(INIT_SRC0_SHMEM_MXFP4)
+ const BLOCK_SIZE = 32u;
+diff --git a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
+index 2c116aa..b07853a 100644
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
+@@ -159,6 +159,46 @@ fn accumulate_vec_dot(thread_id: u32, row_base: u32, src0_batch_offset: u32, src
+ }
+ #endif
+ 
++#ifdef MUL_ACC_PQ2_0
++#define BLOCK_SIZE 128
++#define BLOCK_SIZE_BYTES 34
++#define THREADS_PER_BLOCK 8
++#define ELEMS_PER_THREAD (BLOCK_SIZE/THREADS_PER_BLOCK)
++fn accumulate_vec_dot(thread_id: u32, row_base: u32, src0_batch_offset: u32, src1_idx_base: u32) -> array<array<f32, OUTPUTS_PER_WG>, NUM_COLS> {
++    var acc: array<array<f32, OUTPUTS_PER_WG>, NUM_COLS>;
++
++    let num_blocks = params.k / BLOCK_SIZE;
++    let thread_within_block = thread_id % THREADS_PER_BLOCK;
++    for (var block = thread_id / THREADS_PER_BLOCK; block < num_blocks; block += WG_SIZE / THREADS_PER_BLOCK) {
++        let x_base = src1_idx_base + block * BLOCK_SIZE + thread_within_block * ELEMS_PER_THREAD;
++        var x_block: array<array<f32, ELEMS_PER_THREAD>, NUM_COLS>;
++        for (var col = 0u; col < NUM_COLS; col++) {
++            for (var i = 0u; i < ELEMS_PER_THREAD; i++) {
++                x_block[col][i] = f32(SRC1[x_base + col * params.stride_11 + i]);
++            }
++        }
++        for (var row = 0u; row < OUTPUTS_PER_WG; row++) {
++            let output_row = row_base + row;
++            if (output_row < params.m) {
++                let block_byte_base = (src0_batch_offset + output_row * params.stride_01 + block) * BLOCK_SIZE_BYTES;
++                let d = f32(load_f16_at_src0(block_byte_base));
++                let q_packed = load_u32_at_src0(block_byte_base + 2u + 4u * thread_within_block);
++                for (var col = 0u; col < NUM_COLS; col++) {
++                    var row_sum = 0.0;
++                    for (var i = 0u; i < ELEMS_PER_THREAD; i++) {
++                        let q = (q_packed >> (2u * i)) & 3u;
++                        row_sum += (f32(q) - 1.0) * x_block[col][i];
++                    }
++                    acc[col][row] += d * row_sum;
++                }
++            }
++        }
++    }
++
++    return acc;
++}
++#endif
++
+ #ifdef MUL_ACC_Q4_0
+ #define BLOCK_SIZE 32
+ #define BLOCK_SIZE_BYTES 18
+diff --git a/src/models/deepseek41.cpp b/src/models/deepseek41.cpp
+index 49e95f5..a0c6e04 100644
+--- a/src/models/deepseek41.cpp
++++ b/src/models/deepseek41.cpp
+@@ -556,7 +556,7 @@ ggml_tensor * llama_model_deepseek41::graph::build_attention41(
+             const int64_t n_tok = nt/n_stream;
+             GGML_ASSERT(ci.kq_mask->ne[1] == n_tok);
+             const int64_t chunk = fused_idx ? n_tok :
+-                std::max({ (n_tok + 63)/64, (INT64_C(1) << 26)/(n_idx_head*n_comp*n_stream), INT64_C(1) });
++                std::max<int64_t>({ (n_tok + 63)/64, (INT64_C(1) << 26)/(n_idx_head*n_comp*n_stream), INT64_C(1) });
+ 
+             const int32_t cand_src = hparams.dsv41_cand_src;
+             const bool    pick_blk = cand_src == il && cand_pin;              // level one: pick the candidate blocks

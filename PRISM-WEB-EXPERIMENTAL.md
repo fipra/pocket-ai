@@ -1,9 +1,9 @@
-# LlamaNest Prism Web — prova sperimentale
+# LlamaNest Prism WebGPU — prova sperimentale
 
-[Apri la versione sperimentale Prism Web](https://llamanest.vercel.app/prism-web/)
+[Apri LlamaNest Prism WebGPU](https://llamanest.vercel.app/prism-gpu/)
 
-Questa prova usa il motore PrismML nel browser **solo su CPU**. WebGPU non è ancora funzionante nel prototipo: il modello viene caricato sulla GPU, ma l'esecuzione si blocca prima di generare una risposta. Non sono previste le prestazioni della versione Mac con Metal.
+Questa versione separata usa WebGPU per i livelli del modello. Alcune operazioni passano alla CPU: è una soluzione ibrida e può essere più lenta dell'app Mac. Richiede Chrome con WebGPU e JSPI attivi. Non usa la GPU se non viene confermato il caricamento dei livelli.
 
-La prova usa dati del browser separati dalla versione Web principale. Scegli un modello GGUF compatibile, ad esempio Ternary Bonsai 2 2B PQ2_0; i modelli non sono inclusi. Il modello 9B non è stato verificato in questa versione e potrebbe richiedere di dividere il file GGUF per rispettare i limiti del browser. Velocità, memoria necessaria e compatibilità dipendono dal dispositivo e dal browser.
+Nelle prove su un MacBook M2, Ternary Bonsai 2 2B e 9B in formato PQ2_0 hanno risposto; il 9B ha raggiunto circa 1,5–1,6 token al secondo nei test effettuati. Compatibilità e velocità dipendono dal dispositivo, dal browser, dal modello e dalle impostazioni. Il modello va scelto o scaricato separatamente; i file GGUF sopra 3 GB richiedono la divisione.
 
-Il sito principale e le altre versioni non vengono sostituiti da questo esperimento.
+Le conversazioni e i modelli di questa prova sono separati dalla versione Web principale. Le versioni esistenti non sono sostituite.
