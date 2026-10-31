@@ -5,8 +5,9 @@ DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 # Finder may propagate the downloaded ZIP's quarantine to every bundled
 # executable and library. The user has launched this local package; verify
 # each bundled Mach-O before clearing quarantine only on those files.
-for file in "$DIR"/bin/* "$DIR"/lib/*.dylib; do
+for file in "$DIR"/bin/* "$DIR"/bin/prism/* "$DIR"/lib/*.dylib; do
     [ -f "$file" ] || continue
+    case "$file" in */LICENSE) continue ;; esac
     if /usr/bin/xattr -p com.apple.quarantine "$file" >/dev/null 2>&1; then
         if ! /usr/bin/codesign --verify --strict "$file"; then
             echo "Firma non valida: $file" >&2

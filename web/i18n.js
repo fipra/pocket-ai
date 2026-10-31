@@ -166,3 +166,12 @@ const inferenceSettingsStrings = {
  es:{inferenceSettings:'Configuración de inferencia',inferenceBackend:'Dispositivo',inferenceThreads:'Hilos de CPU',inferenceAuto:'Automático',inferenceHelp:'Automático mantiene el comportamiento actual. CPU desactiva la GPU; GPU requiere una versión compatible de llama-server. El modelo se recargará en el siguiente mensaje.'}
 };
 for (const language of Object.keys(inferenceSettingsStrings)) Object.assign(window.USB_AI_I18N[language], inferenceSettingsStrings[language]);
+
+const engineStrings = {
+ en:{inferenceEngine:'Model engine',engineStandard:'Standard',prismUnavailable:'PrismML engine is not installed in this package.'},
+ it:{inferenceEngine:'Motore del modello',engineStandard:'Standard',prismUnavailable:'Il motore PrismML non è installato in questo pacchetto.'},
+ fr:{inferenceEngine:'Moteur du modèle',engineStandard:'Standard',prismUnavailable:'Le moteur PrismML n’est pas installé dans ce paquet.'},
+ de:{inferenceEngine:'Modell-Engine',engineStandard:'Standard',prismUnavailable:'Die PrismML-Engine ist in diesem Paket nicht installiert.'},
+ es:{inferenceEngine:'Motor del modelo',engineStandard:'Estándar',prismUnavailable:'El motor PrismML no está instalado en este paquete.'}
+};
+for (const language of Object.keys(engineStrings)) Object.assign(window.USB_AI_I18N[language], engineStrings[language]);

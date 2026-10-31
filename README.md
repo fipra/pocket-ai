@@ -104,3 +104,7 @@ See [VERIFICHE.md](VERIFICHE.md) for verification status and the licensing secti
 ## Model Creator Lab (experimental)
 
 The desktop Laboratory includes Model Creator for training a small Transformer from scratch with local Python and PyTorch. It can export an F32 GGUF for LlamaNest Web when the `gguf` Python package is installed. See [MODEL_CREATOR.md](MODEL_CREATOR.md) for setup, limitations, evaluation and export.
+
+### Optional PrismML engine
+
+The desktop app can use a separately packaged PrismML `llama-server` for GGUF formats such as Bonsai PQ2_0. The standard engine remains the default. On macOS, set `LLAMA_PRISM_SERVER` to the compiled server and `LLAMA_PRISM_LICENSE` to the fork license before running `scripts/package-mac.py`. On Windows, set `USB_AI_PRISM_RUNTIME_DIR` to the directory containing `llama-server.exe` and its DLLs, and set `LLAMA_PRISM_LICENSE` before running `scripts/package-windows.ps1`. Select PrismML under Models and hardware; engine changes unload the current model. Build and test each runtime on the target platform. The browser-only app uses a separate WebAssembly runtime and does not yet support this optional engine.

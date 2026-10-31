@@ -551,6 +551,8 @@ struct Workspace {
     inference_backend: String,
     #[serde(default)]
     inference_threads: u32,
+    #[serde(default)]
+    inference_engine: String,
 }
 
 fn choose_existing_model_file() -> Result<Option<PathBuf>, String> {
@@ -1611,7 +1613,7 @@ impl App {
                 "installed":installed.contains(&model.file),"fit":fit,"recommended":recommendation==Some(model.id.as_str())})
         }).collect::<Vec<_>>();
         json!({"chats":self.db.chats,"memory":self.db.memory,"documents":self.db.documents.iter().map(|d|json!({"id":d.id,"name":d.name,"count":d.chunks.len(),"chatId":d.chat_id})).collect::<Vec<_>>(),
-            "models":installed,"modelDetails":model_details,"ignoredModelFiles":self.ignored_model_files(),"modelsDir":self.models,"model":self.selected,"root":self.root,"language":self.language(),"thinking":self.db.thinking,"inferenceBackend":if self.db.inference_backend.is_empty() { "auto" } else { &self.db.inference_backend },"inferenceThreads":self.db.inference_threads,"catalog":catalog,"hardware":self.hardware,
+            "models":installed,"modelDetails":model_details,"ignoredModelFiles":self.ignored_model_files(),"modelsDir":self.models,"model":self.selected,"root":self.root,"language":self.language(),"thinking":self.db.thinking,"inferenceBackend":if self.db.inference_backend.is_empty() { "auto" } else { &self.db.inference_backend },"inferenceThreads":self.db.inference_threads,"inferenceEngine":if self.db.inference_engine == "prism" { "prism" } else { "standard" },"prismAvailable":prism_server_path().is_some(),"catalog":catalog,"hardware":self.hardware,
             "download":self.download_status(),"quantizeAvailable":quantize_available(),"quantize":self.quantization.as_ref().map(|job|job.lock().unwrap().status())})
     }
     fn download_status(&self) -> Value {
@@ -1695,6 +1697,21 @@ impl App {
                 }
                 self.db.language = value.to_owned();
                 self.save()?;
+                Ok(self.state())
+            }
+            "set-inference-engine" => {
+                let engine = data["engine"].as_str().ok_or("Missing inference engine")?;
+                if !["standard", "prism"].contains(&engine) {
+                    return Err("Invalid inference engine".into());
+                }
+                if engine == "prism" && prism_server_path().is_none() {
+                    return Err("PrismML engine is not installed".into());
+                }
+                if self.db.inference_engine != engine {
+                    self.inference = None;
+                    self.db.inference_engine = engine.to_owned();
+                    self.save()?;
+                }
                 Ok(self.state())
             }
             "set-inference-options" => {
@@ -2041,7 +2058,16 @@ impl App {
                     .map_err(|e| format!("llama-server: {e}"))?;
                 let port = listener.local_addr().map_err(|e| e.to_string())?.port();
                 drop(listener);
-                let mut command = Command::new(tool_path("LLAMA_SERVER", "llama-server"));
+                let prism = self.db.inference_engine == "prism";
+                let server_path = if prism {
+                    prism_server_path().ok_or("PrismML engine is not installed")?
+                } else {
+                    tool_path("LLAMA_SERVER", "llama-server")
+                };
+                let mut command = Command::new(server_path);
+                if prism {
+                    command.args(["--cors-origins", "http://127.0.0.1:0"]);
+                }
                 command
                     .args(["--host", "127.0.0.1", "--port", &port.to_string(), "-m"])
                     .arg(model)
@@ -2490,6 +2516,23 @@ fn start_hub_download(app: Arc<Mutex<App>>, model_id: &str) -> Result<Value, Str
         guard.downloading = None;
     });
     Ok(state)
+}
+
+fn prism_server_path() -> Option<PathBuf> {
+    let path = if let Some(path) = env::var_os("LLAMA_PRISM_SERVER") {
+        PathBuf::from(path)
+    } else {
+        env::current_exe()
+            .ok()?
+            .parent()?
+            .join("prism")
+            .join(if cfg!(windows) {
+                "llama-server.exe"
+            } else {
+                "llama-server"
+            })
+    };
+    path.is_file().then_some(path)
 }
 
 fn tool_path(override_name: &str, name: &str) -> PathBuf {
@@ -3789,6 +3832,15 @@ mod tests {
         assert_eq!(app.state()["thinking"], false);
         assert_eq!(app.state()["inferenceBackend"], "auto");
         assert_eq!(app.state()["inferenceThreads"], 0);
+        assert_eq!(app.state()["inferenceEngine"], "standard");
+        assert!(app
+            .command("set-inference-engine", json!({"engine":"invalid"}))
+            .is_err());
+        app.command("set-inference-engine", json!({"engine":"standard"}))
+            .unwrap();
+        let saved: Workspace =
+            serde_json::from_slice(&fs::read(root.join("workspace.json")).unwrap()).unwrap();
+        assert_eq!(saved.inference_engine, "standard");
         let settings = app
             .command(
                 "set-inference-options",

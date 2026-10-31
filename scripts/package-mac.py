@@ -64,6 +64,38 @@ def runtime_backends(llama):
     return list(found.values())
 
 
+def package_prism(source_server):
+    """Bundle an optional, separately linked PrismML server and its libraries."""
+    source_server = pathlib.Path(source_server).resolve(strict=True)
+    target_dir = BIN / "prism"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    queue = [(source_server, target_dir / "llama-server", False)]
+    seen = set()
+    while queue:
+        source, target, library = queue.pop(0)
+        if target in seen:
+            continue
+        seen.add(target)
+        shutil.copy2(source, target)
+        target.chmod(target.stat().st_mode | 0o200)
+        for dep in dependencies(source):
+            resolved = resolve(source, dep)
+            if resolved is None:
+                continue
+            name = pathlib.Path(dep).name
+            child = target_dir / name
+            queue.append((resolved, child, True))
+            run("install_name_tool", "-change", dep, f"@loader_path/{name}", str(target))
+        if library:
+            run("install_name_tool", "-id", f"@loader_path/{target.name}", str(target))
+        run("codesign", "--force", "--sign", "-", str(target))
+        run("codesign", "--verify", "--strict", str(target))
+    license_path = os.environ.get("LLAMA_PRISM_LICENSE")
+    if not license_path:
+        raise RuntimeError("Set LLAMA_PRISM_LICENSE to the PrismML llama.cpp LICENSE file")
+    shutil.copy2(license_path, target_dir / "LICENSE")
+
+
 def main():
     subprocess.run(["cargo", "build", "--release", "--locked"], cwd=ROOT, check=True)
     tools = {"llama-cli": shutil.which("llama-cli"), "llama-server": shutil.which("llama-server"), "llama-quantize": shutil.which("llama-quantize"), "pdftotext": shutil.which("pdftotext")}
@@ -129,6 +161,8 @@ def main():
     for path in signed:
         run("codesign", "--force", "--sign", "-", str(path))
         run("codesign", "--verify", "--strict", str(path))
+    if os.environ.get("LLAMA_PRISM_SERVER"):
+        package_prism(os.environ["LLAMA_PRISM_SERVER"])
     for model in (ROOT / "models").glob("*.gguf"):
         dest = OUT / "models" / model.name
         try:

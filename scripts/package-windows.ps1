@@ -45,6 +45,17 @@ try {
     $openMpLicense = Join-Path $gpuRuntime 'LICENSE-LLVM-OpenMP'
     if (Test-Path $openMpLicense) { Copy-Item $openMpLicense $gpuBin }
   }
+  if ($env:USB_AI_PRISM_RUNTIME_DIR) {
+    $prismServer = Join-Path $env:USB_AI_PRISM_RUNTIME_DIR 'llama-server.exe'
+    if (!(Test-Path $prismServer) -or !$env:LLAMA_PRISM_LICENSE -or !(Test-Path $env:LLAMA_PRISM_LICENSE)) {
+      throw 'PrismML requires llama-server.exe and LLAMA_PRISM_LICENSE'
+    }
+    $prismBin = Join-Path $bin 'prism'
+    New-Item $prismBin -ItemType Directory -Force | Out-Null
+    Copy-Item $prismServer $prismBin
+    Get-ChildItem $env:USB_AI_PRISM_RUNTIME_DIR -Filter '*.dll' -File | Copy-Item -Destination $prismBin -Force
+    Copy-Item $env:LLAMA_PRISM_LICENSE (Join-Path $prismBin 'LICENSE')
+  }
   Get-ChildItem (Join-Path $root 'models') -Filter '*.gguf' | ForEach-Object {
     $destination = Join-Path (Join-Path $out 'models') $_.Name
     if (-not (Test-Path $destination)) { Copy-Item $_.FullName $destination }

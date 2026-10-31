@@ -100,3 +100,7 @@ Vedi [VERIFICHE.md](VERIFICHE.md) per lo stato dei controlli e [README.md](READM
 ## Model Creator Lab (sperimentale)
 
 Il Laboratorio desktop include Model Creator per addestrare un piccolo Transformer da zero sui propri dati, con Python e PyTorch locali. Può esportare un GGUF F32 per LlamaNest Web installando il pacchetto Python `gguf`. Per installazione, limiti, valutazione ed esportazione consulta [MODEL_CREATOR.md](MODEL_CREATOR.md).
+
+### Motore PrismML opzionale (Mac)
+
+Per i GGUF PrismML come Bonsai `PQ2_0` si può includere separatamente un `llama-server` compilato dal [fork PrismML](https://github.com/PrismML-Eng/llama.cpp), senza sostituire il motore standard. Per creare il pacchetto, imposta `LLAMA_PRISM_SERVER` sul server compilato e `LLAMA_PRISM_LICENSE` sul file LICENSE del fork prima di eseguire `python3 scripts/package-mac.py`. In Modelli e hardware scegli PrismML; tornando a Standard il modello viene scaricato e ricaricato alla prossima richiesta. Il motore deve essere compilato per il Mac di destinazione.
