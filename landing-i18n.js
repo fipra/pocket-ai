@@ -1,6 +1,10 @@
 (() => {
   // The Italian HTML is the readable fallback when JavaScript is unavailable.
   const rows = [
+    ["La nostra scelta consigliata: PrismML + Bonsai 2 9B", "Our recommended choice: PrismML + Bonsai 2 9B", "Notre choix recommandé : PrismML + Bonsai 2 9B", "Unsere Empfehlung: PrismML + Bonsai 2 9B", "Nuestra elección recomendada: PrismML + Bonsai 2 9B"],
+    ["Prova con Bonsai sul Web", "Try Bonsai on the Web", "Essayer Bonsai sur le Web", "Bonsai im Web testen", "Probar Bonsai en la web"],
+    ["Scarica Prism per Mac", "Download Prism for Mac", "Télécharger Prism pour Mac", "Prism für Mac herunterladen", "Descargar Prism para Mac"],
+    ["Web: il modello si scarica al primo utilizzo (2,42 GB). Mac: modello da scaricare separatamente.", "Web: download the model on first use (2.42 GB). Mac: download the model separately.", "Web : téléchargez le modèle à la première utilisation (2,42 Go). Mac : téléchargez le modèle séparément.", "Web: Modell bei der ersten Nutzung herunterladen (2,42 GB). Mac: Modell separat herunterladen.", "Web: descarga el modelo al usarlo por primera vez (2,42 GB). Mac: descarga el modelo por separado."],
     ["Prova le versioni Mac preliminari con copia e condivisione", "Try the preliminary Mac versions with copy and sharing", "Essayer les versions Mac préliminaires avec copie et partage", "Vorläufige Mac-Versionen mit Kopieren und Teilen testen", "Prueba las versiones preliminares para Mac con copia y uso compartido"],
     ["Apri PrismML Web", "Open PrismML Web", "Ouvrir PrismML Web", "PrismML Web öffnen", "Abrir PrismML Web"],
     ["PrismML Web", "PrismML Web", "PrismML Web", "PrismML Web", "PrismML Web"],
