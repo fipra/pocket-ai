@@ -1,6 +1,7 @@
 (() => {
   // The Italian HTML is the readable fallback when JavaScript is unavailable.
   const rows = [
+    ["Prova sperimentale Bonsai GPU ↗", "Try experimental Bonsai GPU ↗", "Essai expérimental Bonsai GPU ↗", "Experimentellen Bonsai-GPU-Test öffnen ↗", "Prueba experimental Bonsai GPU ↗"],
     ["La nostra scelta consigliata: PrismML + Bonsai 2 9B", "Our recommended choice: PrismML + Bonsai 2 9B", "Notre choix recommandé : PrismML + Bonsai 2 9B", "Unsere Empfehlung: PrismML + Bonsai 2 9B", "Nuestra elección recomendada: PrismML + Bonsai 2 9B"],
     ["Prova con Bonsai sul Web", "Try Bonsai on the Web", "Essayer Bonsai sur le Web", "Bonsai im Web testen", "Probar Bonsai en la web"],
     ["Scarica Prism per Mac", "Download Prism for Mac", "Télécharger Prism pour Mac", "Prism für Mac herunterladen", "Descargar Prism para Mac"],
