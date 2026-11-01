@@ -53,7 +53,7 @@ export function inferencePreferences(settings = {}, windows = isWindows(), webGp
 export function modelOptions({ safariCpu = usesSafariCpu(), deviceMemory = navigator.deviceMemory, iosDiagnostic = false, contextSize: requestedContext = 0, threads = 1, hardwareConcurrency = globalThis.navigator?.hardwareConcurrency, backend = 'auto', windows = isWindows() } = {}) {
   if (iosDiagnostic) return { n_ctx: 512, n_batch: 64, n_threads: 1, n_gpu_layers: 0, jinja: true, reasoning: true };
   if (safariCpu) return { n_ctx: 2048, n_batch: 64, n_threads: 1, n_gpu_layers: 0, jinja: true, reasoning: true };
-  const contextSize = [4096, 8192, 16384, 32768].includes(Number(requestedContext)) ? Number(requestedContext) : deviceMemory && deviceMemory <= 4 ? 4096 : 8192;
+  const contextSize = [4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576].includes(Number(requestedContext)) ? Number(requestedContext) : deviceMemory && deviceMemory <= 4 ? 4096 : 8192;
   const options = { n_ctx: contextSize, n_threads: threadCount(threads, hardwareConcurrency), jinja: true, reasoning: true };
   if (windows && backend === 'cpu') options.n_gpu_layers = 0;
   if (windows && backend === 'gpu') options.n_gpu_layers = 99999;

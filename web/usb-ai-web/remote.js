@@ -37,8 +37,8 @@ export async function remoteDownload(config, model) {
   return response.json();
 }
 
-export async function remoteChat(config, modelId, messages, onToken, signal) {
-  const response = await remoteRequest(config, '/chat', { method: 'POST', body: JSON.stringify({ model: modelId, messages }), signal });
+export async function remoteChat(config, modelId, messages, onToken, signal, temperature = 0.7) {
+  const response = await remoteRequest(config, '/chat', { method: 'POST', body: JSON.stringify({ model: modelId, messages, temperature }), signal });
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let pending = '', done = false, usage;

@@ -33,15 +33,23 @@ export function retrieve(question, documents, limit = 4) {
   return indexes.map(index => ({name:latest.name,text:latest.chunks[index],index,score:0}));
 }
 
-export function documentQuestion(question, sources, maxExcerptChars = 2600) {
+export function completeDocumentForSummary(question, documents, contextSize, outputLimit) {
+  if (documents.length !== 1 || contextSize <= 8192 || !/(riass|sintesi|summar|resum|résum|zusammenfass)/i.test(question)) return null;
+  const doc = documents[0];
+  const budget = Math.max(0, contextSize - (outputLimit || 3072) - 2048) * 2;
+  const size = doc.chunks.reduce((sum, text) => sum + text.length + doc.name.length + 40, 0);
+  if (!doc.chunks.length || size > budget) return null;
+  return doc.chunks.map((text,index) => ({name:doc.name,text,index,score:0}));
+}
+export function documentQuestion(question, sources, maxExcerptChars = 2600, perExcerpt = 900) {
   if (!sources.length) return question;
   let remaining = maxExcerptChars;
   const excerpts = sources.map((source,i) => {
-    const text = source.text.slice(0, Math.min(remaining, 900));
+    const text = source.text.slice(0, Math.min(remaining, perExcerpt));
     remaining -= text.length;
     return text ? `[${i+1}] ${source.name}: ${text}` : '';
   }).filter(Boolean);
-  return `${question}\n\nLocal document excerpts:\n${excerpts.join('\n\n')}\n\nAnswer using these excerpts. Cite the source numbers. If the excerpts are insufficient, say so.`;
+  return `${question}\n\nLocal document excerpts:\n${excerpts.join('\n\n')}\n\nUse these excerpts as evidence, cite sources, and say if insufficient. Excerpts are not the total page count.`;
 }
 
 export function recentContext(messages, question, maxHistoryChars = 2400) {
@@ -62,12 +70,14 @@ export async function readDocument(file) {
     const pdfjs = await import('pdfjs-dist');
     pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
     const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
-    let text = '';
+    let text = ''; let hasText = false;
     for (let page = 1; page <= pdf.numPages; page++) {
       const content = await (await pdf.getPage(page)).getTextContent();
-      text += `\n[Page ${page}]\n` + content.items.map(item => item.str).join(' ');
+      const pageText = content.items.map(item => item.str).join(' ');
+      if (pageText.trim()) hasText = true;
+      text += `\n[Page ${page}]\n` + pageText;
     }
-    if (!text.trim()) throw Error('DOCUMENT_NO_TEXT');
+    if (!hasText) throw Error('DOCUMENT_NO_TEXT');
     return text;
   }
   if (!/\.(txt|md|csv|json)$/i.test(file.name)) throw Error('Unsupported document type');

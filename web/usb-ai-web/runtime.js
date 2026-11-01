@@ -234,7 +234,7 @@ export async function loadModel(id, contextSize = 0, threads = 1, backend = 'aut
   } catch (error) { iosDiagnostic('load error', String(error?.message || error).slice(0,300)); void next.exit().catch(() => {}); throw error; }
   finally { clearTimeout(timer); clearInterval(heartbeat); }
 }
-export async function streamChat(messages, onToken, signal, thinking = false, outputLimit = 0) {
+export async function streamChat(messages, onToken, signal, thinking = false, outputLimit = 0, temperature = 0.7) {
   if (!engine) throw Error('Select a model first');
   if (signal.aborted) return;
   const current = engine;
@@ -272,7 +272,7 @@ export async function streamChat(messages, onToken, signal, thinking = false, ou
   const generation = Promise.resolve().then(() => current.createChatCompletion({
     messages: requestMessages,
     max_tokens: maxTokens,
-    temperature: 0.7,
+    temperature,
     stream: true,
     chat_template_kwargs: { enable_thinking: thinking },
     abortSignal: signal,

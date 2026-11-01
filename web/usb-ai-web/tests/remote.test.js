@@ -32,10 +32,12 @@ test('remote model listing and verified download use the configured bridge', asy
 
 test('remote chat streams tokens and returns usage', async () => {
   const original = globalThis.fetch;
-  globalThis.fetch = async () => new Response('data: {"choices":[{"delta":{"content":"Ciao"}}]}\n\ndata: {"usage":{"prompt_tokens":4,"completion_tokens":1},"choices":[]}\n\ndata: [DONE]\n\n', { headers:{ 'Content-Type':'text/event-stream' } });
+  let sent;
+  globalThis.fetch = async (_url, options) => { sent = JSON.parse(options.body); return new Response('data: {"choices":[{"delta":{"content":"Ciao"}}]}\n\ndata: {"usage":{"prompt_tokens":4,"completion_tokens":1},"choices":[]}\n\ndata: [DONE]\n\n', { headers:{ 'Content-Type':'text/event-stream' } }); };
   try {
     const tokens = [];
-    const usage = await remoteChat(config, 'model-1', [{ role:'user', content:'ciao' }], token => tokens.push(token), new AbortController().signal);
+    const usage = await remoteChat(config, 'model-1', [{ role:'user', content:'ciao' }], token => tokens.push(token), new AbortController().signal, 1.2);
+    assert.equal(sent.temperature, 1.2);
     assert.deepEqual(tokens, ['Ciao']);
     assert.equal(usage.inputTokens, 4);
     assert.equal(usage.outputTokens, 1);

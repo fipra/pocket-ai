@@ -30,6 +30,7 @@ test('Chrome and Safari with WebGPU retain the standard context', () => {
 
 test('local context and output settings apply within supported choices', () => {
   assert.equal(modelOptions({safariCpu:false, deviceMemory:8, contextSize:16384}).n_ctx, 16384);
+  assert.equal(modelOptions({safariCpu:false, deviceMemory:8, contextSize:131072}).n_ctx, 131072);
   assert.equal(modelOptions({safariCpu:false, deviceMemory:8, contextSize:999999}).n_ctx, 8192);
   assert.equal(modelOptions({safariCpu:true, contextSize:16384}).n_ctx, 2048);
   assert.equal(generationLimit(8192), 8192);

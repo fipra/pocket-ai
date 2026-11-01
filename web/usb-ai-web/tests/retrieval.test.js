@@ -55,3 +55,13 @@ test('a long document summary samples its beginning, middle, and end', () => {
 test('empty text documents are rejected instead of silently saved', async () => {
   await assert.rejects(readDocument({name:'scan.txt',size:0,text:async()=>''}), /DOCUMENT_NO_TEXT/);
 });
+
+
+test('larger context includes the full document for a summary only when it fits', async () => {
+  const {completeDocumentForSummary} = await import('../retrieval.js');
+  const doc = {name:'report.pdf', chunks:Array.from({length:80}, (_,i)=>`Page ${i+1}: ` + 'text '.repeat(150))};
+  assert.equal(completeDocumentForSummary('riassumi il documento', [doc], 8192, 3072), null);
+  assert.equal(completeDocumentForSummary('riassumi il documento', [doc], 16384, 3072), null);
+  assert.equal(completeDocumentForSummary('riassumi il documento', [doc], 131072, 3072).length, 80);
+  assert.equal(completeDocumentForSummary('cosa dice pagina 3', [doc], 131072, 3072), null);
+});

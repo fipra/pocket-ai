@@ -127,11 +127,13 @@ async function download(data) {
 async function chat(request, response) {
   const data = await body(request);
   if (!(await models()).some(item => item.id === data.model) || !Array.isArray(data.messages) || data.messages.length > 32 || data.messages.some(message => !['system','user','assistant'].includes(message.role) || typeof message.content !== 'string' || message.content.length > 50_000)) throw Error('Invalid chat request');
+  const temperature = data.temperature ?? 0.7;
+  if (typeof temperature !== 'number' || !Number.isFinite(temperature) || temperature < 0 || temperature > 2) throw Error('Invalid temperature');
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 600_000);
   response.once('close', () => controller.abort());
   try {
-    const upstream = await fetch(`http://127.0.0.1:${llamaPort}/v1/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: data.model, messages: data.messages, stream: true, max_tokens: 3072, temperature: 0.7, stream_options: { include_usage: true } }), signal: controller.signal });
+    const upstream = await fetch(`http://127.0.0.1:${llamaPort}/v1/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: data.model, messages: data.messages, stream: true, max_tokens: 3072, temperature, stream_options: { include_usage: true } }), signal: controller.signal });
     if (!upstream.ok || !upstream.body) throw Error(`llama-server: HTTP ${upstream.status} ${await upstream.text()}`);
     response.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
     for await (const chunk of upstream.body) { if (response.destroyed) break; response.write(chunk); }
