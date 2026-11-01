@@ -9,7 +9,10 @@ import zipfile
 
 root = Path(__file__).resolve().parents[1]
 web = root / 'web'
-dest = root / '.vercel-static' / 'prism-dual'
+base_path = os.environ.get('LLAMA_PRISM_DUAL_BASE', '/prism-dual/')
+if base_path not in ('/prism-dual/', '/prism-gpu/'):
+    raise RuntimeError('Unsupported dual-engine base path')
+dest = root / '.vercel-static' / base_path.strip('/')
 
 def replace_file(path, old, new):
     text = path.read_text()
@@ -26,6 +29,7 @@ with tempfile.TemporaryDirectory(prefix='llamanest-prism-gpu-') as tmp:
         for name in ('prism-webgpu.js', 'prism-wllama.js', 'prism-webgpu.wasm'):
             (app / name).write_bytes(archive.read(name))
     runtime = app / 'runtime.js'
+    replace_file(runtime, 'wasm/wllama.wasm', 'wasm/standard-wllama.wasm')
     replace_file(runtime, "let engine;", "let engineMode = 'prism';\nexport function setEngineMode(value) { if (!['prism','standard'].includes(value)) throw Error('Invalid engine'); engineMode = value; }\nlet engine;")
     replace_file(runtime, "import('@wllama/wllama').then(({ ModelManager })", "import('./prism-wllama.js').then(({ ModelManager })")
     replace_file(runtime, "    import('@wllama/wllama'),\n    import('@wllama/wllama-compat/wasm/wllama.js?raw')", "    ...(engineMode === 'prism' ? [import('./prism-wllama.js'), import('./prism-webgpu.js?raw')] : [import('@wllama/wllama'), import('@wllama/wllama-compat/wasm/wllama.js?raw')])")
@@ -48,11 +52,11 @@ with tempfile.TemporaryDirectory(prefix='llamanest-prism-gpu-') as tmp:
     replace_file(app / 'folder-models.js', 'usb-ai-models', 'usb-ai-prism-gpu-models')
     replace_file(app / 'public' / 'sw.js', 'usb-ai-web-shell-', 'usb-ai-prism-gpu-shell-')
     config = app / 'vite.config.js'
-    replace_file(config, "copyFileSync(resolve(base, 'wllama.wasm'), resolve(dest, 'wllama.wasm'));", "copyFileSync(resolve(base, 'wllama.wasm'), resolve(dest, 'wllama.wasm'));\n    copyFileSync(resolve(import.meta.dirname, 'prism-webgpu.wasm'), resolve(dest, 'prism-webgpu.wasm'));")
+    replace_file(config, "copyFileSync(resolve(base, 'wllama.wasm'), resolve(dest, 'wllama.wasm'));", "copyFileSync(resolve(base, 'wllama.wasm'), resolve(dest, 'standard-wllama.wasm'));\n    copyFileSync(resolve(import.meta.dirname, 'prism-webgpu.wasm'), resolve(dest, 'prism-webgpu.wasm'));")
     html = app / 'index.html'
     replace_file(html, '<h3 data-i18n="generationSettings"></h3>', '<h3 data-i18n="generationSettings"></h3><label><span data-i18n="webEngine"></span> <select id="web-engine"><option value="prism" data-i18n="enginePrism"></option><option value="standard" data-i18n="engineStandard"></option></select></label><p class="hint" data-i18n="engineHelp"></p>')
     banner = '''<div id="prism-gpu-notice" style="background:#fff3cd;padding:10px;text-align:center;color:#503a00">Experimental Prism WebGPU: GPU for model layers; some operations run on CPU. Chrome on Apple Silicon tested; performance varies. Separate browser data.</div><script>const m={it:'Prism WebGPU sperimentale: livelli del modello sulla GPU; alcune operazioni usano la CPU. Provato con Chrome su Apple Silicon; velocità variabile. Dati del browser separati.',fr:'Prism WebGPU expérimental : couches du modèle sur GPU ; certaines opérations utilisent le processeur. Testé avec Chrome sur Apple Silicon ; vitesse variable. Données séparées.',de:'Prism WebGPU experimentell: Modellebenen auf der GPU; einige Vorgänge nutzen die CPU. Mit Chrome auf Apple Silicon getestet; Geschwindigkeit variiert. Separate Browserdaten.',es:'Prism WebGPU experimental: capas del modelo en GPU; algunas operaciones usan la CPU. Probado con Chrome en Apple Silicon; velocidad variable. Datos separados.'};document.getElementById('prism-gpu-notice').textContent=m[(navigator.language||'en').slice(0,2)]||document.getElementById('prism-gpu-notice').textContent;</script>'''
     replace_file(html, '<body>', '<body>' + banner)
-    env = dict(os.environ, USB_AI_WEB_BASE='/prism-dual/')
+    env = dict(os.environ, USB_AI_WEB_BASE=base_path)
     subprocess.run(['npm', 'run', 'build'], cwd=work, env=env, check=True)
     shutil.copytree(work / 'dist', dest, dirs_exist_ok=True)
