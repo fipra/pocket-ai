@@ -4,10 +4,12 @@ export function createBackendDetector({ forceCpu = false } = {}) {
   let result = { kind: 'unknown' };
   let gpuUnavailable = false;
   let cpuModel = false;
+  let memoryFailure = false;
   let buffer = '';
   return {
     record(...args) {
       buffer = (buffer + '\n' + args.map(String).join(' ')).slice(-16000);
+      if (/out[ -]?of[ -]?memory|insufficient memory|allocation failed|failed to allocate/i.test(buffer)) memoryFailure = true;
       const matches = [...buffer.matchAll(/offloaded\s+(\d+)\s*\/\s*(\d+)\s+layers\s+to\s+GPU/gi)];
       if (matches.length) {
         const match = matches[matches.length - 1];
@@ -18,6 +20,7 @@ export function createBackendDetector({ forceCpu = false } = {}) {
       if (/CPU(?:_Mapped)?\s+model buffer size/i.test(buffer)) cpuModel = true;
       if (result.kind === 'unknown' && cpuModel && (forceCpu || gpuUnavailable)) result = { kind: 'cpu' };
     },
-    value() { return { ...result }; }
+    value() { return { ...result }; },
+    memoryFailure() { return memoryFailure; }
   };
 }

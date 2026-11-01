@@ -17,6 +17,7 @@ async function modelManager() {
   return managerPromise;
 }
 let engine;
+let engineDetector;
 let loadedId;
 let creatorModel;
 let backendInfo;
@@ -174,7 +175,7 @@ export async function deleteModel(id) {
   sessionFiles.delete(id);
   await db.remove('models', id);
 }
-export async function unload() { if (engine) await engine.exit(); engine = undefined; loadedId = undefined; creatorModel = undefined; backendInfo = undefined; }
+export async function unload() { if (engine) await engine.exit(); engine = undefined; engineDetector = undefined; loadedId = undefined; creatorModel = undefined; backendInfo = undefined; }
 let loadedContext, loadedThreads, loadedGpuLayers;
 export async function loadModel(id, contextSize = 0, threads = 1, backend = 'auto') {
   if (isSmartphone() && !isIPhone()) throw Error('SMARTPHONE_DISABLED');
@@ -230,14 +231,15 @@ export async function loadModel(id, contextSize = 0, threads = 1, backend = 'aut
     if (diagnostic) iosDiagnostic('model/context', `initialized · training context=${metadata.hparams.nCtxTrain} · vocabulary=${metadata.hparams.nVocab} · tokenizer=${metadata.meta?.['tokenizer.ggml.model'] || 'unknown'} · threads=${next.getNumThreads()} · multithread=${next.isMultithread()} · chat template=${!!next.getChatTemplate()} · add BOS=${next.mustAddBosToken()} · add EOS=${next.mustAddEosToken()}`);
     const creatorMode = metadata.meta?.['llamanest.creator.mode'];
     creatorModel = ['qa', 'lm'].includes(creatorMode) ? { mode: creatorMode, context: metadata.hparams.nCtxTrain } : undefined;
-    engine = next; loadedId = id; backendInfo = detector.value();
-  } catch (error) { iosDiagnostic('load error', String(error?.message || error).slice(0,300)); void next.exit().catch(() => {}); throw error; }
+    engine = next; engineDetector = detector; loadedId = id; backendInfo = detector.value();
+  } catch (error) { iosDiagnostic('load error', String(error?.message || error).slice(0,300)); void next.exit().catch(() => {}); throw detector.memoryFailure() ? Error('GPU_OUT_OF_MEMORY') : error; }
   finally { clearTimeout(timer); clearInterval(heartbeat); }
 }
 export async function streamChat(messages, onToken, signal, thinking = false, outputLimit = 0, temperature = 0.7) {
   if (!engine) throw Error('Select a model first');
   if (signal.aborted) return;
   const current = engine;
+  const currentDetector = engineDetector;
   const safariCpu = usesSafariCpu();
   let requestMessages = normalizeChatMessages(messages);
   let maxTokens = generationLimit(outputLimit, {iosDiagnostic:iosDiagnosticsEnabled(), safariCpu});
@@ -255,7 +257,7 @@ export async function streamChat(messages, onToken, signal, thinking = false, ou
     if (settled) return;
     settled = true;
     iosDiagnostic('generation interrupted', reason);
-    if (engine === current) { engine = undefined; loadedId = undefined; backendInfo = undefined; }
+    if (engine === current) { engine = undefined; engineDetector = undefined; loadedId = undefined; backendInfo = undefined; }
     // Wllama terminates its worker in exit(). A busy WASM call cannot be
     // interrupted reliably with abortSignal alone on Safari.
     void current.exit().catch(() => {});
@@ -302,6 +304,11 @@ export async function streamChat(messages, onToken, signal, thinking = false, ou
     return usage;
   } catch (error) {
     iosDiagnostic('generation error', String(error?.message || error).slice(0,300));
+    if (!signal.aborted && currentDetector?.memoryFailure()) {
+      if (engine === current) { engine = undefined; engineDetector = undefined; loadedId = undefined; creatorModel = undefined; backendInfo = undefined; }
+      void current.exit().catch(() => {});
+      throw Error('GPU_OUT_OF_MEMORY');
+    }
     throw error;
   } finally {
     settled = true;

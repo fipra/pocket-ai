@@ -376,3 +376,12 @@ for (const language of Object.keys(temperatureStrings)) Object.assign(translatio
 
 const documentPageStrings = {en:{pages:'pages'},it:{pages:'pagine'},fr:{pages:'pages'},de:{pages:'Seiten'},es:{pages:'páginas'}};
 for (const language of Object.keys(documentPageStrings)) Object.assign(translations[language], documentPageStrings[language]);
+
+const memoryErrorStrings = {
+ en: 'Not enough memory to run the model. Reduce the context window to 4,096 or 8,192 tokens and reload the model. Close other tabs or apps if needed.',
+ it: 'Memoria insufficiente per usare il modello. Riduci la finestra di contesto a 4.096 o 8.192 token e ricarica il modello. Se necessario, chiudi altre schede o applicazioni.',
+ fr: 'Mémoire insuffisante pour utiliser le modèle. Réduisez la fenêtre de contexte à 4 096 ou 8 192 jetons et rechargez le modèle. Fermez d’autres onglets ou applications si nécessaire.',
+ de: 'Nicht genügend Speicher für das Modell. Reduziere das Kontextfenster auf 4.096 oder 8.192 Token und lade das Modell erneut. Schließe bei Bedarf andere Tabs oder Anwendungen.',
+ es: 'No hay memoria suficiente para usar el modelo. Reduce la ventana de contexto a 4.096 u 8.192 tokens y vuelve a cargar el modelo. Si es necesario, cierra otras pestañas o aplicaciones.'
+};
+for (const language of Object.keys(memoryErrorStrings)) translations[language].gpuOutOfMemory = memoryErrorStrings[language];

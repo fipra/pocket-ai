@@ -2,6 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createBackendDetector } from '../backend-detection.js';
 
+test('recognizes an explicit GPU memory failure without treating every abort as one', () => {
+  const detector = createBackendDetector();
+  detector.record('RuntimeError: (ABORT)');
+  assert.equal(detector.memoryFailure(), false);
+  detector.record('Metal command buffer failed: Insufficient Memory (kIOGPUCommandBufferCallbackErrorOutOfMemory)');
+  assert.equal(detector.memoryFailure(), true);
+});
+
 test('reports GPU only when the runtime confirms offloaded layers', () => {
   const detector = createBackendDetector();
   detector.record('WebGPU available', 'CPU model buffer size = 2 MiB');
