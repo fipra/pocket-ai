@@ -1,0 +1,23 @@
+LlamaNest + PrismML / Windows x64
+
+Extract the complete ZIP, then double-click Avvia LlamaNest Prism.cmd.
+The app opens on localhost. Vulkan acceleration is selected when detected;
+otherwise the included CPU runtime is used. For CPU only, launch
+Avvia LlamaNest Prism CPU.cmd and select CPU in the model settings.
+
+Like the Mac Prism edition, this package selects PrismML automatically and
+offers Ternary Bonsai 2 9B PQ2_0. Download it from the app on first use
+(2.42 GB), or import an existing GGUF. Downloads use the pinned SHA-256
+and exact size in the catalog. Other GGUFs must be supported by PrismML.
+Keep the whole folder together: models and conversations remain here.
+The workspace is not encrypted. Model weights are not included in the ZIP.
+The model is Apache-2.0; see its source and license before use:
+https://huggingface.co/prism-ml/Ternary-Bonsai-2-9B-gguf
+
+Italiano
+Estrai tutto lo ZIP e apri Avvia LlamaNest Prism.cmd.
+Il motore PrismML e' gia' selezionato, come nella versione Mac Prism.
+Scarica Bonsai 2 9B dall'app al primo utilizzo oppure importa il tuo GGUF.
+La GPU Vulkan viene usata quando rilevata; altrimenti viene usata la CPU.
+Per forzare la CPU, apri Avvia LlamaNest Prism CPU.cmd e scegli CPU nelle
+impostazioni del modello. Conserva tutta la cartella sulla chiavetta.

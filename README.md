@@ -1,5 +1,34 @@
 # LlamaNest by FipraAI
 
+## Windows PrismML / Bonsai edition
+
+Build the dedicated portable edition with Rust (MSVC toolchain), `curl.exe`,
+and a Windows Poppler installation providing `pdftotext.exe`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/package-windows-prism.ps1 -PdfToText C:\tools\poppler\Library\bin\pdftotext.exe -Zip
+```
+
+Output: `release/LlamaNest-Prism-Bonsai-Windows-x64.zip`. Extract the whole
+folder and run `Avvia LlamaNest Prism.cmd`. Like the Mac Prism edition, it
+uses PrismML automatically and offers Bonsai 2 9B PQ2_0 on first use, with
+verified model downloads. The launcher detects Vulkan or uses the bundled
+CPU runtime. The existing interface and five languages are shared with Mac.
+Models and conversations are not included in the ZIP. Existing output folders
+are never overwritten; move them before rebuilding.
+
+The `Windows Prism Bonsai portable` GitHub Actions workflow builds an artifact
+and checks actual CPU inference using the catalog's size- and hash-verified
+Bonsai model. On main, a successful build publishes the verified Windows Prism release. To run that integration check
+locally after packaging (downloads 2.42 GB into ignored `target/`):
+
+```powershell
+python scripts/test-prism-inference.py release/LlamaNest-Prism-Bonsai-Windows-x64
+```
+
+The runtime is pinned to the [official PrismML release prism-b12128-d7b2896](https://github.com/PrismML-Eng/llama.cpp/releases/tag/prism-b12128-d7b2896).
+GPU performance must also be checked on the intended Windows hardware.
+
 > [!IMPORTANT]
 > **Commercial use of current LlamaNest versions requires a separate paid written license before use.** This includes internal business use, client work, paid services, resale, and integration into a commercial product. [Contact the project owner about an agreement](https://github.com/fipra/usb-ai/issues/new?title=Commercial%20licensing%20inquiry) and read the [commercial licensing terms](COMMERCIAL_LICENSE.md).
 >

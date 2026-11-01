@@ -1,5 +1,32 @@
 # LlamaNest by FipraAI
 
+## Versione Windows PrismML / Bonsai
+
+La procedura dedicata riprende la modalita Mac Prism: motore PrismML automatico,
+stessa interfaccia in cinque lingue e Bonsai 2 9B PQ2_0 scaricabile al primo uso.
+Il launcher sceglie Vulkan quando rilevato, altrimenti usa il runtime CPU incluso.
+
+Per creare lo ZIP servono Rust con toolchain MSVC, curl.exe e Poppler per Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/package-windows-prism.ps1 -PdfToText C:\tools\poppler\Library\bin\pdftotext.exe -Zip
+```
+
+Estrai `release/LlamaNest-Prism-Bonsai-Windows-x64.zip` e apri
+`Avvia LlamaNest Prism.cmd`. I pesi Bonsai (2,42 GB) non sono inclusi;
+il download dall'app verifica dimensione e SHA-256. Puoi anche importare un GGUF.
+La procedura non sovrascrive cartelle gia esistenti con possibili dati personali.
+
+Il workflow GitHub Actions `Windows Prism Bonsai portable` prepara lo ZIP e
+verifica un'inferenza reale su CPU prima di caricare l'artefatto, e pubblica la release Windows Prism solo dopo il successo dei test su main. Per la stessa verifica locale dopo il packaging:
+
+```powershell
+python scripts/test-prism-inference.py release/LlamaNest-Prism-Bonsai-Windows-x64
+```
+
+Il test scarica il modello nella cartella ignorata `target/`. Le prestazioni GPU
+vanno verificate sul PC Windows di destinazione.
+
 > [!IMPORTANT]
 > **Per usare commercialmente le versioni attuali di LlamaNest serve prima una licenza scritta separata e a pagamento.** Questo vale anche per l'uso interno in azienda, i lavori per clienti, i servizi a pagamento, la rivendita e l'integrazione in un prodotto commerciale. [Contatta il titolare del progetto per un accordo](https://github.com/fipra/usb-ai/issues/new?title=Richiesta%20licenza%20commerciale) e leggi le [condizioni commerciali](COMMERCIAL_LICENSE.md).
 >
