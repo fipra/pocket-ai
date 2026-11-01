@@ -1,0 +1,18 @@
+[
+  {
+    "id": "bonsai-2-9b-pq2",
+    "name": "Ternary Bonsai 2 · 9B PQ2_0",
+    "family": "Ternary Bonsai 2",
+    "parameters": "9B",
+    "file": "Ternary-Bonsai-2-9B-PQ2_0.gguf",
+    "url": "https://huggingface.co/prism-ml/Ternary-Bonsai-2-9B-gguf/resolve/5b2abb02362efbed46bbe204014b02837778b2c2/Ternary-Bonsai-2-9B-PQ2_0.gguf",
+    "source_url": "https://huggingface.co/prism-ml/Ternary-Bonsai-2-9B-gguf",
+    "size_bytes": 2416851840,
+    "download_gb": 2.42,
+    "sha256": "7a89ab48f5038c704480f60781f9b8d4035351f5f6beb7d11fad80001fde23f9",
+    "minimum_ram_gb": 8,
+    "comfortable_ram_gb": 16,
+    "license": "Apache-2.0",
+    "summary": "Recommended ternary model for PrismML."
+  }
+]
