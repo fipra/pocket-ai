@@ -47,3 +47,19 @@ export async function remove(store, id) {
     request.onerror = () => reject(request.error);
   });
 }
+
+// Delete conversations and their documents in one transaction.
+export async function removeChats(ids) {
+  const db = await openDB();
+  const selected = new Set(ids);
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(['chats', 'documents'], 'readwrite');
+    const chats = tx.objectStore('chats'), docs = tx.objectStore('documents');
+    for (const id of selected) chats.delete(id);
+    const cursor = docs.openCursor();
+    cursor.onsuccess = () => { const item = cursor.result; if (!item) return; if (selected.has(item.value.chatId)) item.delete(); item.continue(); };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('Transaction aborted'));
+  });
+}
