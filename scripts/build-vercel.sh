@@ -7,3 +7,4 @@ cp index.html landing-i18n.js landing-mobile-gate.js landing-demo.js robots.txt 
 cp -R web/dist/. .vercel-static/app/
 python3 scripts/build-prism-web.py
 python3 scripts/build-prism-webgpu.py
+python3 scripts/build-prism-dual.py
