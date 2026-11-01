@@ -1,0 +1,148 @@
+--- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -4409,6 +4409,7 @@
+     switch (type) {
+         case GGML_TYPE_Q1_0:
+         case GGML_TYPE_Q2_0:
++        case GGML_TYPE_PTQ1_0:
+         case GGML_TYPE_PQ2_0:
+         case GGML_TYPE_Q4_0:
+         case GGML_TYPE_Q4_1:
+@@ -4516,6 +4517,7 @@
+                             case GGML_TYPE_BF16:
+                             case GGML_TYPE_Q1_0:
+                             case GGML_TYPE_Q2_0:
++        case GGML_TYPE_PTQ1_0:
+         case GGML_TYPE_PQ2_0:
+                             case GGML_TYPE_Q4_0:
+                             case GGML_TYPE_Q4_1:
+--- a/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
++++ b/ggml/src/ggml-webgpu/ggml-webgpu-shader-lib.hpp
+@@ -1656,6 +1656,7 @@
+                     switch (key.src_type) {
+                         case GGML_TYPE_Q1_0:
+                         case GGML_TYPE_Q2_0:
++                        case GGML_TYPE_PTQ1_0:
+                         case GGML_TYPE_PQ2_0:
+                         case GGML_TYPE_Q4_0:
+                         case GGML_TYPE_Q5_0:
+@@ -1696,7 +1697,7 @@
+ 
+                     defines.push_back("DST_TYPE=f32");
+ 
+-                    if (key.src_type == GGML_TYPE_Q1_0 || key.src_type == GGML_TYPE_PQ2_0) {
++                    if (key.src_type == GGML_TYPE_Q1_0 || key.src_type == GGML_TYPE_PQ2_0 || key.src_type == GGML_TYPE_PTQ1_0) {
+                         defines.push_back("BLOCK_SIZE=128u");
+                     } else if ((key.src_type >= GGML_TYPE_Q4_0 && key.src_type <= GGML_TYPE_Q8_1) ||
+                                key.src_type == GGML_TYPE_IQ4_NL || key.src_type == GGML_TYPE_MXFP4) {
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/get_rows.wgsl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/get_rows.wgsl
+@@ -61,6 +61,30 @@
+             let q = (q_packed >> (2u * k)) & 3u;
+             dst[dst_base + offset * 64u + j * 16u + k] = (f32(q) - 1.0) * d;
+         }
++    }
++}
++#endif
++
++#ifdef PTQ1_0
++fn ptq_index(e: u32) -> vec2<u32> {
++    if (e < 80u) { return vec2<u32>(e % 16u, e / 16u); }
++    if (e < 120u) { return vec2<u32>(16u + (e - 80u) % 8u, (e - 80u) / 8u); }
++    return vec2<u32>(24u + (e - 120u) % 2u, (e - 120u) / 2u);
++}
++fn ptq_trit(byte: u32, power: u32) -> f32 {
++    var q = byte;
++    for (var i = 0u; i < power; i++) { q = (q * 3u) & 255u; }
++    return f32((q * 3u) >> 8u) - 1.0;
++}
++fn copy_elements(src_base: u32, dst_base: u32, offset: u32) {
++    let block = (src_base + offset) * 28u;
++    let d = load_f16_as_f32_at_src(block + 26u);
++    for (var e = 0u; e < 128u; e++) {
++        let index = ptq_index(e);
++        let pos = block + index.x;
++        let packed = src[pos / 4u];
++        let byte = (packed >> ((pos % 4u) * 8u)) & 255u;
++        dst[dst_base + offset * 128u + e] = d * ptq_trit(byte, index.y);
+     }
+ }
+ #endif
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_decls.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_decls.tmpl
+@@ -134,6 +134,33 @@
+ }
+ #endif // INIT_SRC0_SHMEM_Q2_0
+ 
++#ifdef INIT_SRC0_SHMEM_PTQ1_0
++fn ptq_index(e: u32) -> vec2<u32> {
++    if (e < 80u) { return vec2<u32>(e % 16u, e / 16u); }
++    if (e < 120u) { return vec2<u32>(16u + (e - 80u) % 8u, (e - 80u) / 8u); }
++    return vec2<u32>(24u + (e - 120u) % 2u, (e - 120u) / 2u);
++}
++fn ptq_trit(byte: u32, power: u32) -> f32 {
++    var q = byte;
++    for (var i = 0u; i < power; i++) { q = (q * 3u) & 255u; }
++    return f32((q * 3u) >> 8u) - 1.0;
++}
++fn init_shmem_src0(thread_id: u32, batch_offset: u32, offset_m: u32, k_outer: u32) {
++    for (var i = thread_id; i < TILE_SRC0_SHMEM; i += TOTAL_WORKGROUP_SIZE) {
++        let m = offset_m + i / TILE_K;
++        let k = k_outer + i % TILE_K;
++        if (m < params.m && k < params.k) {
++            let block = (batch_offset + m * params.stride_01 + k / 128u) * 28u;
++            let index = ptq_index(k % 128u);
++            let pos = block + index.x;
++            let packed = load_u32_at_src0_aligned(pos);
++            let byte = (packed >> ((pos % 4u) * 8u)) & 255u;
++            shmem[i] = f16(ptq_trit(byte, index.y)) * load_f16_at_src0(block + 26u);
++        }
++    }
++}
++#endif
++
+ #ifdef INIT_SRC0_SHMEM_PQ2_0
+ const BLOCK_SIZE = 128u;
+ const BLOCK_SIZE_BYTES = 34u;
+--- a/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
++++ b/ggml/src/ggml-webgpu/wgsl-shaders/mul_mat_vec_acc.tmpl
+@@ -155,6 +155,39 @@
+         }
+     }
+ 
++    return acc;
++}
++#endif
++
++#ifdef MUL_ACC_PTQ1_0
++fn ptq_index(e: u32) -> vec2<u32> {
++    if (e < 80u) { return vec2<u32>(e % 16u, e / 16u); }
++    if (e < 120u) { return vec2<u32>(16u + (e - 80u) % 8u, (e - 80u) / 8u); }
++    return vec2<u32>(24u + (e - 120u) % 2u, (e - 120u) / 2u);
++}
++fn ptq_trit(byte: u32, power: u32) -> f32 {
++    var q = byte;
++    for (var i = 0u; i < power; i++) { q = (q * 3u) & 255u; }
++    return f32((q * 3u) >> 8u) - 1.0;
++}
++fn accumulate_vec_dot(thread_id: u32, row_base: u32, src0_batch_offset: u32, src1_idx_base: u32) -> array<array<f32, OUTPUTS_PER_WG>, NUM_COLS> {
++    var acc: array<array<f32, OUTPUTS_PER_WG>, NUM_COLS>;
++    for (var k = thread_id; k < params.k; k += WG_SIZE) {
++        let index = ptq_index(k % 128u);
++        for (var row = 0u; row < OUTPUTS_PER_WG; row++) {
++            let m = row_base + row;
++            if (m < params.m) {
++                let block = (src0_batch_offset + m * params.stride_01 + k / 128u) * 28u;
++                let pos = block + index.x;
++                let packed = load_u32_at_src0_aligned(pos);
++                let byte = (packed >> ((pos % 4u) * 8u)) & 255u;
++                let weight = ptq_trit(byte, index.y) * load_f16_as_f32_at_src0(block + 26u);
++                for (var col = 0u; col < NUM_COLS; col++) {
++                    acc[col][row] += weight * f32(SRC1[src1_idx_base + k + col * params.stride_11]);
++                }
++            }
++        }
++    }
+     return acc;
+ }
+ #endif
