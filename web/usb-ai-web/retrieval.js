@@ -33,6 +33,10 @@ export function retrieve(question, documents, limit = 4) {
   return indexes.map(index => ({name:latest.name,text:latest.chunks[index],index,score:0}));
 }
 
+export function documentPageFacts(documents) {
+  return documents.filter(doc => Number.isSafeInteger(doc.pageCount) && doc.pageCount > 0)
+    .map(doc => `Document ${JSON.stringify(doc.name)} has ${doc.pageCount} pages. The text shown may contain selected excerpts only.`).join('\n');
+}
 export function completeDocumentForSummary(question, documents, contextSize, outputLimit) {
   if (documents.length !== 1 || contextSize <= 8192 || !/(riass|sintesi|summar|resum|résum|zusammenfass)/i.test(question)) return null;
   const doc = documents[0];
@@ -78,10 +82,10 @@ export async function readDocument(file) {
       text += `\n[Page ${page}]\n` + pageText;
     }
     if (!hasText) throw Error('DOCUMENT_NO_TEXT');
-    return text;
+    return {text, pageCount:pdf.numPages};
   }
   if (!/\.(txt|md|csv|json)$/i.test(file.name)) throw Error('Unsupported document type');
   const text = await file.text();
   if (!text.trim()) throw Error('DOCUMENT_NO_TEXT');
-  return text;
+  return {text, pageCount:null};
 }
