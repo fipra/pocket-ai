@@ -34,3 +34,4 @@
 .message-actions{display:flex;align-items:center;gap:5px;margin-top:10px}.message-action{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:6px;border:0;border-radius:7px;color:#858585;background:transparent}.message-action:hover{background:#f1f1f1;color:#333}.message-action:focus-visible{outline:2px solid #476d58;outline-offset:2px}.message-action svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 
 .history-row{display:flex;align-items:center;min-width:0}.history-row .chat-item{flex:1;min-width:0}.history-action{border:0;background:transparent;color:#bbb;padding:7px;font-size:15px;border-radius:6px}.history-action:hover{background:#444;color:white}
+.desktop-download{color:#e5f7e9;background:#315a43;text-decoration:none;line-height:1.35}.desktop-download:hover{background:#3d7053}

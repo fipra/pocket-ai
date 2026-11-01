@@ -352,3 +352,12 @@ for (const language of Object.keys(historyStrings)) Object.assign(translations[l
 
 const deleteChatWarnings = {"en": "Delete this chat and its attached documents? This cannot be undone.", "it": "Eliminare questa chat e i suoi documenti allegati? Non sarà possibile annullare.", "fr": "Supprimer cette discussion et ses documents joints ? Cette action est irréversible.", "de": "Diesen Chat und seine Anhänge löschen? Dies kann nicht rückgängig gemacht werden.", "es": "¿Eliminar este chat y sus documentos adjuntos? Esta acción no se puede deshacer."};
 for (const language of Object.keys(deleteChatWarnings)) translations[language].deleteConfirm = deleteChatWarnings[language];
+
+const desktopDownloadStrings = {
+ en:{downloadDesktopUsb:'Download for Mac, Windows or USB'},
+ it:{downloadDesktopUsb:'Scarica per Mac, Windows o chiavetta USB'},
+ fr:{downloadDesktopUsb:'Télécharger pour Mac, Windows ou clé USB'},
+ de:{downloadDesktopUsb:'Für Mac, Windows oder USB-Stick herunterladen'},
+ es:{downloadDesktopUsb:'Descargar para Mac, Windows o memoria USB'}
+};
+for (const language of Object.keys(desktopDownloadStrings)) Object.assign(translations[language], desktopDownloadStrings[language]);
