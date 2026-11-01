@@ -521,6 +521,8 @@ struct Source {
 struct Chat {
     id: String,
     title: String,
+    #[serde(default)]
+    title_custom: bool,
     messages: Vec<Message>,
 }
 #[derive(Clone, Serialize, Deserialize)]
@@ -1789,12 +1791,41 @@ impl App {
                 let chat = Chat {
                     id: id(),
                     title: localized_new_chat(self.language()).into(),
+                    title_custom: false,
                     messages: vec![],
                 };
                 let chat_id = chat.id.clone();
                 self.db.chats.insert(0, chat);
                 self.save()?;
                 Ok(json!({"id":chat_id}))
+            }
+            "rename-chat" => {
+                let chat_id = data["id"].as_str().ok_or("ID missing")?;
+                let title = data["title"].as_str().ok_or("Title missing")?.trim();
+                if title.is_empty()
+                    || title.chars().count() > 100
+                    || title.chars().any(char::is_control)
+                {
+                    return Err("Title must be one line of at most 100 characters".into());
+                }
+                let chat = self
+                    .db
+                    .chats
+                    .iter_mut()
+                    .find(|chat| chat.id == chat_id)
+                    .ok_or("Chat not found")?;
+                chat.title = title.to_owned();
+                chat.title_custom = true;
+                self.save()?;
+                Ok(self.state())
+            }
+            "clear-chats" => {
+                self.db.chats.clear();
+                self.db
+                    .documents
+                    .retain(|document| document.chat_id.is_none());
+                self.save()?;
+                Ok(self.state())
             }
             "delete-chat" => {
                 let id = data["id"].as_str().ok_or("ID mancante")?;
@@ -2036,7 +2067,7 @@ impl App {
         if let Some(index) = edit_index {
             chat.messages.truncate(index);
         }
-        if chat.messages.is_empty() {
+        if chat.messages.is_empty() && !chat.title_custom {
             chat.title = text.chars().take(45).collect();
         }
         chat.messages.push(Message {
@@ -4101,6 +4132,64 @@ mod tests {
         );
         app.command("delete-chat", json!({"id":chat_id})).unwrap();
         assert!(app.db.documents.is_empty());
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn chat_titles_and_history_changes_persist_without_removing_unattached_documents() {
+        let root = env::temp_dir().join(format!("usb-ai-history-{}", id()));
+        fs::create_dir_all(&root).unwrap();
+        let mut app = App {
+            root: root.clone(),
+            models: root.join("models"),
+            db: Workspace::default(),
+            selected: None,
+            catalog: model_catalog(),
+            hardware: detect_hardware(),
+            downloading: None,
+            download_error: None,
+            inference: None,
+            quantization: None,
+        };
+        let first = app.command("new-chat", json!({})).unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        app.command(
+            "rename-chat",
+            json!({"id":first,"title":"  Titolo personale  "}),
+        )
+        .unwrap();
+        assert!(app
+            .command("rename-chat", json!({"id":first,"title":"  "}))
+            .is_err());
+        assert!(app
+            .command("rename-chat", json!({"id":"missing","title":"x"}))
+            .is_err());
+        let second = app.command("new-chat", json!({})).unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        app.upload(&first, "doc.txt", b"Document").unwrap();
+        app.db.documents.push(Document {
+            id: "legacy".into(),
+            name: "old.txt".into(),
+            chunks: chunks("legacy"),
+            chat_id: None,
+        });
+        app.save().unwrap();
+        let saved: Workspace =
+            serde_json::from_slice(&fs::read(root.join("workspace.json")).unwrap()).unwrap();
+        let renamed = saved.chats.iter().find(|chat| chat.id == first).unwrap();
+        assert_eq!(renamed.title, "Titolo personale");
+        assert!(renamed.title_custom);
+        app.command("delete-chat", json!({"id":second})).unwrap();
+        assert_eq!(app.db.chats.len(), 1);
+        app.command("clear-chats", json!({})).unwrap();
+        let saved: Workspace =
+            serde_json::from_slice(&fs::read(root.join("workspace.json")).unwrap()).unwrap();
+        assert!(saved.chats.is_empty());
+        assert_eq!(saved.documents.len(), 1);
+        assert_eq!(saved.documents[0].id, "legacy");
         fs::remove_dir_all(root).unwrap();
     }
     #[test]
