@@ -9,3 +9,4 @@ python3 scripts/build-prism-web.py
 LLAMA_PRISM_DUAL_BASE=/prism-gpu/ python3 scripts/build-prism-dual.py
 python3 scripts/build-prism-dual.py
 LLAMA_PRISM_DUAL_BASE=/prism-fast/ python3 scripts/build-prism-dual.py
+LLAMA_PRISM_DUAL_BASE=/prism-dflash/ python3 scripts/build-prism-dual.py

@@ -1,0 +1,14 @@
+--- a/cpp/wllama-context.h
++++ b/cpp/wllama-context.h
+@@ -549,8 +549,10 @@
+       params.lora_init_without_apply = req.lora_init_without_apply.value;
+ 
+     // speculative decoding
+-    if (req.spec_draft_model.not_null())
++    if (req.spec_draft_model.not_null()) {
+       params.speculative.draft.mparams.path = req.spec_draft_model.value;
++      params.speculative.types = { COMMON_SPECULATIVE_TYPE_DRAFT_DFLASH };
++    }
+     if (req.spec_draft_ngl.not_null())
+       params.speculative.draft.n_gpu_layers = req.spec_draft_ngl.value;
+     if (req.spec_draft_n_max.not_null())
