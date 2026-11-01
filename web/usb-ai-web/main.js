@@ -297,7 +297,7 @@ async function send(editedText, editIndex, editChatId) {
     setStatus(controller.signal.aborted ? tr('stopped') : tr('ready'));
   } catch (error) {
     if (!controller.signal.aborted) {
-      const message = error.message === 'EMPTY_MODEL_RESPONSE' ? tr('emptyResponse') : error.message === 'GENERATION_TIMEOUT' ? tr('safariGenerationTimeout') : error.message === 'CREATOR_PROMPT_TOO_LONG' ? tr('creatorPromptTooLong') : `${tr('error')}: ${error.message}`;
+      const message = error.message === 'GPU_OUT_OF_MEMORY' ? `${tr('error')}: ${tr('gpuOutOfMemory')}` : error.message === 'EMPTY_MODEL_RESPONSE' ? tr('emptyResponse') : error.message === 'GENERATION_TIMEOUT' ? tr('safariGenerationTimeout') : error.message === 'CREATOR_PROMPT_TOO_LONG' ? tr('creatorPromptTooLong') : `${tr('error')}: ${error.message}`;
       if (editing && !answer.text) { chat.messages = previousMessages; chat.title = previousTitle; }
       else answer.text ||= message;
       setStatus(message, true);
